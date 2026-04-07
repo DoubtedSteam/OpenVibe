@@ -3,7 +3,11 @@
   "displayName": "Vibe Coding Assistant",
   "description": "AI coding assistant with file editing tools",
   "version": "0.0.1",
-  "publisher": "local-dev",
+  "publisher": "DoubtedSteam",
+  "repository": {
+    "type": "git",
+    "url": "git@github.com:DoubtedSteam/OpenVibe.git"
+  },
   "engines": {
     "vscode": "^1.74.0"
   },
