@@ -1,4 +1,3 @@
-```markdown
 ![OpenVibe Logo](imgs/logo.png)
 # 🚀 OpenVibe - AI Coding Assistant for VS Code
 > **An intelligent project editing assistant built on three core tools**
@@ -386,4 +385,3 @@ MIT License - See LICENSE file for details
 > **OpenVibe - An intelligent project editing assistant built on three core tools**
 >
 > *Simple, controllable, powerful AI‑assisted programming experience*
-```
