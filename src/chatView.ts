@@ -54,7 +54,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         this._sendWorkspaceBanner();
         this._postSessionsList();
         for (const saved of this._messages) {
-          if (saved.role === 'user') {
+          if (saved.role === 'user' && saved.content) {
             this._view?.webview.postMessage({
               type: 'addMessage',
               message: { role: saved.role, content: saved.content },
@@ -930,37 +930,44 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     this._messages = [];
   }
 
-  private _saveSessions() {
-    try {
-      // Update current session
-      const currentSession = this._sessions.find(s => s.id === this._currentSessionId);
-      if (currentSession) {
-        currentSession.messages = this._messages;
-        currentSession.updated = Date.now();
-        // Ensure only one active session
-        this._sessions.forEach(s => s.isActive = s.id === this._currentSessionId);
-      }
-      
-      // Save all sessions to file system
-      this._sessions.forEach(session => {
-        // For index sessions (without messages), we need to get the full session
-        if (session.messages === undefined || session.messages.length === 0) {
-          const fullSession = this._loadSession(session.id);
-          if (fullSession) {
-            session.messages = fullSession.messages;
-          } else {
-            session.messages = [];
-          }
-        }
-        this._saveSession(session);
-      });
-      
-      // Also update globalState for backward compatibility
-      this._context.globalState.update('chatSessions', JSON.stringify(this._sessions));
-    } catch (error) {
-      console.warn('Failed to save sessions:', error);
-    }
-  }
+   private _saveSessions() {
+     try {
+       // Update current session
+       const currentSession = this._sessions.find(s => s.id === this._currentSessionId);
+       if (currentSession) {
+         currentSession.messages = this._messages;
+         currentSession.updated = Date.now();
+         // Ensure only one active session
+         this._sessions.forEach(s => s.isActive = s.id === this._currentSessionId);
+       }
+       
+       // Save all sessions to file system
+       this._sessions.forEach(session => {
+         // Skip loading from file for the current session, use in-memory messages
+         if (session.id === this._currentSessionId) {
+           // Current session already has updated messages from above
+           this._saveSession(session);
+           return;
+         }
+         
+         // For other sessions, we need to get the full session from file if needed
+         if (session.messages === undefined || session.messages.length === 0) {
+           const fullSession = this._loadSession(session.id);
+           if (fullSession) {
+             session.messages = fullSession.messages;
+           } else {
+             session.messages = [];
+           }
+         }
+         this._saveSession(session);
+       });
+       
+       // Also update globalState for backward compatibility
+       this._context.globalState.update('chatSessions', JSON.stringify(this._sessions));
+     } catch (error) {
+       console.warn('Failed to save sessions:', error);
+     }
+   }
 
   private _addMessage(message: ChatMessage) {
     this._messages.push(message);
@@ -1070,13 +1077,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       // Update UI
       this._post({ type: 'clearMessages' });
       this._postSessionsList();
-       for (const saved of this._messages) {
-          if (saved.role === 'user') {
-            this._post({
-              type: 'addMessage',
-              message: { role: saved.role, content: saved.content },
-            });
-          } else if (saved.role === 'assistant' && saved.tool_calls) {
+        for (const saved of this._messages) {
+           if (saved.role === 'user' && saved.content) {
+             this._post({
+               type: 'addMessage',
+               message: { role: saved.role, content: saved.content },
+             });
+           } else if (saved.role === 'assistant' && saved.tool_calls) {
             // 处理包含 tool_calls 的助手消息
             // 先显示助手的内容（如果有）
             if (saved.content) {

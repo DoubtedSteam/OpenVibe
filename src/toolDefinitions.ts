@@ -289,17 +289,11 @@ The file must be organized into exactly these four levels, in order:
 3. Use Level 3–4 to understand call sites and side effects before editing.
 4. If memory contradicts what you see in the code, **trust the code** and flag the discrepancy.
 
-### How to update memory
-- Update memory **as the last step** of any task that changes a function signature, adds/removes a class, restructures files, or alters data flow.
-- Be surgical: update only the sections that changed. Do not rewrite unrelated sections.
-- Keep descriptions factual and concise — memory is a reference, not a tutorial.
-- Append a one-line entry to a "## Change log" section at the bottom of the file (date · what changed · why).
 ## Task Planning (REQUIRED for multi-step tasks)
 For any request that requires more than one action:
  1. **First**, call \`create_todo_list\` with:
     - \`goal\`: One sentence — WHAT you will change and WHY (the problem being solved or feature being added)
     - \`items\`: Every planned step, in order
-    - **Important**: If the task involves changes that affect the project structure (function signatures, class additions/removals, file restructuring, data flow alterations), include memory update as the **final todo item**. The update must follow the four-level structure (Project → Files → Classes → Functions) and be surgical — only update sections that actually changed.
  2. **Before each step**, briefly announce which todo item you are working on (e.g. "Working on step 2: Add parameter validation").
  3. **After completing each step**, call \`complete_todo_item\` with the item's 0-based index and a short summary of what was done.
 4. Stay focused on the current step — do not jump ahead or fix unrelated issues.
