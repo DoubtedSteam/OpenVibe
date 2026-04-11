@@ -1027,18 +1027,29 @@ export function listGitSnapshotsTool(): string {
     for (const tag of tags) {
       // Use 'git log -1' instead of 'git show' to avoid annotated-tag header
       // appearing before the format output and corrupting the parsed fields.
-      const showResult = executeGitCommand(['log', '-1', '--format=%H|%ct|%s', tag], root);
+      const showResult = executeGitCommand(['log', '-1', '--format=%H|%ct|%s|%b', tag], root);
       if (showResult.success) {
-        const firstLine = showResult.stdout.trim().split('\n')[0];
-        const [hash, timestamp, ...subjectParts] = firstLine.split('|');
-        const subject = subjectParts.join('|'); // re-join in case subject contains '|'
+        const output = showResult.stdout.trim();
+        // The format is: <hash>|<timestamp>|<subject>|<body…>
+        // Split only on the first 3 '|' so the body (which may contain '|') is kept intact.
+        const firstPipe  = output.indexOf('|');
+        const secondPipe = output.indexOf('|', firstPipe + 1);
+        const thirdPipe  = output.indexOf('|', secondPipe + 1);
+        const hash      = output.slice(0, firstPipe);
+        const timestamp = output.slice(firstPipe + 1, secondPipe);
+        const subject   = output.slice(secondPipe + 1, thirdPipe);
+        const body      = thirdPipe >= 0 ? output.slice(thirdPipe + 1) : '';
+
+        // Extract "User instruction: ..." from commit body
+        const instrMatch = body.match(/^User instruction:\s*(.+)/m);
+        const userInstruction = instrMatch ? instrMatch[1].replace(/\.\.\.$/,'').trim() : subject;
+
         // Tag format: vibe-snapshot-<sessionId>-snapshot-<ts>-<hash>
-        // Split carefully: sessionId is between 'snapshot' (idx 1) and 'snapshot' (idx 2)
-        const withoutPrefix = tag.slice('vibe-snapshot-'.length); // "<sessionId>-snapshot-<ts>-<hash>"
+        const withoutPrefix = tag.slice('vibe-snapshot-'.length);
         const snapshotKeyword = '-snapshot-';
         const snapshotIdx = withoutPrefix.indexOf(snapshotKeyword);
-        const sessionId = snapshotIdx >= 0 ? withoutPrefix.slice(0, snapshotIdx) : withoutPrefix;
-        const snapshotId = snapshotIdx >= 0 ? 'snapshot' + withoutPrefix.slice(snapshotIdx + '-snapshot'.length) : '';
+        const sessionId   = snapshotIdx >= 0 ? withoutPrefix.slice(0, snapshotIdx) : withoutPrefix;
+        const snapshotId  = snapshotIdx >= 0 ? 'snapshot' + withoutPrefix.slice(snapshotIdx + '-snapshot'.length) : '';
 
         snapshots.push({
           tag,
@@ -1046,7 +1057,8 @@ export function listGitSnapshotsTool(): string {
           snapshotId,
           commitHash: hash,
           timestamp: parseInt(timestamp, 10) * 1000,
-          subject
+          subject,
+          userInstruction,
         });
       }
     }

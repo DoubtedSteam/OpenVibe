@@ -159,6 +159,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
        if (msg.type === 'showSnapshots') {
          this._showGitSnapshots();
        }
+       if (msg.type === 'rollbackToSnapshot') {
+         this._rollbackToSnapshot(msg.snapshot);
+       }
      });
    }
 
@@ -1355,31 +1358,68 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     try {
       const result = listGitSnapshotsTool();
       const parsed = JSON.parse(result);
-      
+
       if (parsed.error) {
         this._post({ type: 'info', message: `Failed to list snapshots: ${parsed.error}` });
         return;
       }
-      
-      if (parsed.success && parsed.snapshots && parsed.snapshots.length > 0) {
-        let message = `Found ${parsed.snapshots.length} Git snapshots:\
-\
-`;
-        parsed.snapshots.forEach((snapshot: any, index: number) => {
-          const date = new Date(snapshot.timestamp).toLocaleString();
-          message += `${index + 1}. ${snapshot.snapshotId} (${date}) - ${snapshot.subject}\
-`;
-          message += `   Session: ${snapshot.sessionId}, Commit: ${snapshot.commitHash.substr(0, 8)}\
-\
-`;
-        });
-        
-        this._post({ type: 'info', message });
-      } else {
-        this._post({ type: 'info', message: 'No Git snapshots found.' });
-      }
+
+      // Send structured data so the webview can render interactive rollback buttons
+      this._post({
+        type: 'snapshotsList',
+        snapshots: parsed.snapshots ?? [],
+      });
     } catch (error: any) {
       this._post({ type: 'info', message: `Error showing snapshots: ${error.message}` });
+    }
+  }
+
+  private async _rollbackToSnapshot(snapshot: {
+    tag: string;
+    snapshotId: string;
+    userInstruction: string;
+  }): Promise<void> {
+    try {
+      // 1. Git reset --hard to the snapshot tag
+      const result = gitRollbackTool({
+        snapshotId: snapshot.snapshotId,
+        sessionId: this._currentSessionId,
+      });
+      const parsed = JSON.parse(result);
+
+      if (!parsed.success) {
+        this._post({ type: 'error', message: `Rollback failed: ${parsed.error}` });
+        return;
+      }
+
+      // 2. Truncate chat history: remove the matching user message and everything after
+      const instruction = snapshot.userInstruction;
+      const cutIndex = this._messages.findIndex(
+        m => m.role === 'user' &&
+             (typeof m.content === 'string' ? m.content : '') === instruction
+      );
+      if (cutIndex !== -1) {
+        this._messages = this._messages.slice(0, cutIndex);
+        this._saveCurrentSession();
+      }
+
+      // 3. Clear webview and re-render remaining history
+      this._post({ type: 'clearMessages' });
+      for (const m of this._messages) {
+        if (m.role === 'user' || m.role === 'assistant') {
+          const content = typeof m.content === 'string' ? m.content : '';
+          if (content) {
+            this._post({ type: 'addMessage', message: { role: m.role, content } });
+          }
+        }
+      }
+
+      this._post({
+        type: 'info',
+        message: `✅ Rolled back to before: "${instruction.substring(0, 60)}${instruction.length > 60 ? '…' : ''}"`,
+      });
+    } catch (error: any) {
+      this._post({ type: 'error', message: `Rollback error: ${error.message}` });
     }
   }
 
@@ -1766,6 +1806,81 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     background: var(--vscode-toolbar-hoverBackground, rgba(128,128,128,0.1));
   }
   #clear:active, #snapshots:active { opacity: 0.6; }
+
+  /* ── Snapshot panel ──────────────────────────────────────────── */
+  .snapshot-panel {
+    border: 1px solid var(--vscode-input-border, #555);
+    border-radius: 6px;
+    margin: 8px 0;
+    overflow: hidden;
+    background: var(--vscode-editor-background);
+  }
+  .snapshot-panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: var(--vscode-sideBarSectionHeader-background, rgba(128,128,128,0.1));
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--vscode-foreground);
+  }
+  .snapshot-panel-close {
+    background: none;
+    border: none;
+    color: var(--vscode-descriptionForeground);
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+    padding: 0 2px;
+  }
+  .snapshot-panel-close:hover { color: var(--vscode-foreground); }
+  .snapshot-empty {
+    padding: 12px;
+    font-size: 12px;
+    color: var(--vscode-descriptionForeground);
+    text-align: center;
+  }
+  .snapshot-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    border-top: 1px solid var(--vscode-input-border, #444);
+    font-size: 12px;
+  }
+  .snapshot-item:hover { background: var(--vscode-list-hoverBackground); }
+  .snapshot-meta {
+    flex: 1;
+    min-width: 0;
+  }
+  .snapshot-time {
+    color: var(--vscode-descriptionForeground);
+    font-size: 11px;
+    margin-bottom: 2px;
+  }
+  .snapshot-instruction {
+    color: var(--vscode-foreground);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .snapshot-rollback-btn {
+    flex-shrink: 0;
+    padding: 3px 10px;
+    font-size: 11px;
+    font-family: inherit;
+    background: var(--vscode-button-secondaryBackground, #3a3a3a);
+    color: var(--vscode-button-secondaryForeground, #ccc);
+    border: 1px solid var(--vscode-input-border, #555);
+    border-radius: 4px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .snapshot-rollback-btn:hover {
+    background: var(--vscode-button-secondaryHoverBackground, #4a4a4a);
+    border-color: var(--vscode-focusBorder, #007acc);
+  }
 </style>
 </head>
   <div id="session-sidebar">
@@ -1865,6 +1980,70 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   function setRunningState(running) {
     sendBtn.disabled = running;
     stopBtn.disabled = !running;
+  }
+
+  function showSnapshotsList(snapshots) {
+    // Remove any existing snapshot panel first
+    const old = messagesDiv.querySelector('.snapshot-panel');
+    if (old) { old.remove(); }
+
+    const panel = document.createElement('div');
+    panel.className = 'snapshot-panel';
+
+    const header = document.createElement('div');
+    header.className = 'snapshot-panel-header';
+    header.innerHTML =
+      '<span>⏮️ Git Snapshots (' + snapshots.length + ')</span>' +
+      '<button class="snapshot-panel-close" title="Close">×</button>';
+    header.querySelector('.snapshot-panel-close').addEventListener('click', () => panel.remove());
+    panel.appendChild(header);
+
+    if (snapshots.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'snapshot-empty';
+      empty.textContent = 'No snapshots yet. A snapshot is created automatically before each instruction is processed.';
+      panel.appendChild(empty);
+    } else {
+      // Show most-recent first
+      const sorted = [...snapshots].sort((a, b) => b.timestamp - a.timestamp);
+      sorted.forEach(snapshot => {
+        const item = document.createElement('div');
+        item.className = 'snapshot-item';
+
+        const date = new Date(snapshot.timestamp);
+        const timeStr = date.toLocaleString([], {
+          month: 'short', day: 'numeric',
+          hour: '2-digit', minute: '2-digit'
+        });
+        const instruction = snapshot.userInstruction || snapshot.subject || snapshot.snapshotId;
+        const truncated = instruction.length > 80 ? instruction.slice(0, 80) + '…' : instruction;
+
+        item.innerHTML =
+          '<div class="snapshot-meta">' +
+            '<div class="snapshot-time">' + escHtml(timeStr) + ' · ' + escHtml((snapshot.commitHash || '').slice(0, 7)) + '</div>' +
+            '<div class="snapshot-instruction" title="' + escHtml(instruction) + '">' + escHtml(truncated) + '</div>' +
+          '</div>' +
+          '<button class="snapshot-rollback-btn">↩ Rollback</button>';
+
+        item.querySelector('.snapshot-rollback-btn').addEventListener('click', () => {
+          if (!confirm('Roll back to before this instruction? Uncommitted changes will be lost.')) { return; }
+          vscode.postMessage({
+            type: 'rollbackToSnapshot',
+            snapshot: {
+              tag: snapshot.tag,
+              snapshotId: snapshot.snapshotId,
+              userInstruction: instruction,
+            }
+          });
+          panel.remove();
+        });
+
+        panel.appendChild(item);
+      });
+    }
+
+    messagesDiv.appendChild(panel);
+    scrollBottom();
   }
 
   function showInfo(msg) {
@@ -1991,6 +2170,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     window.addEventListener('message', event => {
       const msg = event.data;
       switch (msg.type) {
+        case 'snapshotsList':  showSnapshotsList(msg.snapshots); break;
         case 'addMessage':   addMessage(msg.message.role, msg.message.content); break;
         case 'toolCall':     addToolCall(msg.name, msg.args); break;
         case 'toolResult':   resolveToolCard(msg.result); break;
