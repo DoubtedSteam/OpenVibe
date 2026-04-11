@@ -552,8 +552,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       `File: ${ctx.filePath}  |  lines ${ctx.startLine}–${ctx.endLine}\n\n` +
       `## BEFORE (lines marked >>> will be replaced)\n\`\`\`\n${ctx.beforeContext}\n\`\`\`\n\n` +
       `## AFTER (lines marked >>> are the new content)\n\`\`\`\n${ctx.afterContext}\n\`\`\`\n\n` +
-      `Does this replacement look correct and safe to apply? ` +
-      `Reply with exactly one word: CONFIRM or REJECT, followed by a brief reason.`;
+        `Focus on comparing the before/after code sections for semantic consistency and logical correctness. ` +
+        `Tool call success determination is handled automatically by program logic; ` +
+        `evaluate only whether the code change itself is correct and safe. Does this replacement look correct and safe to apply? ` +
+        `Reply with exactly one word: CONFIRM or REJECT, followed by a brief reason.`;
 
     let reply: string;
     try {

@@ -84,11 +84,12 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
     function: {
       name: 'edit',
       description:
-        'Edit a range of lines in a file with new content. ' +
+         'Edit a range of lines in a file with new content. ' +
         'A secondary LLM check will automatically verify the change before it is applied — ' +
-        'no need to call find_in_file first, just supply the correct line numbers. ' +
+        'the LLM focuses on comparing before/after code sections for semantic consistency and logical correctness. ' +
+         'No need to call find_in_file first, just supply the correct line numbers. ' +
         'To insert without removing any lines, set endLine = startLine - 1. ' +
-        'To delete lines, set newContent to an empty string "". ' +
+        'To delete lines, set newContent to an empty string \"\". ' +
         'After an edit, call read_file to verify the result.',
       parameters: {
         type: 'object',
@@ -279,7 +280,7 @@ export const SYSTEM_PROMPT = `You are Vibe Coding Assistant — an AI that can d
 - **get_workspace_info** — Get the workspace root path and top-level file list. Call this first if unsure.
 - **read_file** — Read file contents with line numbers.
 - **find_in_file** — Locate code by content and return its current line number.
-- **edit** — Edit a line range with new text. A built-in LLM check automatically verifies the change before it is committed.
+- **edit** — Edit a line range with new text. A built-in LLM check automatically verifies the change before it is committed (focusing on comparing before/after code sections for semantic consistency).
 - **create_directory** — Create a directory (folder) in the workspace.
 - **create_todo_list** — Create a structured task plan before starting multi-step work.
   - **complete_todo_item** — Mark a step as done after verifying it is complete.
