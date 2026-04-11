@@ -12,10 +12,16 @@
 >
 > The entire development cost a whopping 30 RMB for DeepSeek API calls.
 
+<h2 id="news">📰 新闻 / News</h2>
+
+自2025年1月起，OpenVibe增加了Git支持功能！现在可以在编码过程中自动创建Git快照，并支持通过UI进行版本回滚和快照管理。
+
+> Since January 2025, OpenVibe has added Git support! Now you can automatically create Git snapshots during coding, and support version rollback and snapshot management through the UI.
 <h2 id="table-of-contents">📋 目录 / Table of Contents</h2>
 
 
 - [重要提示 / Important Notice](#important-notice)
+- [新闻 / News](#news)
 - [项目概述 / Project Overview](#project-overview)
 - [设计理念 / Design Philosophy](#design-philosophy)
 - [核心工具说明 / Core Tools Explained](#core-tools-explained)
@@ -213,6 +219,32 @@ edit(filePath, startLine, endLine, newContent)
 将长对话历史压缩为简洁摘要，减少上下文窗口使用。
 
 > Compresses a long conversation history into a concise summary, reducing context window usage.
+
+### Git快照管理工具 / Git Snapshot Tools
+
+OpenVibe集成了Git快照功能，可以在编码过程中自动创建版本快照，并通过UI管理版本历史。
+
+**可用工具**：
+- **Git快照创建**：用户发送消息时自动创建Git快照，记录项目状态变化
+- **Git快照列表**：在UI中查看所有Git快照的时间戳和描述
+- **Git回滚**：通过UI按钮选择特定快照进行版本回滚
+
+**特性**：
+- **自动快照**：无需手动操作，系统自动记录重要编辑点
+- **UI集成**：所有Git操作都通过VS Code Webview界面管理
+- **安全回滚**：提供可控的版本回退机制，避免代码丢失
+
+> OpenVibe integrates Git snapshot functionality, allowing automatic version snapshots to be created during coding, and managing version history through the UI.
+>
+> **Available tools**:
+> - **Git snapshot creation**: Automatically creates Git snapshots when users send messages, recording project state changes
+> - **Git snapshot listing**: View all Git snapshots with timestamps and descriptions in the UI
+> - **Git rollback**: Select specific snapshots for version rollback via UI buttons
+>
+> **Features**:
+> - **Automatic snapshots**: No manual operation required, system automatically records important editing points
+> - **UI integration**: All Git operations are managed through the VS Code Webview interface
+> - **Safe rollback**: Provides controllable version rollback mechanism to prevent code loss
 
 <h2 id="installation">🔧 安装 / Installation</h2>
 
