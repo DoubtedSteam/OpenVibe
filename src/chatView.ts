@@ -1808,13 +1808,16 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   #clear:active, #snapshots:active { opacity: 0.6; }
 
   /* ── Snapshot panel ──────────────────────────────────────────── */
-  .snapshot-panel {
-    border: 1px solid var(--vscode-input-border, #555);
-    border-radius: 6px;
-    margin: 8px 0;
-    overflow: hidden;
-    background: var(--vscode-editor-background);
-  }
+   .snapshot-panel {
+     border: 1px solid var(--vscode-input-border, #555);
+     border-radius: 6px;
+     margin: 8px 0;
+     overflow-y: auto;
+     background: var(--vscode-editor-background);
+     max-height: 300px;
+     min-height: 100px;
+     flex-shrink: 0;
+   }
   .snapshot-panel-header {
     display: flex;
     justify-content: space-between;
