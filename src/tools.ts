@@ -956,15 +956,16 @@ export function gitRollbackTool(params: GitRollbackParams): string {
     console.log(`[GitRollback] Looking for tag: ${tagName}`);
     
     // Check if tag exists
+    // Check if tag exists
     const tagCheck = executeGitCommand(['show-ref', '--tags', tagName], root);
-    console.log(`[GitRollback] Tag check result: success=${tagCheck.success}, stdout="${tagCheck.stdout}", stderr="${tagCheck.stderr}"`);
+    console.log(`[GitRollback] Tag check result: success=${tagCheck.success}, stdout="${tagCheck.stdout.trim()}", stderr="${tagCheck.stderr.trim()}"`);
     
     if (!tagCheck.success || !tagCheck.stdout.trim()) {
-      console.log(`[GitRollback] Tag not found, trying to find by snapshot ID in commit messages`);
+      console.log(`[GitRollback] Tag not found: ${tagName}`);
+      console.log(`[GitRollback] Trying to find by snapshot ID in commit messages: ${params.snapshotId}`);
       // Try to find by snapshot ID in commit messages
       const logResult = executeGitCommand(['log', '--all', '--grep', params.snapshotId, '--oneline', '-1'], root);
-      console.log(`[GitRollback] Log search result: success=${logResult.success}, stdout="${logResult.stdout}", stderr="${logResult.stderr}"`);
-      
+      console.log(`[GitRollback] Log search result: success=${logResult.success}, stdout="${logResult.stdout.trim()}", stderr="${logResult.stderr.trim()}"`);
       if (!logResult.success || !logResult.stdout.trim()) {
         console.log(`[GitRollback] Snapshot not found in commit messages: ${params.snapshotId}`);
         return JSON.stringify({
@@ -1018,6 +1019,19 @@ export function gitRollbackTool(params: GitRollbackParams): string {
     }
     
     console.log(`[GitRollback] Rollback successful to tag ${tagName}`);
+    
+    // Refresh VS Code workspace to show the changes
+    try {
+      const folders = vscode.workspace.workspaceFolders;
+      if (folders && folders.length > 0) {
+        vscode.commands.executeCommand('workbench.files.action.refreshFilesExplorer');
+        console.log(`[GitRollback] Refreshed workspace explorer`);
+      }
+    } catch (refreshError) {
+      console.warn(`[GitRollback] Failed to refresh workspace: ${refreshError}`);
+      // Continue anyway, as the Git operation succeeded
+    }
+    
     return JSON.stringify({
       success: true,
       snapshotId: params.snapshotId,
@@ -1025,7 +1039,6 @@ export function gitRollbackTool(params: GitRollbackParams): string {
       reset: 'hard',
       message: `Rolled back to snapshot ${params.snapshotId} (tag ${tagName})`
     });
-    
   } catch (e: any) {
     console.log(`[GitRollback] Exception: ${e.message}`);
     return JSON.stringify({
@@ -1068,12 +1081,12 @@ export function listGitSnapshotsTool(): string {
         const instrMatch = body.match(/^User instruction:\s*(.+)/m);
         const userInstruction = instrMatch ? instrMatch[1].replace(/\.\.\.$/,'').trim() : subject;
 
-        // Tag format: vibe-snapshot-<sessionId>-snapshot-<ts>-<hash>
+        // Tag format: vibe-snapshot-<sessionId>-snapshot-<timestamp>-<hash>
         const withoutPrefix = tag.slice('vibe-snapshot-'.length);
         const snapshotKeyword = '-snapshot-';
         const snapshotIdx = withoutPrefix.indexOf(snapshotKeyword);
         const sessionId   = snapshotIdx >= 0 ? withoutPrefix.slice(0, snapshotIdx) : withoutPrefix;
-        const snapshotId  = snapshotIdx >= 0 ? 'snapshot' + withoutPrefix.slice(snapshotIdx + '-snapshot'.length) : '';
+        const snapshotId  = snapshotIdx >= 0 ? withoutPrefix.slice(snapshotIdx + 1) : ''; // +1 to skip the '-'
 
         snapshots.push({
           tag,
