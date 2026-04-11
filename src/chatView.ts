@@ -1376,12 +1376,27 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     }
   }
 
-  private async _rollbackToSnapshot(snapshot: {
-    tag: string;
-    snapshotId: string;
-    userInstruction: string;
-  }): Promise<void> {
-    try {
+   private async _rollbackToSnapshot(snapshot: {
+     tag: string;
+     snapshotId: string;
+     userInstruction: string;
+   }): Promise<void> {
+     // First ask for confirmation using VS Code native dialog
+     const confirmation = await vscode.window.showWarningMessage(
+       `Roll back to before: "${snapshot.userInstruction}"?
+
+Uncommitted changes will be lost.`,
+       { modal: true },
+       'Roll back',
+       'Cancel'
+     );
+     
+     if (confirmation !== 'Roll back') {
+       this._log(`[_rollbackToSnapshot] Rollback cancelled by user`);
+       return;
+     }
+     
+     try {
       this._log(`[_rollbackToSnapshot] Starting rollback to snapshot: ${JSON.stringify(snapshot)}`);
       this._log(`[_rollbackToSnapshot] Current session ID: ${this._currentSessionId}`);
       
@@ -2049,7 +2064,7 @@ ${error.stack}`);
           '<button class="snapshot-rollback-btn">↩ Rollback</button>';
 
         item.querySelector('.snapshot-rollback-btn').addEventListener('click', () => {
-          if (!confirm('Roll back to before this instruction? Uncommitted changes will be lost.')) { return; }
+          // Removed confirm() call - confirmation will be handled in extension
           vscode.postMessage({
             type: 'rollbackToSnapshot',
             snapshot: {
