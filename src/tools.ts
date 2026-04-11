@@ -1033,7 +1033,6 @@ export function gitRollbackTool(params: GitRollbackParams): string {
     });
   }
 }
-}
 
 export function listGitSnapshotsTool(): string {
   try {
