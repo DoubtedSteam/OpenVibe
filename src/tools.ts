@@ -946,17 +946,27 @@ User instruction: ${params.userInstruction.substring(0, 100)}${params.userInstru
 export function gitRollbackTool(params: GitRollbackParams): string {
   try {
     const root = getWorkspaceRoot();
+    console.log(`[GitRollback] Starting rollback for snapshot ${params.snapshotId}, session ${params.sessionId}`);
+    console.log(`[GitRollback] Workspace root: ${root}`);
+    
     ensureGitRepository();
     
     // Try to find the commit by tag
     const tagName = `vibe-snapshot-${params.sessionId}-${params.snapshotId}`;
+    console.log(`[GitRollback] Looking for tag: ${tagName}`);
     
     // Check if tag exists
     const tagCheck = executeGitCommand(['show-ref', '--tags', tagName], root);
+    console.log(`[GitRollback] Tag check result: success=${tagCheck.success}, stdout="${tagCheck.stdout}", stderr="${tagCheck.stderr}"`);
+    
     if (!tagCheck.success || !tagCheck.stdout.trim()) {
+      console.log(`[GitRollback] Tag not found, trying to find by snapshot ID in commit messages`);
       // Try to find by snapshot ID in commit messages
       const logResult = executeGitCommand(['log', '--all', '--grep', params.snapshotId, '--oneline', '-1'], root);
+      console.log(`[GitRollback] Log search result: success=${logResult.success}, stdout="${logResult.stdout}", stderr="${logResult.stderr}"`);
+      
       if (!logResult.success || !logResult.stdout.trim()) {
+        console.log(`[GitRollback] Snapshot not found in commit messages: ${params.snapshotId}`);
         return JSON.stringify({
           error: `Snapshot not found: ${params.snapshotId}`
         });
@@ -964,20 +974,28 @@ export function gitRollbackTool(params: GitRollbackParams): string {
       
       // Extract commit hash from log output
       const commitHash = logResult.stdout.split(' ')[0];
+      console.log(`[GitRollback] Extracted commit hash: ${commitHash}`);
+      
       if (!commitHash) {
+        console.log(`[GitRollback] Could not extract commit hash from: ${logResult.stdout}`);
         return JSON.stringify({
           error: `Could not find commit for snapshot: ${params.snapshotId}`
         });
       }
       
       // Reset to that commit
+      console.log(`[GitRollback] Resetting to commit: ${commitHash}`);
       const resetResult = executeGitCommand(['reset', '--hard', commitHash], root);
+      console.log(`[GitRollback] Reset result: success=${resetResult.success}, stderr="${resetResult.stderr}"`);
+      
       if (!resetResult.success) {
+        console.log(`[GitRollback] Reset failed: ${resetResult.stderr}`);
         return JSON.stringify({
           error: `Failed to reset to commit: ${resetResult.stderr}`
         });
       }
       
+      console.log(`[GitRollback] Rollback successful to commit ${commitHash.substring(0, 8)}`);
       return JSON.stringify({
         success: true,
         snapshotId: params.snapshotId,
@@ -988,13 +1006,18 @@ export function gitRollbackTool(params: GitRollbackParams): string {
     }
     
     // Reset to tag
+    console.log(`[GitRollback] Resetting to tag: ${tagName}`);
     const resetResult = executeGitCommand(['reset', '--hard', tagName], root);
+    console.log(`[GitRollback] Reset result: success=${resetResult.success}, stderr="${resetResult.stderr}"`);
+    
     if (!resetResult.success) {
+      console.log(`[GitRollback] Reset to tag failed: ${resetResult.stderr}`);
       return JSON.stringify({
         error: `Failed to reset to tag: ${resetResult.stderr}`
       });
     }
     
+    console.log(`[GitRollback] Rollback successful to tag ${tagName}`);
     return JSON.stringify({
       success: true,
       snapshotId: params.snapshotId,
@@ -1004,10 +1027,12 @@ export function gitRollbackTool(params: GitRollbackParams): string {
     });
     
   } catch (e: any) {
+    console.log(`[GitRollback] Exception: ${e.message}`);
     return JSON.stringify({
       error: `Failed to rollback: ${e.message}`
     });
   }
+}
 }
 
 export function listGitSnapshotsTool(): string {

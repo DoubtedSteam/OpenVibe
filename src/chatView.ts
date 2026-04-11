@@ -1380,27 +1380,41 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     userInstruction: string;
   }): Promise<void> {
     try {
+      this._log(`[_rollbackToSnapshot] Starting rollback to snapshot: ${JSON.stringify(snapshot)}`);
+      this._log(`[_rollbackToSnapshot] Current session ID: ${this._currentSessionId}`);
+      
       // 1. Git reset --hard to the snapshot tag
       const result = gitRollbackTool({
         snapshotId: snapshot.snapshotId,
         sessionId: this._currentSessionId,
       });
+      this._log(`[_rollbackToSnapshot] gitRollbackTool result: ${result}`);
+      
       const parsed = JSON.parse(result);
+      this._log(`[_rollbackToSnapshot] Parsed result: ${JSON.stringify(parsed)}`);
 
       if (!parsed.success) {
+        this._log(`[_rollbackToSnapshot] Rollback failed: ${parsed.error}`);
         this._post({ type: 'error', message: `Rollback failed: ${parsed.error}` });
         return;
       }
 
       // 2. Truncate chat history: remove the matching user message and everything after
       const instruction = snapshot.userInstruction;
+      this._log(`[_rollbackToSnapshot] Looking for user instruction: "${instruction}"`);
+      
       const cutIndex = this._messages.findIndex(
         m => m.role === 'user' &&
              (typeof m.content === 'string' ? m.content : '') === instruction
       );
+      this._log(`[_rollbackToSnapshot] Found cut index: ${cutIndex}`);
+      
       if (cutIndex !== -1) {
         this._messages = this._messages.slice(0, cutIndex);
         this._saveCurrentSession();
+        this._log(`[_rollbackToSnapshot] Truncated messages to ${this._messages.length} messages`);
+      } else {
+        this._log(`[_rollbackToSnapshot] No matching user message found for instruction`);
       }
 
       // 3. Clear webview and re-render remaining history
@@ -1416,9 +1430,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
       this._post({
         type: 'info',
-        message: `✅ Rolled back to before: "${instruction.substring(0, 60)}${instruction.length > 60 ? '…' : ''}"`,
+        message: `✅ Rolled back to before: \"${instruction.substring(0, 60)}${instruction.length > 60 ? '…' : ''}\"`,
       });
+      
+      this._log(`[_rollbackToSnapshot] Rollback completed successfully`);
     } catch (error: any) {
+      this._log(`[_rollbackToSnapshot] Error: ${error.message}
+${error.stack}`);
       this._post({ type: 'error', message: `Rollback error: ${error.message}` });
     }
   }
