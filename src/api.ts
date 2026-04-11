@@ -18,7 +18,7 @@ export async function sendChatMessage(
   const payload: Record<string, unknown> = {
     model: config.model,
     messages,
-    temperature: 0.7,
+    temperature: 0.0,
   };
 
   if (tools && tools.length > 0) {
