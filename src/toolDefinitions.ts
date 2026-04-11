@@ -232,6 +232,46 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       },
     },
   },
+  // Git snapshot tools are now handled automatically, not as LLM tools
+  {
+    type: 'function',
+    function: {
+      name: 'git_snapshot',
+      description:
+        'Git snapshots are now created automatically when user sends a message. This tool is disabled.',
+      parameters: {
+        type: 'object',
+        properties: {},
+        required: [],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'git_rollback',
+      description:
+        'Git rollback is now handled through UI buttons. This tool is disabled.',
+      parameters: {
+        type: 'object',
+        properties: {},
+        required: [],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'list_git_snapshots',
+      description:
+        'Git snapshots are listed in the UI. This tool is disabled.',
+      parameters: {
+        type: 'object',
+        properties: {},
+        required: [],
+      },
+    },
+  }
 ];
 export const SYSTEM_PROMPT = `You are Vibe Coding Assistant — an AI that can directly read and edit files inside the user's VS Code workspace.
 

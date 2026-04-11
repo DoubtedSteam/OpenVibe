@@ -14,12 +14,21 @@ export interface ChatMessage {
   tool_call_id?: string;
 }
 
+export interface GitSnapshot {
+  id: string;
+  timestamp: number;
+  userInstruction: string;
+  gitCommitHash?: string;
+  gitTag?: string;
+}
+
 export interface ChatSession {
   id: string;
   title: string;
   created: number;
   updated: number;
   messages: ChatMessage[];
+  snapshots?: GitSnapshot[];
   isActive?: boolean;
 }
 

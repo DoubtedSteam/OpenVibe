@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { sendChatMessage } from './api';
 import { ChatMessage, ChatSession, ApiConfig } from './types';
 import { TOOL_DEFINITIONS, SYSTEM_PROMPT } from './toolDefinitions';
-import { readFileTool, findInFileTool, replaceLinesTool, getWorkspaceInfoTool, createDirectoryTool, getDiagnosticsTool } from './tools';
+import { readFileTool, findInFileTool, replaceLinesTool, getWorkspaceInfoTool, createDirectoryTool, getDiagnosticsTool, gitSnapshotTool, gitRollbackTool, listGitSnapshotsTool } from './tools';
 import type { ReplaceCheckContext } from './tools';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -21,12 +21,24 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   private _isRunning = false;
   private _stopRequested = false;
   private _abortController: AbortController = new AbortController();
+  private _outputChannel?: vscode.OutputChannel;
 
   constructor(
     private readonly _extensionUri: vscode.Uri,
     private readonly _context: vscode.ExtensionContext
   ) {
     this._loadSessions();
+  }
+
+  public setOutputChannel(channel: vscode.OutputChannel): void {
+    this._outputChannel = channel;
+  }
+
+  private _log(message: string): void {
+    console.log(message);
+    if (this._outputChannel) {
+      this._outputChannel.appendLine(message);
+    }
   }
 
   // ─── WebviewViewProvider ───────────────────────────────────────────────────
@@ -142,10 +154,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         });
         if (newTitle && newTitle.trim()) {
           await this._updateSessionTitle(msg.sessionId, newTitle.trim());
-        }
-      }
-    });
-  }
+         }
+       }
+       if (msg.type === 'showSnapshots') {
+         this._showGitSnapshots();
+       }
+     });
+   }
 
   // ─── Message handling ──────────────────────────────────────────────────────
   /**
@@ -210,11 +225,29 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     this._abortController = new AbortController();
     this._post({ type: 'setRunning', running: true });
 
-    // Empty message = "continue" signal; don't add it to conversation history.
-    if (text) {
-      this._post({ type: 'addMessage', message: { role: 'user', content: text } });
-      this._addMessage({ role: 'user', content: text });
-    }
+     // Empty message = "continue" signal; don't add it to conversation history.
+     if (text) {
+       // 尝试创建Git快照（静默失败，不影响主流程）
+       try {
+         const snapshotResult = gitSnapshotTool({
+           sessionId: this._currentSessionId,
+           userInstruction: text,
+           description: `Auto-snapshot before processing user instruction`
+         });
+          const parsed = JSON.parse(snapshotResult);
+          if (parsed.success && parsed.snapshotId) {
+            console.log(`Git snapshot created: ${parsed.snapshotId} for instruction: ${text.substring(0, 50)}...`);
+          } else {
+            console.log(`Git snapshot result: success=${parsed.success}, snapshotId=${parsed.snapshotId}, message="${parsed.message || ''}", error="${parsed.error || ''}"`);
+          }
+       } catch (error) {
+         // 如果Git仓库不存在或快照创建失败，只记录到控制台
+         console.log('Git snapshot creation skipped or failed:', error);
+       }
+       
+       this._post({ type: 'addMessage', message: { role: 'user', content: text } });
+       this._addMessage({ role: 'user', content: text });
+     }
     this._post({ type: 'loading', loading: true });
      try {
          const apiConfig = this._getApiConfig();
@@ -311,6 +344,14 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             // MODIFIED: Removed automatic memory update prompt for better user experience
             // Now directly break when task is complete
             break;
+          } else {
+            // LLM provided a response without tool calls and without <TASK_COMPLETE>
+            // Add a prompt asking the LLM to either continue or signal completion
+            const prompt = `你的回答没有包含工具调用，也没有任务完成标记<TASK_COMPLETE>。请确认：
+1. 如果任务已完成，请输出<TASK_COMPLETE>
+2. 如果需要继续分析或调用工具，请继续。`;
+            this._post({ type: 'addMessage', message: { role: 'user', content: prompt } });
+            this._addMessage({ role: 'user', content: prompt });
           }
         }
       if (iterations >= maxIterations) {
@@ -471,6 +512,24 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           });
         }
 
+        case 'git_snapshot': {
+          return gitSnapshotTool({
+            sessionId: args.sessionId as string,
+            userInstruction: args.userInstruction as string,
+            description: args.description as string | undefined,
+          });
+        }
+
+        case 'git_rollback': {
+          return gitRollbackTool({
+            snapshotId: args.snapshotId as string,
+            sessionId: args.sessionId as string,
+          });
+        }
+
+        case 'list_git_snapshots': {
+          return listGitSnapshotsTool();
+        }
         default:
         return JSON.stringify({ error: `Unknown tool: ${name}` });
     }
@@ -1292,6 +1351,38 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     });
   }
 
+  private async _showGitSnapshots(): Promise<void> {
+    try {
+      const result = listGitSnapshotsTool();
+      const parsed = JSON.parse(result);
+      
+      if (parsed.error) {
+        this._post({ type: 'info', message: `Failed to list snapshots: ${parsed.error}` });
+        return;
+      }
+      
+      if (parsed.success && parsed.snapshots && parsed.snapshots.length > 0) {
+        let message = `Found ${parsed.snapshots.length} Git snapshots:\
+\
+`;
+        parsed.snapshots.forEach((snapshot: any, index: number) => {
+          const date = new Date(snapshot.timestamp).toLocaleString();
+          message += `${index + 1}. ${snapshot.snapshotId} (${date}) - ${snapshot.subject}\
+`;
+          message += `   Session: ${snapshot.sessionId}, Commit: ${snapshot.commitHash.substr(0, 8)}\
+\
+`;
+        });
+        
+        this._post({ type: 'info', message });
+      } else {
+        this._post({ type: 'info', message: 'No Git snapshots found.' });
+      }
+    } catch (error: any) {
+      this._post({ type: 'info', message: `Error showing snapshots: ${error.message}` });
+    }
+  }
+
   private _post(msg: unknown) {
     this._view?.webview.postMessage(msg);
   }
@@ -1654,7 +1745,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   #toggle-sidebar:hover {
     background: var(--vscode-toolbar-hoverBackground);
   }
-  #clear {
+  #clear, #snapshots {
     display: flex;
     align-items: center;
     gap: 4px;
@@ -1669,12 +1760,12 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     opacity: 0.7;
     transition: opacity 0.15s, border-color 0.15s;
   }
-  #clear:hover {
+  #clear:hover, #snapshots:hover {
     opacity: 1;
     border-color: var(--vscode-input-border, #555);
     background: var(--vscode-toolbar-hoverBackground, rgba(128,128,128,0.1));
   }
-  #clear:active { opacity: 0.6; }
+  #clear:active, #snapshots:active { opacity: 0.6; }
 </style>
 </head>
   <div id="session-sidebar">
@@ -1695,9 +1786,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           <span>☰</span> Conversations
         </button>
       </div>
-      <div class="toolbar-right">
-        <button id="clear" title="Clear conversation history">🗑 Clear</button>
-      </div>
+       <div class="toolbar-right">
+         <button id="snapshots" title="View and rollback to Git snapshots">⏮️ Snapshots</button>
+         <button id="clear" title="Clear conversation history">🗑 Clear</button>
+       </div>
     </div>
     <div id="messages"></div>
     <div class="input-area">
@@ -1714,6 +1806,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   const sendBtn = document.getElementById('send');
   const stopBtn = document.getElementById('stop');
   const clearBtn = document.getElementById('clear');
+  const snapshotsBtn = document.getElementById('snapshots');
   const TOOL_ICONS = {
     read_file: '📄',
     find_in_file: '🔍',
@@ -1927,9 +2020,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
      vscode.postMessage({ type: 'stopOperation' });
    });
 
-   clearBtn.addEventListener('click', () => {
-     vscode.postMessage({ type: 'clearHistory' });
-   });
+    clearBtn.addEventListener('click', () => {
+      vscode.postMessage({ type: 'clearHistory' });
+    });
+    
+    snapshotsBtn.addEventListener('click', () => {
+      vscode.postMessage({ type: 'showSnapshots' });
+    });
 
    input.addEventListener('keydown', e => {
      if (e.key === 'Enter' && !e.shiftKey) {
