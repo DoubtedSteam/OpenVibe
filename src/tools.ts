@@ -202,7 +202,8 @@ export async function replaceLinesTool(
   }
 
   let lines: string[] = [];
-  let crlf = false; // default for new files
+  // Default newline style for new files: use CRLF on Windows, LF on Unix
+  let crlf = process.platform === 'win32'; // default for new files
   let total = 0;
   
   // Handle file creation or reading existing file
