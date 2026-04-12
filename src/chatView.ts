@@ -51,9 +51,15 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
     webviewView.webview.options = {
       enableScripts: true,
-      localResourceRoots: [this._extensionUri],
+      enableCommandUris: true,  // 允许命令URI，用于调用VSCode命令
+      localResourceRoots: [
+        this._extensionUri,
+        // 允许访问工作区根目录
+        ...(vscode.workspace.workspaceFolders?.map(f => f.uri) || []),
+        // 允许访问用户主目录（用于临时文件）
+        vscode.Uri.file(require('os').homedir())
+      ],
     };
-
     webviewView.webview.html = this._getHtml();
 
     webviewView.webview.onDidReceiveMessage(async (msg) => {
@@ -161,9 +167,34 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
        }
        if (msg.type === 'rollbackToSnapshot') {
          this._rollbackToSnapshot(msg.snapshot);
-       }
-     });
-   }
+        }
+        
+        // 并排对比视图相关消息
+        if (msg.type === 'openDiffView') {
+          this._openDiffView(msg.data);
+        }
+        
+        if (msg.type === 'getFileInfo') {
+          this._handleGetFileInfo(msg.filePath);
+        }
+        
+        if (msg.type === 'getDiagnostics') {
+          this._handleGetDiagnostics(msg.filePath);
+        }
+        
+        if (msg.type === 'executeCommand') {
+          this._handleExecuteCommand(msg.command, msg.args);
+        }
+        
+        if (msg.type === 'getThemeInfo') {
+          this._handleGetThemeInfo();
+        }
+        
+        if (msg.type === 'showNotification') {
+          this._handleShowNotification(msg.message, msg.type);
+        }
+      });
+    }
 
   // ─── Message handling ──────────────────────────────────────────────────────
   /**
@@ -1455,10 +1486,15 @@ Uncommitted changes will be lost.`,
       this._log(`[_rollbackToSnapshot] Error: ${error.message}
 ${error.stack}`);
       this._post({ type: 'error', message: `Rollback error: ${error.message}` });
-    }
-  }
+     }
+   }
 
-  private _post(msg: unknown) {
+   private async _handleGetFileInfo(filePath: string): Promise<void> {
+     // TODO: 实现获取文件信息功能
+     this._post({ type: 'fileInfo', data: { path: filePath, exists: false } });
+   }
+
+   private _post(msg: unknown) {
     this._view?.webview.postMessage(msg);
   }
   // ─── HTML ──────────────────────────────────────────────────────────────────
@@ -2309,24 +2345,39 @@ ${error.stack}`);
 
     window.addEventListener('message', event => {
       const msg = event.data;
-      switch (msg.type) {
-        case 'snapshotsList':  showSnapshotsList(msg.snapshots); break;
-        case 'addMessage':   addMessage(msg.message.role, msg.message.content); break;
-        case 'toolCall':     addToolCall(msg.name, msg.args); break;
-        case 'toolResult':   resolveToolCard(msg.result); break;
-        case 'loading':      showLoading(msg.loading); break;
-        case 'error':        showError(msg.message); break;
-        case 'tokenUsage':   showTokenUsage(msg.usage); break;
-        case 'setRunning':   setRunningState(msg.running); break;
-        case 'info':         showInfo(msg.message); break;
-        case 'clearMessages':
-          messagesDiv.innerHTML = '';
-          pendingToolCard = null;
-          break;
-        case 'sessionsList':
-          updateSessionsList(msg.sessions);
-          break;
-      }
+       switch (msg.type) {
+         case 'snapshotsList':  showSnapshotsList(msg.snapshots); break;
+         case 'addMessage':   addMessage(msg.message.role, msg.message.content); break;
+         case 'toolCall':     addToolCall(msg.name, msg.args); break;
+         case 'toolResult':   resolveToolCard(msg.result); break;
+         case 'loading':      showLoading(msg.loading); break;
+         case 'error':        showError(msg.message); break;
+         case 'tokenUsage':   showTokenUsage(msg.usage); break;
+         case 'setRunning':   setRunningState(msg.running); break;
+         case 'info':         showInfo(msg.message); break;
+         case 'clearMessages':
+           messagesDiv.innerHTML = '';
+           pendingToolCard = null;
+           break;
+         case 'sessionsList':
+           updateSessionsList(msg.sessions);
+           break;
+         case 'diffView':
+           showDiffView(msg.data);
+           break;
+         case 'fileInfo':
+           handleFileInfo(msg.data, msg.error);
+           break;
+         case 'diagnostics':
+           handleDiagnostics(msg.data, msg.error);
+           break;
+         case 'themeInfo':
+           handleThemeInfo(msg.data);
+           break;
+         case 'commandResult':
+           handleCommandResult(msg.data, msg.error);
+           break;
+       }
     });
 
    sendBtn.addEventListener('click', () => {
