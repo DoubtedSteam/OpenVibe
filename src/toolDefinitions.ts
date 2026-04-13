@@ -530,7 +530,7 @@ For any request that requires more than one action:
 - When creating a new file, write the full content with startLine=1, endLine=0.
 - Keep edits focused and minimal — change only what is necessary.
 - **Tool call explanation**: Before calling any tool, briefly explain to the user what you are about to do and why.
-
+ - **Parallel tool calls**: When multiple independent operations are needed (like reading multiple files), you can return multiple tool calls in a single response to reduce round-trips. The system will execute them in order, but for independent reads this improves efficiency.
 ## Output after modifications
 After completing file modifications, output a clear summary:
 1. **Files modified** — list each changed file path

@@ -55,6 +55,7 @@ export class UIManager {
   private _view?: vscode.WebviewView;
   private _outputChannel?: vscode.OutputChannel;
   private _abortController: AbortController = new AbortController();
+  private _pendingReplaceConfirms: Map<string, (approved: boolean) => void> = new Map();
 
   constructor(private readonly _context: vscode.ExtensionContext) {}
 
@@ -137,8 +138,7 @@ ${ctx.afterContext}
 
     // Surface the LLM's verdict in the chat UI as a check card
     const reason = reply.slice(approved ? 7 : 6).trim() || '(no reason given)';
-    const beforeT = trimForWebview(ctx.beforeContext);
-    const afterT = trimForWebview(ctx.afterContext);
+    const unifiedT = trimForWebview(ctx.unifiedDiff || '');
     this.post({
       type: 'addCheckCard',
       data: {
@@ -148,9 +148,8 @@ ${ctx.afterContext}
         verdict: approved ? 'CONFIRMED' : 'REJECTED',
         reason: reason,
         timestamp: Date.now(),
-        beforeContext: beforeT.text,
-        afterContext: afterT.text,
-        contextTruncated: beforeT.truncated || afterT.truncated,
+        unifiedDiff: unifiedT.text,
+        contextTruncated: unifiedT.truncated,
         languageId: languageIdFromPath(ctx.filePath),
       },
     });
@@ -159,23 +158,44 @@ ${ctx.afterContext}
   }
 
   public async userConfirmReplace(ctx: ReplaceCheckContext): Promise<boolean> {
-    const title = `Replace lines ${ctx.startLine}-${ctx.endLine} in ${ctx.filePath}`;
-    
-    const choices = [
-      'Yes, apply the change',
-      'No, keep the original',
-    ];
-    
-    const result = await vscode.window.showInformationMessage(
-      title,
-      {
-        modal: true,
-        detail:
-          'The replace check card in chat shows Before/After side by side. Use Open in editor for the full VS Code diff.',
+    if (!this._view) {
+      // No UI surface to ask the user; stay safe.
+      return false;
+    }
+
+    const requestId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const unifiedT = trimForWebview(ctx.unifiedDiff || '');
+
+    this.post({
+      type: 'requestReplaceConfirm',
+      data: {
+        requestId,
+        filePath: ctx.filePath,
+        startLine: ctx.startLine,
+        endLine: ctx.endLine,
+        unifiedDiff: unifiedT.text,
+        contextTruncated: unifiedT.truncated,
       },
-      ...choices
-    );
-    
-    return result === choices[0];
+    });
+
+    return await new Promise<boolean>((resolve) => {
+      const timer = setTimeout(() => {
+        this._pendingReplaceConfirms.delete(requestId);
+        resolve(false);
+      }, 10 * 60 * 1000);
+
+      this._pendingReplaceConfirms.set(requestId, (approved) => {
+        clearTimeout(timer);
+        this._pendingReplaceConfirms.delete(requestId);
+        resolve(approved);
+      });
+    });
+  }
+
+  public resolveReplaceConfirm(requestId: string, approved: boolean): void {
+    const resolver = this._pendingReplaceConfirms.get(requestId);
+    if (resolver) {
+      resolver(approved);
+    }
   }
 }

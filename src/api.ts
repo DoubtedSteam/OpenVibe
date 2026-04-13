@@ -24,6 +24,7 @@ export async function sendChatMessage(
   if (tools && tools.length > 0) {
     payload.tools = tools;
     payload.tool_choice = 'auto';
+    payload.parallel_tool_calls = true;
   }
 
   try {

@@ -126,6 +126,12 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       if (msg.type === 'rollbackToSnapshot') {
         await this._rollbackToSnapshot(msg.snapshot);
       }
+      if (msg.type === 'replaceConfirmResponse') {
+        this._uiManager.resolveReplaceConfirm(
+          typeof msg.requestId === 'string' ? msg.requestId : '',
+          !!msg.approved
+        );
+      }
       if (msg.type === 'openCheckDiff') {
         const title =
           typeof msg.title === 'string' && msg.title.trim()
@@ -393,64 +399,52 @@ Uncommitted changes will be lost.`,
   .check-meta .file-path { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .check-body { padding: 8px 10px; background: var(--vscode-editor-background); font-size: 11px; line-height: 1.4; display: none; }
   .check-card.expanded .check-body { display: flex; flex-direction: column; gap: 8px; }
-  .check-diff-toolbar {
-    display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
-  }
-  .check-diff-open {
-    padding: 4px 10px; font-size: 11px; font-family: inherit;
-    background: var(--vscode-button-secondaryBackground);
-    color: var(--vscode-button-secondaryForeground);
-    border: 1px solid var(--vscode-input-border, #555); border-radius: 4px; cursor: pointer;
-  }
-  .check-diff-open:hover {
-    background: var(--vscode-button-secondaryHoverBackground);
-  }
   .check-diff-trunc {
     font-size: 10px; color: var(--vscode-descriptionForeground);
   }
-  .check-diff-split {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 1px;
-    border: 1px solid var(--vscode-input-border, #555);
-    border-radius: 4px;
-    overflow: hidden;
-    max-height: min(42vh, 320px);
-    min-height: 80px;
-  }
-  .check-diff-pane {
-    display: flex; flex-direction: column;
-    min-width: 0;
-    background: var(--vscode-editor-background);
-  }
-  .check-diff-label {
-    flex-shrink: 0;
-    padding: 4px 8px;
-    font-size: 10px; font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    background: var(--vscode-sideBarSectionHeader-background, rgba(128,128,128,0.12));
-    color: var(--vscode-descriptionForeground);
-    border-bottom: 1px solid var(--vscode-input-border, #444);
-  }
-  .check-diff-pre {
+  .check-diff-unified {
     margin: 0;
     padding: 6px 8px;
-    flex: 1;
     overflow: auto;
     white-space: pre;
     font-family: var(--vscode-editor-font-family, monospace);
     font-size: 11px;
     line-height: 1.35;
-  }
-  @media (max-width: 420px) {
-    .check-diff-split {
-      grid-template-columns: 1fr;
-      max-height: min(50vh, 400px);
-    }
+    border: 1px solid var(--vscode-input-border, #555);
+    border-radius: 4px;
+    background: var(--vscode-editor-background);
+    max-height: min(46vh, 380px);
+    min-height: 80px;
   }
   .reason-section { margin: 0; }
   .reason-section strong { display: inline-block; margin-right: 4px; }
+
+  /* Replace confirm bar (non-blocking) */
+  #replace-confirm {
+    display: none;
+    border: 1px solid var(--vscode-input-border, #555);
+    border-radius: 8px;
+    padding: 8px 10px;
+    background: var(--vscode-editor-background);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+  }
+  #replace-confirm.show { display: block; }
+  .confirm-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .confirm-title { font-size: 12px; font-weight: 600; }
+  .confirm-actions { display: flex; gap: 8px; }
+  .confirm-btn {
+    padding: 6px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--vscode-input-border, transparent);
+    cursor: pointer;
+    font-size: 12px;
+    font-family: inherit;
+  }
+  .confirm-btn.apply { background: var(--vscode-testing-runAction, #388a34); color: #fff; border-color: transparent; }
+  .confirm-btn.apply:hover { background: var(--vscode-testing-runAction, #4aa844); }
+  .confirm-btn.cancel { background: transparent; color: var(--vscode-foreground); }
+  .confirm-btn.cancel:hover { background: var(--vscode-toolbar-hoverBackground); }
+  .confirm-meta { margin-top: 6px; font-size: 10px; color: var(--vscode-descriptionForeground); }
 
   /* Input area */
   .input-area { display: flex; gap: 6px; align-items: flex-end; }
@@ -632,6 +626,16 @@ Uncommitted changes will be lost.`,
       </div>
     </div>
     <div id="messages"></div>
+    <div id="replace-confirm">
+      <div class="confirm-row">
+        <div class="confirm-title">Apply this edit?</div>
+        <div class="confirm-actions">
+          <button id="confirm-apply" class="confirm-btn apply" type="button">Apply</button>
+          <button id="confirm-cancel" class="confirm-btn cancel" type="button">Cancel</button>
+        </div>
+      </div>
+      <div id="confirm-meta" class="confirm-meta"></div>
+    </div>
     <div class="input-area">
       <textarea id="input" rows="3" placeholder="Describe what you want to change…"></textarea>
       <button id="send" class="chat-button" title="Send message">▶</button>
@@ -647,6 +651,10 @@ Uncommitted changes will be lost.`,
   const stopBtn = document.getElementById('stop');
   const clearBtn = document.getElementById('clear');
   const snapshotsBtn = document.getElementById('snapshots');
+  const confirmBar = document.getElementById('replace-confirm');
+  const confirmMeta = document.getElementById('confirm-meta');
+  const confirmApplyBtn = document.getElementById('confirm-apply');
+  const confirmCancelBtn = document.getElementById('confirm-cancel');
   const TOOL_ICONS = {
     read_file: '📄',
     find_in_file: '🔍',
@@ -656,6 +664,7 @@ Uncommitted changes will be lost.`,
   };
 
   let pendingToolCard = null;
+  let pendingConfirm = null; // { requestId, ... }
 
   function addMessage(role, content) {
     const row = document.createElement('div');
@@ -707,71 +716,18 @@ Uncommitted changes will be lost.`,
     const body = document.createElement('div');
     body.className = 'check-body';
 
-    const hasDiff =
-      typeof data.beforeContext === 'string' &&
-      typeof data.afterContext === 'string' &&
-      (data.beforeContext.length > 0 || data.afterContext.length > 0);
-
-    if (hasDiff) {
-      const toolbar = document.createElement('div');
-      toolbar.className = 'check-diff-toolbar';
-
-      const openBtn = document.createElement('button');
-      openBtn.type = 'button';
-      openBtn.className = 'check-diff-open';
-      openBtn.textContent = 'Open in editor';
-      openBtn.title = 'Open side-by-side diff in VS Code';
-      openBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const title =
-          'Replace: ' + (data.filePath || '') + ' (' + data.startLine + '–' + data.endLine + ')';
-        vscode.postMessage({
-          type: 'openCheckDiff',
-          title: title,
-          leftContent: data.beforeContext || '',
-          rightContent: data.afterContext || '',
-          languageId: data.languageId || '',
-        });
-      });
-      toolbar.appendChild(openBtn);
-
+    const hasUnified = typeof data.unifiedDiff === 'string' && data.unifiedDiff.length > 0;
+    if (hasUnified) {
       if (data.contextTruncated) {
-        const hint = document.createElement('span');
+        const hint = document.createElement('div');
         hint.className = 'check-diff-trunc';
-        hint.textContent = 'Long context trimmed for chat — editor shows the same excerpt.';
-        toolbar.appendChild(hint);
+        hint.textContent = 'Long diff trimmed for chat view.';
+        body.appendChild(hint);
       }
-
-      const split = document.createElement('div');
-      split.className = 'check-diff-split';
-
-      const paneBefore = document.createElement('div');
-      paneBefore.className = 'check-diff-pane';
-      const lb = document.createElement('div');
-      lb.className = 'check-diff-label';
-      lb.textContent = 'Before';
-      const preB = document.createElement('pre');
-      preB.className = 'check-diff-pre';
-      preB.textContent = data.beforeContext || '';
-      paneBefore.appendChild(lb);
-      paneBefore.appendChild(preB);
-
-      const paneAfter = document.createElement('div');
-      paneAfter.className = 'check-diff-pane';
-      const la = document.createElement('div');
-      la.className = 'check-diff-label';
-      la.textContent = 'After';
-      const preA = document.createElement('pre');
-      preA.className = 'check-diff-pre';
-      preA.textContent = data.afterContext || '';
-      paneAfter.appendChild(la);
-      paneAfter.appendChild(preA);
-
-      split.appendChild(paneBefore);
-      split.appendChild(paneAfter);
-
-      body.appendChild(toolbar);
-      body.appendChild(split);
+      const pre = document.createElement('pre');
+      pre.className = 'check-diff-unified';
+      pre.textContent = data.unifiedDiff || '';
+      body.appendChild(pre);
     }
 
     const reasonDiv = document.createElement('div');
@@ -785,7 +741,7 @@ Uncommitted changes will be lost.`,
     card.appendChild(body);
 
     messagesDiv.appendChild(card);
-    if (hasDiff) {
+    if (hasUnified) {
       card.classList.add('expanded');
     }
     scrollBottom();
@@ -993,15 +949,39 @@ Uncommitted changes will be lost.`,
       case 'tokenUsage':     showTokenUsage(msg.usage); break;
       case 'setRunning':     setRunningState(msg.running); break;
       case 'info':           showInfo(msg.message); break;
+      case 'requestReplaceConfirm': {
+        pendingConfirm = msg.data || null;
+        const fp = pendingConfirm && pendingConfirm.filePath ? pendingConfirm.filePath : '';
+        const rng = pendingConfirm ? (pendingConfirm.startLine + '–' + pendingConfirm.endLine) : '';
+        confirmMeta.textContent = fp ? (fp + (rng ? (' · lines ' + rng) : '')) : '';
+        confirmBar.classList.add('show');
+        scrollBottom();
+        break;
+      }
       case 'clearMessages':
         messagesDiv.innerHTML = '';
         pendingToolCard = null;
+        pendingConfirm = null;
+        confirmBar.classList.remove('show');
         break;
       case 'sessionsList':
         updateSessionsList(msg.sessions);
         break;
     }
   });
+
+  function respondConfirm(approved) {
+    if (!pendingConfirm || !pendingConfirm.requestId) {
+      confirmBar.classList.remove('show');
+      return;
+    }
+    vscode.postMessage({ type: 'replaceConfirmResponse', requestId: pendingConfirm.requestId, approved });
+    pendingConfirm = null;
+    confirmBar.classList.remove('show');
+  }
+
+  confirmApplyBtn.addEventListener('click', () => respondConfirm(true));
+  confirmCancelBtn.addEventListener('click', () => respondConfirm(false));
 
   sendBtn.addEventListener('click', () => {
     const text = input.value.trim();

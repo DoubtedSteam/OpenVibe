@@ -183,6 +183,7 @@ export interface ReplaceCheckContext {
   endLine: number;           // clamped end line (actual range being replaced)
   beforeContext: string;     // numbered lines: [ctx_start..ctx_end], with >>> marking the replaced range
   afterContext: string;      // numbered lines: same surroundings but with newContent substituted in
+  unifiedDiff: string;       // unified diff with line numbers: - old, + new
 }
 
 export async function replaceLinesTool(
@@ -293,6 +294,25 @@ export async function replaceLinesTool(
       })
       .join('\n');
   }
+
+  // ── Unified diff (with line numbers) ───────────────────────────────────────
+  // This is shown to the user in chat. We intentionally keep it compact and focused
+  // on the changed hunk, with explicit +/- prefixes.
+  const unifiedDiffLines: string[] = [];
+  if (oldLines.length === 0 && newLines.length === 0) {
+    unifiedDiffLines.push('(no changes)');
+  } else {
+    for (let i = 0; i < oldLines.length; i++) {
+      const ln = params.startLine + i;
+      unifiedDiffLines.push(`- ${ln}: ${oldLines[i]}`);
+    }
+    for (let i = 0; i < newLines.length; i++) {
+      const ln = params.startLine + i;
+      unifiedDiffLines.push(`+ ${ln}: ${newLines[i]}`);
+    }
+  }
+  const unifiedDiff = unifiedDiffLines.join('\n');
+
   // ── LLM secondary confirmation ─────────────────────────────────────────────
   const confirmed = await llmCheckFn({
     filePath: params.filePath,
@@ -300,6 +320,7 @@ export async function replaceLinesTool(
     endLine: clampedEnd,
     beforeContext,
     afterContext,
+    unifiedDiff,
   });
 
   if (!confirmed) {
@@ -314,6 +335,7 @@ export async function replaceLinesTool(
       endLine: clampedEnd,
       beforeContext,
       afterContext,
+      unifiedDiff,
     });
     if (!userApproved) {
       return JSON.stringify({ success: false, message: 'User rejected the replacement — operation cancelled' });
