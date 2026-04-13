@@ -56,6 +56,7 @@ export class UIManager {
   private _outputChannel?: vscode.OutputChannel;
   private _abortController: AbortController = new AbortController();
   private _pendingReplaceConfirms: Map<string, (approved: boolean) => void> = new Map();
+  private _pendingShellConfirms: Map<string, (approved: boolean) => void> = new Map();
 
   constructor(private readonly _context: vscode.ExtensionContext) {}
 
@@ -194,6 +195,48 @@ ${ctx.afterContext}
 
   public resolveReplaceConfirm(requestId: string, approved: boolean): void {
     const resolver = this._pendingReplaceConfirms.get(requestId);
+    if (resolver) {
+      resolver(approved);
+    }
+  }
+
+  public async userConfirmShellCommand(command: string): Promise<boolean> {
+    if (!this._view) {
+      // No UI surface to ask the user; stay safe.
+      return false;
+    }
+
+    const cmd = (command ?? '').trim();
+    if (!cmd) {
+      return false;
+    }
+
+    const requestId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+    this.post({
+      type: 'requestShellConfirm',
+      data: {
+        requestId,
+        command: cmd,
+      },
+    });
+
+    return await new Promise<boolean>((resolve) => {
+      const timer = setTimeout(() => {
+        this._pendingShellConfirms.delete(requestId);
+        resolve(false);
+      }, 10 * 60 * 1000);
+
+      this._pendingShellConfirms.set(requestId, (approved) => {
+        clearTimeout(timer);
+        this._pendingShellConfirms.delete(requestId);
+        resolve(approved);
+      });
+    });
+  }
+
+  public resolveShellConfirm(requestId: string, approved: boolean): void {
+    const resolver = this._pendingShellConfirms.get(requestId);
     if (resolver) {
       resolver(approved);
     }

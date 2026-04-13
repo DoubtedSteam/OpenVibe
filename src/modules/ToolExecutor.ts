@@ -35,6 +35,7 @@ export class ToolExecutor {
       post: (message: any) => void;
       llmCheckReplace: (ctx: ReplaceCheckContext) => Promise<ReplaceCheckResult>;
       userConfirmReplace: (ctx: ReplaceCheckContext) => Promise<boolean>;
+      userConfirmShellCommand: (command: string) => Promise<boolean>;
       getApiConfig: () => ApiConfig & { confirmChanges?: boolean };
       getLastUserTextForTools: () => string;
       getRelatedContextForTodolistReview: () => string;
@@ -145,7 +146,13 @@ ${list}
         return getThemeInfoTool();
 
       case 'run_shell_command':
-        return await runShellCommandTool({ command: args.command as string });
+        if (this._context.getApiConfig().confirmChanges !== false) {
+          const approved = await this._context.userConfirmShellCommand(String(args.command ?? ''));
+          if (!approved) {
+            return JSON.stringify({ success: false, error: 'User cancelled shell command' });
+          }
+        }
+        return await runShellCommandTool({ command: String(args.command ?? '') });
 
       case 'git_snapshot': {
         return gitSnapshotTool({

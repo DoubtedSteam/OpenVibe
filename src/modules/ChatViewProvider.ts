@@ -47,6 +47,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         });
       },
       userConfirmReplace: (ctx) => this._uiManager.userConfirmReplace(ctx),
+      userConfirmShellCommand: (command) => this._uiManager.userConfirmShellCommand(command),
       getApiConfig: () => this._uiManager.getApiConfig(),
       getLastUserTextForTools: () => this._conversation.getLastUserTextForTools(),
       getRelatedContextForTodolistReview: () => this._conversation.getRelatedContextForTodolistReview(),
@@ -99,7 +100,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         vscode.Uri.file(require('os').homedir())
       ],
     };
-    webviewView.webview.html = this._getHtml();
+    webviewView.webview.html = this._getHtml(webviewView.webview);
 
     webviewView.webview.onDidReceiveMessage(async (msg) => {
       if (msg.type === 'sendMessage') {
@@ -109,6 +110,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         this._uiManager.sendWorkspaceBanner();
         this._sessionManager.postSessionsList();
         this._replayWebview();
+      }
+      if (msg.type === 'webviewError') {
+        const message =
+          typeof msg.message === 'string' && msg.message.trim()
+            ? msg.message.trim()
+            : 'Unknown webview error';
+        this._uiManager.post({ type: 'error', message: `Webview error: ${message}` });
       }
       if (msg.type === 'stopOperation') {
         this._messageHandler.stopCurrentOperation();
@@ -155,6 +163,12 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       }
       if (msg.type === 'replaceConfirmResponse') {
         this._uiManager.resolveReplaceConfirm(
+          typeof msg.requestId === 'string' ? msg.requestId : '',
+          !!msg.approved
+        );
+      }
+      if (msg.type === 'shellConfirmResponse') {
+        this._uiManager.resolveShellConfirm(
           typeof msg.requestId === 'string' ? msg.requestId : '',
           !!msg.approved
         );
@@ -259,14 +273,15 @@ Uncommitted changes will be lost.`,
     this._sessionManager.clearHistory();
   }
 
-  private _getHtml(): string {
+  private _getHtml(webview: vscode.Webview): string {
+    const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'webview.js'));
     return `<!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Vibe Coding Chat</title>
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} https: data:; style-src ${webview.cspSource} 'unsafe-inline'; font-src ${webview.cspSource} https: data:; script-src ${webview.cspSource};">
     <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -670,366 +685,10 @@ Uncommitted changes will be lost.`,
     </div>
   </div>
 
-<script>
-  const vscode = acquireVsCodeApi();
-  const messagesDiv = document.getElementById('messages');
-  const input = document.getElementById('input');
-  const sendBtn = document.getElementById('send');
-  const stopBtn = document.getElementById('stop');
-  const clearBtn = document.getElementById('clear');
-  const snapshotsBtn = document.getElementById('snapshots');
-  const confirmBar = document.getElementById('replace-confirm');
-  const confirmMeta = document.getElementById('confirm-meta');
-  const confirmApplyBtn = document.getElementById('confirm-apply');
-  const confirmCancelBtn = document.getElementById('confirm-cancel');
-  const TOOL_ICONS = {
-    read_file: '📄',
-    find_in_file: '🔍',
-    edit: '✏️',
-    create_directory: '📁',
-    get_workspace_info: '📂',
-  };
-
-  let pendingToolCard = null;
-  let pendingConfirm = null; // { requestId, ... }
-
-  function addMessage(role, content) {
-    const row = document.createElement('div');
-    row.className = 'message-row ' + role;
-    if (role !== 'system') {
-      const label = document.createElement('div');
-      label.className = 'message-role';
-      label.textContent = role === 'user' ? 'You' : 'Assistant';
-      row.appendChild(label);
-    }
-    const bubble = document.createElement('div');
-    bubble.className = 'bubble';
-    if (typeof marked !== 'undefined') {
-      try {
-        bubble.innerHTML = marked.parse(content);
-      } catch (e) {
-        bubble.textContent = content;
-      }
-    } else {
-      bubble.textContent = content;
-    }
-    row.appendChild(bubble);
-    messagesDiv.appendChild(row);
-    scrollBottom();
-  }
-
-  function addCheckCard(data) {
-    const verdict = data.verdict || '';
-    const card = document.createElement('div');
-    card.className = 'check-card ' + String(verdict).toLowerCase();
-    const icon = verdict === 'CONFIRMED' ? '✅' : '❌';
-    const timeStr = new Date(data.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-
-    const header = document.createElement('div');
-    header.className = 'check-header';
-    header.innerHTML =
-      '<span class="check-icon">' + icon + '</span>' +
-      '<span class="check-title">Replace check</span>' +
-      '<span class="check-status">' + escHtml(verdict) + '</span>';
-    header.addEventListener('click', () => card.classList.toggle('expanded'));
-
-    const meta = document.createElement('div');
-    meta.className = 'check-meta';
-    meta.innerHTML =
-      '<span class="file-path">' + escHtml(data.filePath) + '</span>' +
-      '<span class="line-range">lines ' + data.startLine + '–' + data.endLine + '</span>' +
-      '<span class="check-time">' + escHtml(timeStr) + '</span>';
-
-    const body = document.createElement('div');
-    body.className = 'check-body';
-
-    const hasUnified = typeof data.unifiedDiff === 'string' && data.unifiedDiff.length > 0;
-    if (hasUnified) {
-      if (data.contextTruncated) {
-        const hint = document.createElement('div');
-        hint.className = 'check-diff-trunc';
-        hint.textContent = 'Long diff trimmed for chat view.';
-        body.appendChild(hint);
-      }
-      const pre = document.createElement('pre');
-      pre.className = 'check-diff-unified';
-      pre.textContent = data.unifiedDiff || '';
-      body.appendChild(pre);
-    }
-
-    const reasonDiv = document.createElement('div');
-    reasonDiv.className = 'reason-section';
-    reasonDiv.innerHTML = '<strong>LLM Reason:</strong> ' + escHtml(data.reason);
-
-    body.appendChild(reasonDiv);
-
-    card.appendChild(header);
-    card.appendChild(meta);
-    card.appendChild(body);
-
-    messagesDiv.appendChild(card);
-    if (hasUnified) {
-      card.classList.add('expanded');
-    }
-    scrollBottom();
-  }
-
-  function addToolCall(name, args) {
-    const card = document.createElement('div');
-    card.className = 'tool-card';
-    const displayName = name === 'replace_lines' ? 'edit' : name;
-    const icon = TOOL_ICONS[name] || '🔧';
-    const argsStr = JSON.stringify(args, null, 2);
-    card.innerHTML =
-      '<div class="tool-header">' +
-        '<span class="tool-icon">' + icon + '</span>' +
-        '<span class="tool-name">' + escHtml(displayName) + '</span>' +
-        '<span class="tool-status">running…</span>' +
-      '</div>' +
-      '<div class="tool-body">' + escHtml(argsStr) + '</div>';
-    card.querySelector('.tool-header').addEventListener('click', () => card.classList.toggle('expanded'));
-    messagesDiv.appendChild(card);
-    scrollBottom();
-    pendingToolCard = card;
-    return card;
-  }
-
-  function resolveToolCard(result) {
-    let card = pendingToolCard;
-    if (!card) {
-      const allCards = document.querySelectorAll('.tool-card');
-      for (let i = allCards.length - 1; i >= 0; i--) {
-        const c = allCards[i];
-        if (!c.classList.contains('done') && !c.classList.contains('error')) {
-          card = c; break;
-        }
-      }
-    }
-    pendingToolCard = null;
-    if (!card) { return; }
-    let parsed;
-    try { parsed = JSON.parse(result); } catch { parsed = { raw: result }; }
-    const isError = parsed && (parsed.error || parsed.success === false);
-    card.classList.remove('expanded');
-    card.classList.add(isError ? 'error' : 'done');
-    const statusEl = card.querySelector('.tool-status');
-    if (statusEl) { statusEl.textContent = isError ? ('error: ' + (parsed.error || parsed.message || '?')) : (parsed.message || 'done'); }
-    const body = card.querySelector('.tool-body');
-    if (body) { body.textContent = JSON.stringify(parsed, null, 2); }
-    scrollBottom();
-  }
-
-  function showLoading(show) {
-    let el = document.getElementById('loading');
-    if (show) {
-      if (!el) {
-        el = document.createElement('div');
-        el.id = 'loading'; el.className = 'loading'; el.textContent = 'Thinking…';
-        messagesDiv.appendChild(el);
-      }
-      scrollBottom(); sendBtn.disabled = true; stopBtn.disabled = false;
-    } else {
-      if (el) { el.remove(); }
-      sendBtn.disabled = false; stopBtn.disabled = true;
-    }
-  }
-
-  function setRunningState(running) { sendBtn.disabled = running; stopBtn.disabled = !running; }
-
-  function showSnapshotsList(snapshots) {
-    const old = messagesDiv.querySelector('.snapshot-panel');
-    if (old) { old.remove(); }
-    const panel = document.createElement('div');
-    panel.className = 'snapshot-panel';
-    const header = document.createElement('div');
-    header.className = 'snapshot-panel-header';
-    header.innerHTML = '<span>⏮️ Git Snapshots (' + snapshots.length + ')</span><button class="snapshot-panel-close" title="Close">×</button>';
-    header.querySelector('.snapshot-panel-close').addEventListener('click', () => panel.remove());
-    panel.appendChild(header);
-    if (snapshots.length === 0) {
-      const empty = document.createElement('div');
-      empty.className = 'snapshot-empty';
-      empty.textContent = 'No snapshots yet.';
-      panel.appendChild(empty);
-    } else {
-      const sorted = [...snapshots].sort((a, b) => b.timestamp - a.timestamp);
-      sorted.forEach(snapshot => {
-        const item = document.createElement('div');
-        item.className = 'snapshot-item';
-        const date = new Date(snapshot.timestamp);
-        const timeStr = date.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-        const instruction = snapshot.userInstruction || snapshot.subject || snapshot.snapshotId;
-        const truncated = instruction.length > 80 ? instruction.slice(0, 80) + '…' : instruction;
-        item.innerHTML =
-          '<div class="snapshot-meta">' +
-            '<div class="snapshot-time">' + escHtml(timeStr) + ' · ' + escHtml((snapshot.commitHash || '').slice(0, 7)) + '</div>' +
-            '<div class="snapshot-instruction" title="' + escHtml(instruction) + '">' + escHtml(truncated) + '</div>' +
-          '</div>' +
-          '<button class="snapshot-rollback-btn">↩ Rollback</button>';
-        item.querySelector('.snapshot-rollback-btn').addEventListener('click', () => {
-          vscode.postMessage({ type: 'rollbackToSnapshot', snapshot: { tag: snapshot.tag, snapshotId: snapshot.snapshotId, userInstruction: instruction } });
-          panel.remove();
-        });
-        panel.appendChild(item);
-      });
-    }
-    messagesDiv.appendChild(panel);
-    scrollBottom();
-  }
-
-  function showInfo(msg) {
-    const el = document.createElement('div');
-    el.className = 'info-msg'; el.textContent = msg;
-    messagesDiv.appendChild(el); scrollBottom();
-    setTimeout(() => el.remove(), 5000);
-  }
-
-  function showError(msg) {
-    const el = document.createElement('div');
-    el.className = 'error-msg'; el.textContent = msg;
-    messagesDiv.appendChild(el); scrollBottom();
-    setTimeout(() => el.remove(), 8000);
-  }
-
-  function scrollBottom() { messagesDiv.scrollTop = messagesDiv.scrollHeight; }
-
-  function escHtml(str) {
-    if (str === null || str === undefined) { return ''; }
-    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  }
-
-  function showTokenUsage(usage) {
-    const el = document.createElement('div');
-    el.className = 'token-usage';
-    el.textContent = '↑ ' + usage.prompt_tokens + '  ↓ ' + usage.completion_tokens + '  Σ ' + usage.total_tokens + ' tokens';
-    messagesDiv.appendChild(el); scrollBottom();
-  }
-
-  function formatTime(timestamp) {
-    const date = new Date(timestamp);
-    const now = new Date();
-    const diff = now - date;
-    if (diff < 24 * 60 * 60 * 1000) { return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
-    if (diff < 7 * 24 * 60 * 60 * 1000) { return ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][date.getDay()]; }
-    return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
-  }
-
-  function updateSessionsList(sessions) {
-    const sessionsList = document.getElementById('sessions-list');
-    sessionsList.innerHTML = '';
-    sessions.forEach(session => {
-      const item = document.createElement('div');
-      item.className = 'session-item' + (session.isActive ? ' active' : '');
-      item.dataset.id = session.id;
-      item.innerHTML =
-        '<div class="session-item-content">' +
-          '<div class="session-title">' + escHtml(session.title) + '</div>' +
-          '<div class="session-meta">' +
-            '<span>' + (session.messageCount || 0) + ' messages</span>' +
-            '<span>' + formatTime(session.updated) + '</span>' +
-          '</div>' +
-        '</div>' +
-        '<div class="session-actions">' +
-          '<button class="session-btn edit-btn" title="Rename">✏️</button>' +
-          '<button class="session-btn delete-btn" title="Delete">🗑</button>' +
-        '</div>';
-      item.addEventListener('click', (e) => {
-        if (!e.target.closest('.session-actions')) {
-          vscode.postMessage({ type: 'switchSession', sessionId: session.id });
-        }
-      });
-      item.querySelector('.edit-btn').addEventListener('click', (e) => {
-        e.stopPropagation();
-        vscode.postMessage({ type: 'renameSession', sessionId: session.id, currentTitle: session.title });
-      });
-      item.querySelector('.delete-btn').addEventListener('click', (e) => {
-        e.stopPropagation();
-        vscode.postMessage({ type: 'deleteSession', sessionId: session.id });
-      });
-      sessionsList.appendChild(item);
-    });
-  }
-
-  // Toggle sidebar
-  const sidebar = document.getElementById('session-sidebar');
-  const toggleBtn = document.getElementById('toggle-sidebar');
-  const closeBtn = document.querySelector('.sidebar-close');
-  const addSessionBtn = document.getElementById('add-session');
-
-  toggleBtn.addEventListener('click', () => sidebar.classList.add('open'));
-  closeBtn.addEventListener('click', () => sidebar.classList.remove('open'));
-  addSessionBtn.addEventListener('click', () => vscode.postMessage({ type: 'newSession' }));
-
-  // Notify extension that the webview is ready
-  vscode.postMessage({ type: 'ready' });
-
-  window.addEventListener('message', event => {
-    const msg = event.data;
-    switch (msg.type) {
-      case 'snapshotsList':  showSnapshotsList(msg.snapshots); break;
-      case 'addMessage':     addMessage(msg.message.role, msg.message.content); break;
-      case 'addCheckCard':   addCheckCard(msg.data); break;
-      case 'toolCall':       addToolCall(msg.name, msg.args); break;
-      case 'toolResult':     resolveToolCard(msg.result); break;
-      case 'loading':        showLoading(msg.loading); break;
-      case 'error':          showError(msg.message); break;
-      case 'tokenUsage':     showTokenUsage(msg.usage); break;
-      case 'setRunning':     setRunningState(msg.running); break;
-      case 'info':           showInfo(msg.message); break;
-      case 'requestReplaceConfirm': {
-        pendingConfirm = msg.data || null;
-        const fp = pendingConfirm && pendingConfirm.filePath ? pendingConfirm.filePath : '';
-        const rng = pendingConfirm ? (pendingConfirm.startLine + '–' + pendingConfirm.endLine) : '';
-        confirmMeta.textContent = fp ? (fp + (rng ? (' · lines ' + rng) : '')) : '';
-        confirmBar.classList.add('show');
-        scrollBottom();
-        break;
-      }
-      case 'clearMessages':
-        messagesDiv.innerHTML = '';
-        pendingToolCard = null;
-        pendingConfirm = null;
-        confirmBar.classList.remove('show');
-        break;
-      case 'sessionsList':
-        updateSessionsList(msg.sessions);
-        break;
-    }
-  });
-
-  function respondConfirm(approved) {
-    if (!pendingConfirm || !pendingConfirm.requestId) {
-      confirmBar.classList.remove('show');
-      return;
-    }
-    vscode.postMessage({ type: 'replaceConfirmResponse', requestId: pendingConfirm.requestId, approved });
-    pendingConfirm = null;
-    confirmBar.classList.remove('show');
-  }
-
-  confirmApplyBtn.addEventListener('click', () => respondConfirm(true));
-  confirmCancelBtn.addEventListener('click', () => respondConfirm(false));
-
-  sendBtn.addEventListener('click', () => {
-    const text = input.value.trim();
-    input.value = ''; input.style.height = 'auto';
-    vscode.postMessage({ type: 'sendMessage', text });
-  });
-
-  stopBtn.addEventListener('click', () => vscode.postMessage({ type: 'stopOperation' }));
-  clearBtn.addEventListener('click', () => vscode.postMessage({ type: 'clearHistory' }));
-  snapshotsBtn.addEventListener('click', () => vscode.postMessage({ type: 'showSnapshots' }));
-
-  input.addEventListener('keydown', e => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendBtn.click(); }
-  });
-
-  input.addEventListener('input', () => {
-    input.style.height = 'auto';
-    input.style.height = Math.min(input.scrollHeight, 120) + 'px';
-  });
-</script>
+<script src="${scriptUri}"></script>
 </body>
 </html>`;
   }
+
+  // JS runs from `media/webview.js` (external script), which is CSP-friendly.
 }

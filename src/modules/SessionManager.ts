@@ -24,6 +24,21 @@ export class SessionManager {
     }
 
     const sessionsDir = path.join(workspaceRoot, '.openvibe', 'sessions');
+    // Migration: older versions stored sessions under `.OpenVibe/sessions`.
+    // If the new location doesn't exist but legacy index does, copy it once.
+    try {
+      const legacyDir = path.join(workspaceRoot, '.OpenVibe', 'sessions');
+      const legacyIndex = path.join(legacyDir, 'index.json');
+      const newIndex = path.join(sessionsDir, 'index.json');
+      if (!fs.existsSync(sessionsDir) && fs.existsSync(legacyIndex)) {
+        fs.mkdirSync(sessionsDir, { recursive: true });
+        if (!fs.existsSync(newIndex)) {
+          fs.copyFileSync(legacyIndex, newIndex);
+        }
+      }
+    } catch {
+      // non-fatal
+    }
     if (!fs.existsSync(sessionsDir)) {
       fs.mkdirSync(sessionsDir, { recursive: true });
     }
