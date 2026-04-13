@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { ApiConfig } from '../types';
-import { ReplaceCheckContext } from '../tools';
+import { ReplaceCheckContext, ReplaceCheckResult } from '../tools';
 import { sendChatMessage } from '../api';
 
 /** Avoid oversized webview payloads; editor open uses the same trimmed text. */
@@ -95,7 +95,7 @@ export class UIManager {
     };
   }
 
-  public async llmCheckReplace(ctx: ReplaceCheckContext): Promise<boolean> {
+  public async llmCheckReplace(ctx: ReplaceCheckContext): Promise<ReplaceCheckResult> {
     const apiConfig = this.getApiConfig();
 
     const prompt =
@@ -131,7 +131,7 @@ ${ctx.afterContext}
       reply = (response.content ?? '').trim().toUpperCase();
     } catch {
       // If the check call itself fails, default to rejecting to stay safe
-      return false;
+      return { ok: false, reason: 'Check call failed', notes: [] };
     }
 
     const approved = reply.startsWith('CONFIRM');
@@ -154,7 +154,7 @@ ${ctx.afterContext}
       },
     });
 
-    return approved;
+    return { ok: approved, reason, notes: [] };
   }
 
   public async userConfirmReplace(ctx: ReplaceCheckContext): Promise<boolean> {

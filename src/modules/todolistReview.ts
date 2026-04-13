@@ -163,26 +163,26 @@ Rules:
 - Items must be concrete, ordered steps.
 - Do not add unrelated work.`;
 
-const EDITOR_SYSTEM_EXPAND = `You are the editor agent for todolist.edit (expand one todo item into multiple items).
-Return ONLY one JSON object: {"replacementItems":["new step a", "new step b", ...], "goal": "optional — omit to keep the existing goal"}
-The replacementItems array is ONLY the new lines that replace the single item at expandIndex (in order). Do NOT return the full list.
-New items will be marked not-done; all other rows keep their previous done state.
-Address reviewer notes if any.`;
+const WRITER_SYSTEM_EDIT = `You are the main planning agent revising a todo list edit for todolist.edit (expand one item into multiple sub-steps).
+Return ONLY one JSON object (no markdown fences): {"replacementItems":["new step a", "new step b", ...]}
+Rules:
+- Address reviewer notes; stay aligned with the user's request and operation goal.
+- The replacementItems array is ONLY the new lines that replace the single item at expandIndex (in order).
+- Do not add unrelated work.`;
 
-function parseExpandEditorResponse(content: string | null): { goal?: string; replacementItems: string[] } {
+function parseReplacementItems(content: string | null): { replacementItems: string[] } {
   if (!content?.trim()) {
-    throw new Error('Empty editor response');
+    throw new Error('Empty model response');
   }
   const raw = extractJsonObject(content) as Record<string, unknown>;
-  if (Array.isArray(raw.replacementItems)) {
-    const replacementItems = raw.replacementItems.map((x) => String(x).trim()).filter(Boolean);
-    if (replacementItems.length === 0) {
-      throw new Error('replacementItems empty');
-    }
-    const goal = typeof raw.goal === 'string' && raw.goal.trim() ? raw.goal.trim() : undefined;
-    return { goal, replacementItems };
+  if (!Array.isArray(raw.replacementItems)) {
+    throw new Error('JSON must include replacementItems[]');
   }
-  throw new Error('Editor JSON must include non-empty replacementItems[]');
+  const replacementItems = raw.replacementItems.map((x) => String(x).trim()).filter(Boolean);
+  if (replacementItems.length === 0) {
+    throw new Error('replacementItems empty');
+  }
+  return { replacementItems };
 }
 
 export async function reviewTodolistGenerate(params: {
@@ -293,7 +293,7 @@ export async function editorExpandCandidate(params: {
   reviewNotes: string[];
   projectConstraints: string;
   editorTimeoutMs: number;
-}): Promise<{ goal?: string; replacementItems: string[] }> {
+}): Promise<{ replacementItems: string[] }> {
   const userMsg =
     `User request:\n${params.userRequest || '(none)'}\n\n` +
     `Baseline list:\n${formatTodoStateForPrompt(params.baseline)}\n\n` +
@@ -303,17 +303,17 @@ export async function editorExpandCandidate(params: {
       params.reviewNotes.length ? params.reviewNotes.map((n, i) => `${i + 1}. ${n}`).join('\n') : '(none)'
     }\n\n` +
     `Project constraints:\n${params.projectConstraints}\n\n` +
-    `Return JSON with replacementItems only (see system).`;
+    `Return JSON with replacementItems only.`;
 
   const content = await chatJson(
     [
-      { role: 'system', content: EDITOR_SYSTEM_EXPAND },
+      { role: 'system', content: WRITER_SYSTEM_EDIT },
       { role: 'user', content: userMsg },
     ],
     params.apiConfig,
     params.editorTimeoutMs
   );
-  return parseExpandEditorResponse(content);
+  return parseReplacementItems(content);
 }
 
 export function applyExpandToClone(

@@ -14,7 +14,7 @@ import {
   gitRollbackTool,
   listGitSnapshotsTool
 } from '../tools';
-import type { ReplaceCheckContext } from '../tools';
+import type { ReplaceCheckContext, ReplaceCheckResult } from '../tools';
 import type { ApiConfig } from '../types';
 import type { TodolistReviewSettings, TodoState } from './todolistReview';
 import {
@@ -33,7 +33,7 @@ export class ToolExecutor {
   constructor(
     private readonly _context: {
       post: (message: any) => void;
-      llmCheckReplace: (ctx: ReplaceCheckContext) => Promise<boolean>;
+      llmCheckReplace: (ctx: ReplaceCheckContext) => Promise<ReplaceCheckResult>;
       userConfirmReplace: (ctx: ReplaceCheckContext) => Promise<boolean>;
       getApiConfig: () => ApiConfig & { confirmChanges?: boolean };
       getLastUserTextForTools: () => string;
@@ -276,14 +276,10 @@ ${list}
       const baselineFrozen = this._cloneTodoState()!;
       const intentReplacement = items.map((t) => String(t));
       let replacementSlice = [...intentReplacement];
-      let candidateGoal = baselineFrozen.goal;
       let reviewNotes: string[] = [];
 
       for (let attempt = 1; attempt <= cfg.maxAttempts; attempt++) {
-        const baselineForApply: TodoState = {
-          goal: candidateGoal,
-          items: baselineFrozen.items.map((x) => ({ ...x })),
-        };
+        const baselineForApply: TodoState = baselineFrozen;
         let modified: TodoState;
         try {
           modified = applyExpandToClone(baselineForApply, expandIndex, replacementSlice);
@@ -354,9 +350,6 @@ ${list}
             editorTimeoutMs: cfg.editorTimeoutMs,
           });
           replacementSlice = edited.replacementItems;
-          if (edited.goal?.trim()) {
-            candidateGoal = edited.goal.trim();
-          }
         } catch (e: any) {
           return JSON.stringify({
             success: false,

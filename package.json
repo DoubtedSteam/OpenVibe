@@ -102,6 +102,17 @@
           "default": 120000,
           "minimum": 5000,
           "description": "HTTP timeout (ms) for each editor-agent API call (todolist.edit expand retries)."
+        },
+        "vibe-coding.editReview.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "When true, code edit tool calls run a blocking independent LLM review (separate from the main assistant) before applying changes."
+        },
+        "vibe-coding.editReview.timeoutMs": {
+          "type": "number",
+          "default": 120000,
+          "minimum": 5000,
+          "description": "HTTP timeout (ms) for the independent review call used by the code edit tool."
         }
       }
     }

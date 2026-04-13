@@ -32,7 +32,20 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
     this._toolExecutor = new ToolExecutor({
       post: (msg) => this._uiManager.post(msg),
-      llmCheckReplace: (ctx) => this._uiManager.llmCheckReplace(ctx),
+      llmCheckReplace: async (ctx) => {
+        // Independent code-edit review (includes user request + related context + memory excerpt).
+        const { llmIndependentEditReview } = await import('./codeEditReview.js');
+        const apiConfig = this._uiManager.getApiConfig();
+        const userRequest = this._conversation.getLastUserTextForTools();
+        const relatedContext = this._conversation.getRelatedContextForTodolistReview();
+        return llmIndependentEditReview({
+          ctx,
+          apiConfig,
+          userRequest,
+          relatedContext,
+          post: (m: any) => this._uiManager.post(m),
+        });
+      },
       userConfirmReplace: (ctx) => this._uiManager.userConfirmReplace(ctx),
       getApiConfig: () => this._uiManager.getApiConfig(),
       getLastUserTextForTools: () => this._conversation.getLastUserTextForTools(),

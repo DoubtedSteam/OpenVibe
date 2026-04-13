@@ -437,7 +437,7 @@ You can configure API settings and interaction limits through the config dialog 
 
 These settings can be accessed by clicking the gear icon (⚙️) in the chat interface.
 ## Project Context and Memory
-\`.OpenVibe/memory.md\` is the **persistent knowledge base** that bridges sessions. Its purpose is to let any new session pick up exactly where the last one left off — without re-reading the entire codebase. Always read it at the start of a session; always update it when something it describes has changed.
+\`.openvibe/memory.md\` is the **persistent knowledge base** that bridges sessions. Its purpose is to let any new session pick up exactly where the last one left off — without re-reading the entire codebase. Always read it at the start of a session; always update it when something it describes has changed.
 
 ### Required four-level structure
 
@@ -465,7 +465,7 @@ The file must be organized into exactly these four levels, in order:
   - Error conditions and how they surface
 
 ### How to use memory at session start
-1. **Read \`.OpenVibe/memory.md\` first** — before touching any source file.
+1. **Read \`.openvibe/memory.md\` first** — before touching any source file.
 2. Use Level 2 to decide which files are relevant to the current task.
 3. Use Level 3–4 to understand call sites and side effects before editing.
 4. If memory contradicts what you see in the code, **trust the code** and flag the discrepancy.

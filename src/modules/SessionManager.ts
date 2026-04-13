@@ -6,20 +6,81 @@ import * as path from 'path';
 export class SessionManager {
   private _currentSessionId: string = 'default';
   private _sessions: ChatSession[] = [];
+  private _currentWorkspacePath: string | null = null;
 
   constructor(
     private readonly _context: vscode.ExtensionContext,
     private readonly _post: (msg: any) => void
   ) {
     this._loadSessions();
+    this._setupWorkspaceChangeListeners();
   }
+  private _ensureSessionsDir(): string | null {
+    const workspaceRoot = this._getWorkspaceRoot();
+    if (!workspaceRoot) {
+      // No workspace → do not fall back to global storage.
+      // Requirement: sidebar should only reflect the current workspace folder's `.openvibe`.
+      return null;
+    }
 
-  private _ensureSessionsDir(): string {
-    const sessionsDir = path.join(this._context.globalStorageUri.fsPath, 'sessions');
+    const sessionsDir = path.join(workspaceRoot, '.openvibe', 'sessions');
     if (!fs.existsSync(sessionsDir)) {
       fs.mkdirSync(sessionsDir, { recursive: true });
     }
     return sessionsDir;
+  }
+  private _getWorkspaceRoot(): string | null {
+    const workspaceFolders = vscode.workspace.workspaceFolders;
+    if (!workspaceFolders || workspaceFolders.length === 0) {
+      return null;
+    }
+    return workspaceFolders[0].uri.fsPath;
+  }
+
+  private _setupWorkspaceChangeListeners(): void {
+    // 监听工作区文件夹变化
+    vscode.workspace.onDidChangeWorkspaceFolders(() => {
+      const newRoot = this._getWorkspaceRoot();
+      const changed = newRoot !== this._currentWorkspacePath;
+
+      // 工作区发生变化时重新加载会话（来自新工作区的 .openvibe/sessions）
+      if (changed) {
+        // Ensure we don't carry a previous workspace's active session selection.
+        this._currentSessionId = 'default';
+      }
+      this._loadSessions();
+      this.postSessionsList();
+
+      // Clear chat UI when switching to a different workspace folder.
+      // The new workspace should not display the previous workspace's conversation.
+      if (changed) {
+        this._post({ type: 'clearMessages' });
+        if (newRoot) {
+          this._post({
+            type: 'addMessage',
+            message: { role: 'system', content: `Workspace changed: ${newRoot}` },
+          });
+        } else {
+          this._post({
+            type: 'addMessage',
+            message: { role: 'system', content: `Workspace changed: (no workspace open)` },
+          });
+        }
+      }
+    });
+  }
+
+  private _createDefaultSession(): void {
+    const defaultSession: ChatSession = {
+      id: 'default',
+      title: 'New Conversation',
+      created: Date.now(),
+      updated: Date.now(),
+      messages: []
+    };
+    this._sessions = [defaultSession];
+    this._currentSessionId = 'default';
+    this._saveSessions();
   }
 
   public getCurrentMessages(): ChatMessage[] {
@@ -61,10 +122,20 @@ export class SessionManager {
   private _loadSessions(): void {
     try {
       const sessionsDir = this._ensureSessionsDir();
-      const indexFile = path.join(sessionsDir, 'index.json');
-      if (fs.existsSync(indexFile)) {
+      const indexFile = sessionsDir ? path.join(sessionsDir, 'index.json') : null;
+      
+      // 重置会话列表并更新当前工作区路径
+      this._sessions = [];
+      this._currentWorkspacePath = this._getWorkspaceRoot();
+      
+      if (indexFile && fs.existsSync(indexFile)) {
         const indexContent = fs.readFileSync(indexFile, 'utf-8');
         this._sessions = JSON.parse(indexContent);
+      }
+      
+      // 确保至少有一个默认会话
+      if (this._sessions.length === 0) {
+        this._createDefaultSession();
       }
     } catch (err) {
       this._post({ type: 'error', message: `Failed to load sessions: ${err}` });
@@ -74,6 +145,10 @@ export class SessionManager {
   private _saveSessions(): void {
     try {
       const sessionsDir = this._ensureSessionsDir();
+      if (!sessionsDir) {
+        // No workspace open → do not persist.
+        return;
+      }
       const indexFile = path.join(sessionsDir, 'index.json');
       fs.writeFileSync(indexFile, JSON.stringify(this._sessions, null, 2));
     } catch (err) {

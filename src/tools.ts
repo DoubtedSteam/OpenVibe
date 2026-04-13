@@ -186,9 +186,17 @@ export interface ReplaceCheckContext {
   unifiedDiff: string;       // unified diff with line numbers: - old, + new
 }
 
+export interface ReplaceCheckResult {
+  ok: boolean;
+  /** Short human-readable reason (shown in UI/tool result). */
+  reason?: string;
+  /** Optional structured notes for retries (shown in tool result). */
+  notes?: string[];
+}
+
 export async function replaceLinesTool(
   params: ReplaceParams,
-  llmCheckFn: (ctx: ReplaceCheckContext) => Promise<boolean>,
+  llmCheckFn: (ctx: ReplaceCheckContext) => Promise<ReplaceCheckResult>,
   userConfirmFn?: (ctx: ReplaceCheckContext) => Promise<boolean>
 ): Promise<string> {
   let absPath: string;
@@ -314,7 +322,7 @@ export async function replaceLinesTool(
   const unifiedDiff = unifiedDiffLines.join('\n');
 
   // ── LLM secondary confirmation ─────────────────────────────────────────────
-  const confirmed = await llmCheckFn({
+  const check = await llmCheckFn({
     filePath: params.filePath,
     startLine: params.startLine,
     endLine: clampedEnd,
@@ -323,8 +331,13 @@ export async function replaceLinesTool(
     unifiedDiff,
   });
 
-  if (!confirmed) {
-    return JSON.stringify({ success: false, message: 'LLM check rejected the replacement — operation cancelled' });
+  if (!check.ok) {
+    return JSON.stringify({
+      success: false,
+      message: 'LLM check rejected the replacement — operation cancelled',
+      reviewReason: check.reason ?? '',
+      reviewNotes: Array.isArray(check.notes) ? check.notes : [],
+    });
   }
 
   // ── User confirmation (after LLM check passes) ─────────────────────────────
@@ -420,12 +433,12 @@ export interface MemorySection {
 
 export function getMemoryFilePath(): string {
   const root = getWorkspaceRoot();
-  return path.join(root, '.OpenVibe', 'memory.md');
+  return path.join(root, '.openvibe', 'memory.md');
 }
 
 export function ensureMemoryDirectory(): void {
   const root = getWorkspaceRoot();
-  const memoryDir = path.join(root, '.OpenVibe');
+  const memoryDir = path.join(root, '.openvibe');
   if (!fs.existsSync(memoryDir)) {
     fs.mkdirSync(memoryDir, { recursive: true });
   }
