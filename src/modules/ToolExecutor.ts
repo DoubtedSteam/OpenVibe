@@ -79,7 +79,7 @@ export class ToolExecutor {
           
           const list = this._todoList.items
             .map((item, i) => `${i + 1}. [${item.done ? 'x' : ' '}] ${item.text}`)
-            .join('
+            .join('\
 ');
           const remaining = this._todoList.items.filter(i => !i.done).length;
           const result = JSON.stringify({
@@ -108,7 +108,7 @@ ${list}
           goal,
           items: items.map(text => ({ text, done: false })),
         };
-        const list = items.map((item, i) => `${i + 1}. [ ] ${item}`).join('
+        const list = items.map((item, i) => `${i + 1}. [ ] ${item}`).join('\
 ');
         const result = JSON.stringify({
           success: true,
