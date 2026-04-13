@@ -286,6 +286,36 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     type: 'function',
     function: {
+      name: 'text_diff',
+      description:
+        'Generate a diff output similar to git diff command. Compares two text strings and outputs unified diff format with context lines and line numbers.',
+      parameters: {
+        type: 'object',
+        properties: {
+          leftContent: {
+            type: 'string',
+            description: 'Original text content to compare',
+          },
+          rightContent: {
+            type: 'string',
+            description: 'Modified text content to compare',
+          },
+          contextLines: {
+            type: 'number',
+            description: 'Number of context lines to show around changes (default: 3)',
+          },
+          showLineNumbers: {
+            type: 'boolean',
+            description: 'Whether to show line numbers in diff output (default: true)',
+          },
+        },
+        required: ['leftContent', 'rightContent'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'show_notification',
       description:
         'Show a short VS Code notification (toast) to the user. Use sparingly for important status.',
