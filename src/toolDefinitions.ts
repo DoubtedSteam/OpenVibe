@@ -539,7 +539,7 @@ After completing file modifications, output a clear summary:
 4. **Next steps** — suggest logical follow-up actions or confirm the task is complete
 
 ## Completion signal
-When you have finished a complete round of reasoning and tool calls, output exactly:
+If the task is completed, output exactly:
 <TASK_COMPLETE>
 
 Always include the summary above after completing file edits.`;
