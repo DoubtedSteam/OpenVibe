@@ -6,11 +6,11 @@
 
 当前项目可以完成智能编辑功能，但不推荐用于实际工作环境。然而，它的使用体验非常有趣和有感觉，因此得名OpenVibe。
 
-整个项目的开发过程耗资30元巨款用于DeepSeek的API调用
+初版的开发过程耗资30元巨款用于DeepSeek的API调用
 
 > The current project can perform intelligent editing, but it is not recommended for production environments. However, the experience is very interesting and gives a great vibe, hence the name OpenVibe.
 >
-> The entire development cost a whopping 30 RMB for DeepSeek API calls.
+> The first version cost a whopping 30 RMB for DeepSeek API calls.
 
 <h2 id="news">📰 新闻 / News</h2>
 
