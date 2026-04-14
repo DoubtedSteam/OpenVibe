@@ -113,10 +113,12 @@ edit(filePath, startLine, endLine, newContent)
 
 > **Purpose**: Replace a specific code region in a file, including automatic LLM verification.
 ---
-<details>
-<summary><h3 id="other-available-tools">📚 其它辅助工具 / Other Auxiliary Tools</h3></summary>
+<h2 id="other-available-tools">📚 其它辅助工具 / Other Auxiliary Tools</h2>
 
 除了三个核心文件操作工具外，OpenVibe还提供以下辅助工具：
+
+<details>
+<summary>查看辅助工具详情</summary>
 
 #### get_workspace_info — 工作区信息 / Workspace Information
 
@@ -161,27 +163,9 @@ OpenVibe集成了Git快照功能，可以在编码过程中自动创建版本快
 > OpenVibe integrates Git snapshot functionality, allowing automatic version snapshots to be created during coding, and managing version history through the UI.
 
 </details>
->
-> 2. **Via settings.json file**:
->    ```json
->    {
->      "vibe-coding.apiBaseUrl": "https://api.deepseek.com",
->      "vibe-coding.apiKey": "your-api-key",
->      "vibe-coding.model": "deepseek-reasoner",
->      "vibe-coding.confirmChanges": true,
->      "vibe-coding.maxInteractions": -1,
-      \"vibe-coding.maxSequenceLength\": 1000000,
-      \"vibe-coding.todolistReview.enabled\": true,
-      \"vibe-coding.todolistReview.maxAttempts\": 5,
-      \"vibe-coding.todolistReview.reviewTimeoutMs\": 120000,
-      \"vibe-coding.todolistReview.editorTimeoutMs\": 120000,
-      \"vibe-coding.editReview.enabled\": true,
-      \"vibe-coding.editReview.timeoutMs\": 120000
->    }
->    ```
+<h2 id="configuration">⚙️ 配置 / Configuration</h2>
 
 ### ⚙️ 配置项说明 / Configuration Options
-
 | 配置项 | 类型 | 默认值 | 说明 |
 |--------|------|--------|------|
 | **apiBaseUrl** | `string` | `https://api.deepseek.com` | OpenAI兼容API的基础URL |
