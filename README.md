@@ -16,11 +16,11 @@
 
 2025年4月11日: OpenVibe增加了Git支持功能！现在可以在编码过程中自动创建Git快照，并支持通过UI进行版本回滚和快照管理。
 
-> 2025年4月11日: OpenVibe已添加Git支持！现在可以在编码过程中自动创建Git快照，并支持通过UI进行版本回滚和快照管理。
+> April 11, 2025: OpenVibe has added Git support! Now automatic Git snapshots can be created during coding, and version rollback and snapshot management are supported through the UI.
 
 2025年4月14日: OpenVibe添加了独立审查机制，包括任务清单审查和代码编辑审查功能，通过独立LLM代理提高代码修改质量。
 
-> 2025年4月14日: OpenVibe added independent review mechanisms including todolist review and code edit review, improving code modification quality through independent LLM agents.
+> April 14, 2025: OpenVibe added independent review mechanisms including todolist review and code edit review, improving code modification quality through independent LLM agents.
 <h2 id="table-of-contents">📋 目录 / Table of Contents</h2>
 
 
@@ -116,9 +116,10 @@ edit(filePath, startLine, endLine, newContent)
 <h2 id="other-available-tools">📚 其它辅助工具 / Other Auxiliary Tools</h2>
 
 除了三个核心文件操作工具外，OpenVibe还提供以下辅助工具：
+> Besides the three core file operation tools, OpenVibe also provides the following auxiliary tools:
 
 <details>
-<summary>查看辅助工具详情</summary>
+<summary>查看辅助工具详情 / View Auxiliary Tools Details</summary>
 
 #### get_workspace_info — 工作区信息 / Workspace Information
 
@@ -164,41 +165,28 @@ OpenVibe集成了Git快照功能，可以在编码过程中自动创建版本快
 
 </details>
 <h2 id="configuration">⚙️ 配置 / Configuration</h2>
-
+OpenVibe提供灵活的配置选项，可通过VS Code设置界面进行配置。
+> OpenVibe provides flexible configuration options that can be set via the VS Code settings interface.
 ### ⚙️ 配置项说明 / Configuration Options
 | 配置项 | 类型 | 默认值 | 说明 |
 |--------|------|--------|------|
-| **apiBaseUrl** | `string` | `https://api.deepseek.com` | OpenAI兼容API的基础URL |
-| **apiKey** | `string` | `""` | API密钥（**必填**） |
-| **model** | `string` | `deepseek-reasoner` | 使用的AI模型 |
-| **confirmChanges** | `boolean` | `true` | 文件修改前是否需要用户确认 |
-| **maxInteractions** | `number` | `-1` | 最大工具调用迭代次数（`-1`表示无限制） |
-| **maxSequenceLength** | `number` | `1000000` | 生成文本的最大长度 |
- | **vibe-coding.todolistReview.enabled** | `boolean` | `true` | 是否启用任务清单审查（独立LLM代理） |
- | **vibe-coding.todolistReview.maxAttempts** | `number` | `5` | 最大审查尝试次数（最小1次） |
- | **vibe-coding.todolistReview.reviewTimeoutMs** | `number` | `120000` | 任务清单审查超时时间（毫秒，最小5000） |
- | **vibe-coding.todolistReview.editorTimeoutMs** | `number` | `120000` | 编辑器超时时间（毫秒，最小5000） |
- | **vibe-coding.editReview.enabled** | `boolean` | `true` | 是否启用代码编辑审查（独立LLM代理） |
- | **vibe-coding.editReview.timeoutMs** | `number` | `120000` | 代码编辑审查超时时间（毫秒，最小5000） |
-
-| Setting | Type | Default | Description |
-|---------|------|---------|-------------|
-| **apiBaseUrl** | `string` | `https://api.deepseek.com` | Base URL of the OpenAI‑compatible API |
-| **apiKey** | `string` | `""` | API key (**required**) |
-| **model** | `string` | `deepseek-reasoner` | AI model to use |
-| **confirmChanges** | `boolean` | `true` | Whether to require user confirmation before modifying files |
-| **maxInteractions** | `number` | `-1` | Maximum number of tool call iterations (`-1` means unlimited) |
-| **maxSequenceLength** | `number` | `1000000` | Maximum length of generated text |
- | **vibe-coding.todolistReview.enabled** | `boolean` | `true` | Whether to enable todolist review by independent LLM agent |
- | **vibe-coding.todolistReview.maxAttempts** | `number` | `5` | Maximum review attempts (minimum 1) |
- | **vibe-coding.todolistReview.reviewTimeoutMs** | `number` | `120000` | Review timeout in ms (minimum 5000) |
- | **vibe-coding.todolistReview.editorTimeoutMs** | `number` | `120000` | Editor timeout in ms (minimum 5000) |
- | **vibe-coding.editReview.enabled** | `boolean` | `true` | Whether to enable code edit review by independent LLM agent |
- | **vibe-coding.editReview.timeoutMs** | `number` | `120000` | Code edit review timeout in ms (minimum 5000) |
+| **apiBaseUrl** | `string` | `https://api.deepseek.com` | OpenAI兼容API的基础URL / Base URL of the OpenAI‑compatible API |
+| **apiKey** | `string` | `""` | API密钥（**必填**） / API key (**required**) |
+| **model** | `string` | `deepseek-reasoner` | 使用的AI模型 / AI model to use |
+| **confirmChanges** | `boolean` | `true` | 文件修改前是否需要用户确认 / Whether to require user confirmation before modifying files |
+| **maxInteractions** | `number` | `-1` | 最大工具调用迭代次数（`-1`表示无限制） / Maximum number of tool call iterations (`-1` means unlimited) |
+| **maxSequenceLength** | `number` | `1000000` | 生成文本的最大长度 / Maximum length of generated text |
+ | **vibe-coding.todolistReview.enabled** | `boolean` | `true` | 是否启用任务清单审查（独立LLM代理） / Whether to enable todolist review by independent LLM agent |
+ | **vibe-coding.todolistReview.maxAttempts** | `number` | `5` | 最大审查尝试次数（最小1次） / Maximum review attempts (minimum 1) |
+ | **vibe-coding.todolistReview.reviewTimeoutMs** | `number` | `120000` | 任务清单审查超时时间（毫秒，最小5000） / Review timeout in ms (minimum 5000) |
+ | **vibe-coding.todolistReview.editorTimeoutMs** | `number` | `120000` | 编辑器超时时间（毫秒，最小5000） / Editor timeout in ms (minimum 5000) |
+ | **vibe-coding.editReview.enabled** | `boolean` | `true` | 是否启用代码编辑审查（独立LLM代理） / Whether to enable code edit review by independent LLM agent |
+ | **vibe-coding.editReview.timeoutMs** | `number` | `120000` | 代码编辑审查超时时间（毫秒，最小5000） / Code edit review timeout in ms (minimum 5000) |
 
 <h2 id="memory-management-system">🧠 内存管理系统 / Memory Management System</h2>
 
 OpenVibe包含一个智能内存系统，用于维护项目知识和任务历史。
+> OpenVibe includes an intelligent memory system for maintaining project knowledge and task history.
 
 ### 内存文件结构 / Memory File Structure
 
