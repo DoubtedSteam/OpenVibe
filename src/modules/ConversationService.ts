@@ -1,4 +1,5 @@
 import { ChatMessage, ToolCall, ApiConfig } from '../types';
+import { getAgentRuntimeContextBlock } from '../agentRuntimeContext';
 import { sendChatMessage } from '../api';
 import { SessionManager } from './SessionManager';
 
@@ -131,7 +132,10 @@ export class ConversationService {
         `Write the summary now:`;
 
       const summaryResponse = await sendChatMessage(
-        [{ role: 'user', content: summarizePrompt }],
+        [
+          { role: 'system', content: getAgentRuntimeContextBlock() },
+          { role: 'user', content: summarizePrompt },
+        ],
         apiConfig,
         undefined,
         abortController.signal

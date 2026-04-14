@@ -26,9 +26,14 @@ import {
   reviewTodolistEdit,
   reviewTodolistGenerate,
 } from './todolistReview';
+import type { ShellCommandReviewSettings } from './shellCommandReview';
+import { reviewShellCommand, shellEditorCandidate } from './shellCommandReview';
 
 export class ToolExecutor {
   private _todoList: { goal: string; items: { text: string; done: boolean }[] } | null = null;
+
+  /** Increments per `edit` LLM check in the current user turn (shown on Replace check cards). */
+  private _editReviewRound = 0;
 
   constructor(
     private readonly _context: {
@@ -36,12 +41,24 @@ export class ToolExecutor {
       llmCheckReplace: (ctx: ReplaceCheckContext) => Promise<ReplaceCheckResult>;
       userConfirmReplace: (ctx: ReplaceCheckContext) => Promise<boolean>;
       userConfirmShellCommand: (command: string) => Promise<boolean>;
-      getApiConfig: () => ApiConfig & { confirmChanges?: boolean };
+      getApiConfig: () => ApiConfig;
       getLastUserTextForTools: () => string;
       getRelatedContextForTodolistReview: () => string;
       getTodolistReviewSettings: () => TodolistReviewSettings;
+      getShellCommandReviewSettings: () => ShellCommandReviewSettings;
     }
   ) {}
+
+  /** Call when the user sends a new message (not empty "continue") so edit check numbering restarts. */
+  public resetReviewUiCounters(): void {
+    this._editReviewRound = 0;
+  }
+
+  /** Next sequence number for Replace check cards this turn. */
+  public nextEditReviewRound(): number {
+    this._editReviewRound += 1;
+    return this._editReviewRound;
+  }
 
   public async executeTool(name: string, args: Record<string, unknown>): Promise<string> {
     switch (name) {
@@ -146,13 +163,7 @@ ${list}
         return getThemeInfoTool();
 
       case 'run_shell_command':
-        if (this._context.getApiConfig().confirmChanges !== false) {
-          const approved = await this._context.userConfirmShellCommand(String(args.command ?? ''));
-          if (!approved) {
-            return JSON.stringify({ success: false, error: 'User cancelled shell command' });
-          }
-        }
-        return await runShellCommandTool({ command: String(args.command ?? '') });
+        return await this._handleRunShellCommand(args);
 
       case 'git_snapshot': {
         return gitSnapshotTool({
@@ -176,6 +187,130 @@ ${list}
       default:
         return JSON.stringify({ error: `Unknown tool: ${name}` });
     }
+  }
+
+  private async _handleRunShellCommand(args: Record<string, unknown>): Promise<string> {
+    const proposedFromTool = String(args.command ?? '').trim();
+    if (!proposedFromTool) {
+      return JSON.stringify({ error: 'command is empty' });
+    }
+
+    const cfg = this._context.getShellCommandReviewSettings();
+    const apiConfig = this._context.getApiConfig();
+    const confirmShell = apiConfig.confirmShellCommand !== false;
+
+    if (!cfg.enabled) {
+      if (confirmShell) {
+        const approved = await this._context.userConfirmShellCommand(proposedFromTool);
+        if (!approved) {
+          return JSON.stringify({ success: false, error: 'User cancelled shell command' });
+        }
+      }
+      return await runShellCommandTool({ command: proposedFromTool });
+    }
+
+    const userRequest = this._context.getLastUserTextForTools();
+    const relatedContext = this._context.getRelatedContextForTodolistReview();
+    const memoryExcerpt = loadMemoryExcerpt();
+
+    let reviewNotes: string[] = [];
+    let commandCandidate = proposedFromTool;
+
+    for (let attempt = 1; attempt <= cfg.maxAttempts; attempt++) {
+      try {
+        const edited = await shellEditorCandidate({
+          apiConfig,
+          userRequest,
+          relatedContext,
+          projectConstraints: memoryExcerpt,
+          proposedFromTool,
+          priorCandidate: commandCandidate,
+          reviewNotes,
+          editorTimeoutMs: cfg.editorTimeoutMs,
+        });
+        commandCandidate = edited.command;
+      } catch (e: any) {
+        return JSON.stringify({
+          success: false,
+          operation: 'run_shell_command',
+          error: `Shell editor agent failed: ${e.message}`,
+          reviewNotesAccumulated: reviewNotes,
+        });
+      }
+
+      const review = await reviewShellCommand({
+        apiConfig,
+        userRequest,
+        relatedContext,
+        projectConstraints: memoryExcerpt,
+        command: commandCandidate,
+        proposedFromTool,
+        reviewTimeoutMs: cfg.reviewTimeoutMs,
+      });
+
+      if (review.decision === 'PASS') {
+        if (attempt > 1) {
+          this._context.post({
+            type: 'addMessage',
+            message: {
+              role: 'assistant',
+              content:
+                `✅ **Shell review** · passed on round **${attempt}/${cfg.maxAttempts}** (command was refined until review passed).`,
+            },
+          });
+        }
+        if (confirmShell) {
+          const approved = await this._context.userConfirmShellCommand(commandCandidate);
+          if (!approved) {
+            return JSON.stringify({
+              success: false,
+              error: 'User cancelled shell command',
+              reviewedCommand: commandCandidate,
+            });
+          }
+        }
+        const execResult = await runShellCommandTool({ command: commandCandidate });
+        try {
+          const parsed = JSON.parse(execResult) as Record<string, unknown>;
+          return JSON.stringify({
+            ...parsed,
+            shellReviewAttempts: attempt,
+            reviewedCommand: commandCandidate,
+          });
+        } catch {
+          return execResult;
+        }
+      }
+
+      reviewNotes = mergeReviewNotes(reviewNotes, review.notes);
+      if (attempt >= cfg.maxAttempts) {
+        return JSON.stringify({
+          success: false,
+          operation: 'run_shell_command',
+          error: `run_shell_command: review did not pass after ${cfg.maxAttempts} attempt(s).`,
+          reviewNotesAccumulated: reviewNotes,
+          lastCandidateCommand: commandCandidate,
+          message: 'No command was executed. Adjust the request or tool arguments from reviewer feedback and retry.',
+        });
+      }
+
+      this._context.post({
+        type: 'addMessage',
+        message: {
+          role: 'assistant',
+          content:
+            `🔁 **Shell review** · round **${attempt}/${cfg.maxAttempts}** — not passed\n\n` +
+            `${review.summary || 'See tool result for reviewer notes.'}\n\n` +
+            `_Regenerating command…_`,
+        },
+      });
+    }
+
+    return JSON.stringify({
+      success: false,
+      operation: 'run_shell_command',
+      error: 'Unexpected shell command review loop exit.',
+    });
   }
 
   /** `compact` is handled in MessageHandler and delegated to ConversationService.compactHistory. */
@@ -327,8 +462,12 @@ ${list}
           this._postTodoDisplay('expanded', this._todoList.goal, list, remaining);
           if (attempt > 1) {
             this._context.post({
-              type: 'info',
-              message: `Todo list (edit) passed review after ${attempt} attempt(s).`,
+              type: 'addMessage',
+              message: {
+                role: 'assistant',
+                content:
+                  `✅ **Todo list (expand) review** · passed on round **${attempt}/${cfg.maxAttempts}**.`,
+              },
             });
           }
           return result;
@@ -344,6 +483,17 @@ ${list}
             message: 'No changes were applied. Adjust create_todo_list (expand) from reviewer feedback and retry.',
           });
         }
+
+        this._context.post({
+          type: 'addMessage',
+          message: {
+            role: 'assistant',
+            content:
+              `🔁 **Todo list (expand) review** · round **${attempt}/${cfg.maxAttempts}** — not passed\n\n` +
+              `${review.summary || 'See reviewer notes in tool result.'}\n\n` +
+              `_Regenerating expanded items…_`,
+          },
+        });
 
         try {
           const edited = await editorExpandCandidate({
@@ -401,8 +551,12 @@ ${list}
         this._postTodoDisplay('created', cg, list, remaining);
         if (attempt > 1) {
           this._context.post({
-            type: 'info',
-            message: `Todo list (generate) passed review after ${attempt} attempt(s).`,
+            type: 'addMessage',
+            message: {
+              role: 'assistant',
+              content:
+                `✅ **Todo list (generate) review** · passed on round **${attempt}/${cfg.maxAttempts}**.`,
+            },
           });
         }
         return result;
@@ -418,6 +572,17 @@ ${list}
           message: 'No todo list was saved. Revise create_todo_list from reviewer feedback and retry.',
         });
       }
+
+      this._context.post({
+        type: 'addMessage',
+        message: {
+          role: 'assistant',
+          content:
+            `🔁 **Todo list (generate) review** · round **${attempt}/${cfg.maxAttempts}** — not passed\n\n` +
+            `${review.summary || 'See reviewer notes in tool result.'}\n\n` +
+            `_Regenerating goal and items…_`,
+        },
+      });
 
       try {
         const next = await regenerateGenerateCandidate({

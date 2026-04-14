@@ -1,4 +1,5 @@
 import { ChatMessage, ApiConfig } from '../types';
+import { getAgentRuntimeContextBlock } from '../agentRuntimeContext';
 import { SYSTEM_PROMPT, TOOL_DEFINITIONS } from '../toolDefinitions';
 import { sendChatMessage } from '../api';
 import { gitSnapshotTool } from '../tools';
@@ -21,6 +22,8 @@ export class MessageHandler {
       sanitizeIncompleteToolCalls: () => void;
       executeTool: (name: string, args: Record<string, unknown>) => Promise<string>;
       compactHistory: (triggeredByTokenLimit?: boolean) => Promise<string>;
+      /** Reset per-turn UI counters (e.g. edit review #) when the user sends a new instruction. */
+      onUserInstructionStart?: () => void;
     }
   ) {}
 
@@ -36,6 +39,7 @@ export class MessageHandler {
 
     // Empty message = "continue" signal; don't add it to conversation history.
     if (text) {
+      this._context.onUserInstructionStart?.();
       // 尝试创建Git快照（静默失败，不影响主流程）
       try {
         gitSnapshotTool({
@@ -71,7 +75,9 @@ export class MessageHandler {
           break;
         }
 
-        const allMessages = this._context.buildMessagesForLlm(SYSTEM_PROMPT + injectedSystemPrompt);
+        const allMessages = this._context.buildMessagesForLlm(
+          SYSTEM_PROMPT + '\n\n' + getAgentRuntimeContextBlock() + injectedSystemPrompt
+        );
 
         const response = await sendChatMessage(allMessages, apiConfig, TOOL_DEFINITIONS, this._abortController.signal);
 

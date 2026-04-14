@@ -5,6 +5,7 @@ import { SessionManager } from './SessionManager';
 import { UIManager } from './UIManager';
 import { ConversationService } from './ConversationService';
 import type { TodolistReviewSettings } from './todolistReview';
+import type { ShellCommandReviewSettings } from './shellCommandReview';
 import { gitRollbackTool, listGitSnapshotsTool, showTextDiffTool } from '../tools';
 
 export class ChatViewProvider implements vscode.WebviewViewProvider {
@@ -38,12 +39,14 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         const apiConfig = this._uiManager.getApiConfig();
         const userRequest = this._conversation.getLastUserTextForTools();
         const relatedContext = this._conversation.getRelatedContextForTodolistReview();
+        const reviewRound = this._toolExecutor.nextEditReviewRound();
         return llmIndependentEditReview({
           ctx,
           apiConfig,
           userRequest,
           relatedContext,
           post: (m: any) => this._uiManager.post(m),
+          reviewRound,
         });
       },
       userConfirmReplace: (ctx) => this._uiManager.userConfirmReplace(ctx),
@@ -52,6 +55,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       getLastUserTextForTools: () => this._conversation.getLastUserTextForTools(),
       getRelatedContextForTodolistReview: () => this._conversation.getRelatedContextForTodolistReview(),
       getTodolistReviewSettings: () => ChatViewProvider._readTodolistReviewSettings(),
+      getShellCommandReviewSettings: () => ChatViewProvider._readShellCommandReviewSettings(),
     });
 
     this._messageHandler = new MessageHandler({
@@ -64,6 +68,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       sanitizeIncompleteToolCalls: () => this._conversation.sanitizeIncompleteToolCalls(),
       executeTool: (name, args) => this._toolExecutor.executeTool(name, args),
       compactHistory: (triggeredByTokenLimit) => this._conversation.compactHistory(triggeredByTokenLimit),
+      onUserInstructionStart: () => this._toolExecutor.resetReviewUiCounters(),
     });
   }
 
@@ -78,6 +83,16 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       maxAttempts: Math.max(1, c.get<number>('todolistReview.maxAttempts', 5)),
       reviewTimeoutMs: Math.max(5000, c.get<number>('todolistReview.reviewTimeoutMs', 120000)),
       editorTimeoutMs: Math.max(5000, c.get<number>('todolistReview.editorTimeoutMs', 120000)),
+    };
+  }
+
+  private static _readShellCommandReviewSettings(): ShellCommandReviewSettings {
+    const c = vscode.workspace.getConfiguration('vibe-coding');
+    return {
+      enabled: c.get<boolean>('shellCommandReview.enabled', true) !== false,
+      maxAttempts: Math.max(1, c.get<number>('shellCommandReview.maxAttempts', 5)),
+      reviewTimeoutMs: Math.max(5000, c.get<number>('shellCommandReview.reviewTimeoutMs', 120000)),
+      editorTimeoutMs: Math.max(5000, c.get<number>('shellCommandReview.editorTimeoutMs', 120000)),
     };
   }
 

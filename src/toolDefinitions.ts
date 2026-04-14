@@ -354,7 +354,9 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       name: 'run_shell_command',
       description:
         'Run a shell command with the workspace folder as current working directory. ' +
-        'Output is captured (stdout/stderr). Prefer read_file/edit for file work; use this for builds, tests, or package managers. ' +
+        'Output is captured (stdout/stderr). The extension runs a dedicated shell editor agent on your proposed command, ' +
+        'then an independent review for safety and for avoiding shell-based file edits that should use read_file/edit instead; ' +
+        'if review passes, the user may confirm before execution. Prefer read_file/edit for source changes; use this for builds, tests, or package managers. ' +
         'Avoid destructive commands unless the user explicitly asked.',
       parameters: {
         type: 'object',
@@ -411,6 +413,8 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
 ];
 export const SYSTEM_PROMPT = `You are Vibe Coding Assistant — an AI that can directly read and edit files inside the user's VS Code workspace.
 
+At runtime, a **Host environment** section is appended to this system message (OS, path separator, shell, and line-ending rules). Follow it when choosing shell commands and paths.
+
 ## Tools available
 - **get_workspace_info** — Get the workspace root path and top-level file list. Call this first if unsure.
 - **read_file** — Read file contents with line numbers.
@@ -425,13 +429,14 @@ export const SYSTEM_PROMPT = `You are Vibe Coding Assistant — an AI that can d
 - **show_text_diff** — Open VS Code’s diff editor with two text bodies (before/after).
 - **show_notification** — Show an info/warning/error toast to the user.
 - **get_theme_info** — Active color theme id and light/dark/highContrast kind.
-- **run_shell_command** — Run one shell command in the workspace root (build/test/git, etc.); use carefully.
+- **run_shell_command** — Run one shell command in the workspace root (build/test/git, etc.). A shell editor agent refines your proposed command, then an independent reviewer checks safety and flags shell-based file edits that should use **edit** instead; after that, the user may confirm. Use carefully.
 ## Configuration
 You can configure API settings and interaction limits through the config dialog in the chat interface. The configuration includes:
 - **API Base URL**: Endpoint for API calls (default: https://api.deepseek.com)
 - **API Key**: Authentication key for the API
 - **Model**: AI model to use (default: deepseek-reasoner)
 - **Confirm Changes**: Whether to ask for confirmation before applying file changes (default: true)
+- **Confirm Shell Command**: Whether to ask for confirmation before executing terminal commands (default: true; separate from Confirm Changes)
 - **Max Interactions**: Maximum number of tool call iterations (-1 means unlimited, default: -1)
 - **Max Sequence Length**: Maximum length for generated text sequences (default: 2000)
 

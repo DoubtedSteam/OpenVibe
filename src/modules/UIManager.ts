@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { getAgentRuntimeContextBlock } from '../agentRuntimeContext';
 import { ApiConfig } from '../types';
 import { ReplaceCheckContext, ReplaceCheckResult } from '../tools';
 import { sendChatMessage } from '../api';
@@ -91,6 +92,7 @@ export class UIManager {
       apiKey,
       model: cfg.get<string>('model', 'gpt-4o'),
       confirmChanges: cfg.get<boolean>('confirmChanges', true),
+      confirmShellCommand: cfg.get<boolean>('confirmShellCommand', true),
       maxInteractions: cfg.get<number>('maxInteractions', -1),
       maxSequenceLength: cfg.get<number>('maxSequenceLength', 2000),
     };
@@ -125,6 +127,7 @@ ${ctx.afterContext}
     let reply: string;
     try {
       const checkMessages = [
+        { role: 'system' as const, content: getAgentRuntimeContextBlock() },
         { role: 'user' as const, content: prompt },
       ];
       // Use the same API but without tools so we get a plain text answer

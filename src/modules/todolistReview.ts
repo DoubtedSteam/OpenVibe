@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import { getAgentRuntimeContextBlock } from '../agentRuntimeContext';
 import { sendChatMessage } from '../api';
 import type { ApiConfig, ChatMessage } from '../types';
 import { getMemoryFilePath } from '../tools';
@@ -208,7 +209,7 @@ export async function reviewTodolistGenerate(params: {
 
   const content = await chatJson(
     [
-      { role: 'system', content: REVIEW_SYSTEM_GENERATE },
+      { role: 'system', content: REVIEW_SYSTEM_GENERATE + '\n\n' + getAgentRuntimeContextBlock() },
       { role: 'user', content: userMsg },
     ],
     params.apiConfig,
@@ -247,7 +248,7 @@ export async function reviewTodolistEdit(params: {
 
   const content = await chatJson(
     [
-      { role: 'system', content: REVIEW_SYSTEM_EDIT },
+      { role: 'system', content: REVIEW_SYSTEM_EDIT + '\n\n' + getAgentRuntimeContextBlock() },
       { role: 'user', content: userMsg },
     ],
     params.apiConfig,
@@ -275,7 +276,7 @@ export async function regenerateGenerateCandidate(params: {
 
   const content = await chatJson(
     [
-      { role: 'system', content: WRITER_SYSTEM_GENERATE },
+      { role: 'system', content: WRITER_SYSTEM_GENERATE + '\n\n' + getAgentRuntimeContextBlock() },
       { role: 'user', content: userMsg },
     ],
     params.apiConfig,
@@ -307,7 +308,7 @@ export async function editorExpandCandidate(params: {
 
   const content = await chatJson(
     [
-      { role: 'system', content: WRITER_SYSTEM_EDIT },
+      { role: 'system', content: WRITER_SYSTEM_EDIT + '\n\n' + getAgentRuntimeContextBlock() },
       { role: 'user', content: userMsg },
     ],
     params.apiConfig,

@@ -18,9 +18,9 @@
 
 > 2025年4月11日: OpenVibe已添加Git支持！现在可以在编码过程中自动创建Git快照，并支持通过UI进行版本回滚和快照管理。
 
-2025年4月12日: OpenVibe 0.4.0版本添加了独立审查机制，包括任务清单审查和代码编辑审查功能，通过独立LLM代理提高代码修改质量。
+2025年4月14日: OpenVibe添加了独立审查机制，包括任务清单审查和代码编辑审查功能，通过独立LLM代理提高代码修改质量。
 
-> 2025年4月12日: OpenVibe version 0.4.0 added independent review mechanisms including todolist review and code edit review, improving code modification quality through independent LLM agents.
+> 2025年4月14日: OpenVibe added independent review mechanisms including todolist review and code edit review, improving code modification quality through independent LLM agents.
 <h2 id="table-of-contents">📋 目录 / Table of Contents</h2>
 
 

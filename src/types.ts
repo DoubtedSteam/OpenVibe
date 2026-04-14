@@ -36,7 +36,10 @@ export interface ApiConfig {
   baseUrl: string;
   apiKey: string;
   model: string;
+  /** Ask before applying **edit** tool (file changes). */
   confirmChanges?: boolean;
+  /** Ask before running **run_shell_command** after review (independent from confirmChanges). */
+  confirmShellCommand?: boolean;
   maxInteractions?: number; // -1 means unlimited
   maxSequenceLength?: number;
 }

@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { getAgentRuntimeContextBlock } from '../agentRuntimeContext';
 import { sendChatMessage } from '../api';
 import type { ApiConfig, ChatMessage } from '../types';
 import type { ReplaceCheckContext, ReplaceCheckResult } from '../tools';
@@ -104,6 +105,8 @@ export async function llmIndependentEditReview(params: {
   userRequest: string;
   relatedContext: string;
   post: (msg: any) => void;
+  /** 1-based index of this Replace check in the current user instruction (shown on the card). */
+  reviewRound?: number;
 }): Promise<ReplaceCheckResult> {
   const settings = readEditReviewSettings();
   if (!settings.enabled) {
@@ -123,7 +126,7 @@ export async function llmIndependentEditReview(params: {
   let content: string | null = null;
   try {
     const messages: ChatMessage[] = [
-      { role: 'system', content: REVIEW_SYSTEM },
+      { role: 'system', content: REVIEW_SYSTEM + '\n\n' + getAgentRuntimeContextBlock() },
       { role: 'user', content: userMsg },
     ];
     const res = await sendChatMessage(messages, params.apiConfig, undefined, undefined, {
@@ -151,6 +154,7 @@ export async function llmIndependentEditReview(params: {
       unifiedDiff: unifiedT.text,
       contextTruncated: unifiedT.truncated,
       languageId: languageIdFromPath(params.ctx.filePath),
+      reviewRound: params.reviewRound,
     },
   });
 

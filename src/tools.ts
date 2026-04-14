@@ -3,6 +3,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import { getRuntimeEnvironmentSummary } from './agentRuntimeContext';
 
 const execAsync = promisify(exec);
 
@@ -36,6 +37,35 @@ function readLines(absPath: string): { lines: string[]; crlf: boolean } {
 
 function writeLines(absPath: string, lines: string[], crlf: boolean): void {
   fs.writeFileSync(absPath, lines.join(crlf ? '\r\n' : '\n'), 'utf-8');
+}
+
+/** Normalize model/tool-supplied replacement text: escaped \\n, CRLF, and legacy CR. */
+function splitLinesForEditInput(raw: string): string[] {
+  let t = raw.replace(/\\n/g, '\n');
+  t = t.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  if (t === '') {
+    return [];
+  }
+  return t.split('\n');
+}
+
+function splitLinesNormalized(raw: string): string[] {
+  const t = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  return t.split('\n');
+}
+
+/** When creating a new file, prefer CRLF if the patch text clearly uses it; otherwise LF if only \\n; else OS default. */
+function inferCrlfForNewFile(raw: string): boolean {
+  if (raw.includes('\r\n')) {
+    return true;
+  }
+  if (/\r/.test(raw)) {
+    return true;
+  }
+  if (raw.includes('\n')) {
+    return false;
+  }
+  return process.platform === 'win32';
 }
 
 // ─── read_file ────────────────────────────────────────────────────────────────
@@ -160,6 +190,7 @@ export function getWorkspaceInfoTool(): string {
     workspaceRoot: root,
     topLevelEntries: entries,
     hint: 'Use relative paths (e.g. "src/index.ts") when calling read_file or find_in_file.',
+    ...getRuntimeEnvironmentSummary(),
   });
 }
 
@@ -242,6 +273,10 @@ export async function replaceLinesTool(
     total = lines.length;
   }
 
+  if (!fs.existsSync(absPath)) {
+    crlf = inferCrlfForNewFile(params.newContent);
+  }
+
   // Support insert-before-start (endLine = startLine - 1)
   // For new files, total is 0, startLine is 1, endLine is 0
   if (params.startLine < 1 || params.startLine > total + 1) {
@@ -250,9 +285,7 @@ export async function replaceLinesTool(
   const clampedEnd = Math.min(Math.max(params.startLine - 1, params.endLine), total);
 
   const oldLines = lines.slice(params.startLine - 1, clampedEnd);
-  // Normalize literal \n (escaped) to real newlines, in case the LLM serialized them as escape sequences
-  const normalizedContent = params.newContent.replace(/\\n/g, '\n');
-  const newLines = normalizedContent !== '' ? normalizedContent.split('\n') : [];
+  const newLines = splitLinesForEditInput(params.newContent);
   // ── Build context windows (±10 lines) ──────────────────────────────────────
   const CTX = 10;
   const isNewFile = total === 0 && !fs.existsSync(absPath);
@@ -793,10 +826,8 @@ export interface TextDiffParams {
 
 export function textDiffTool(params: TextDiffParams): string {
   try {
-    const leftLines = params.leftContent.split('\
-');
-    const rightLines = params.rightContent.split('\
-');
+    const leftLines = splitLinesNormalized(params.leftContent);
+    const rightLines = splitLinesNormalized(params.rightContent);
     const context = params.contextLines ?? 3;
     const showLineNumbers = params.showLineNumbers ?? true;
     
@@ -879,8 +910,7 @@ function formatUnifiedDiff(
     lines.push(prefix + lineNumStr + content);
   }
   
-  return lines.join('\
-');
+  return lines.join('\n');
 }
 
 // ─── show_notification ────────────────────────────────────────────────────────
@@ -1203,7 +1233,7 @@ export function listGitSnapshotsTool(): string {
         error: `Failed to list tags: ${tagResult.stderr}`
       });
     }
-    const tags = tagResult.stdout.trim().split('\n').map(t => t.trim()).filter(tag => tag);
+    const tags = tagResult.stdout.trim().split(/\r?\n/).map(t => t.trim()).filter(tag => tag);
     const snapshots = [];
     for (const tag of tags) {
       // Use 'git log -1' instead of 'git show' to avoid annotated-tag header
