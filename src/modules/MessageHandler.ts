@@ -38,7 +38,7 @@ export class MessageHandler {
     this._abortController = new AbortController();
     this._context.post({ type: 'setRunning', running: true });
 
-    // Empty message = "continue" signal; don't add it to conversation history.
+    // Empty message = "continue" signal; add placeholder to conversation history for LLM context.
     if (text) {
       this._context.onUserInstructionStart?.();
       // 尝试创建Git快照（静默失败，不影响主流程）
@@ -54,6 +54,11 @@ export class MessageHandler {
       
       this._context.post({ type: 'addMessage', message: { role: 'user', content: text } });
       this._context.addMessage({ role: 'user', content: text });
+    } else {
+      // 空消息：添加占位消息，让LLM知道用户想继续
+      const placeholder = "[继续]";
+      this._context.post({ type: 'addMessage', message: { role: 'user', content: placeholder } });
+      this._context.addMessage({ role: 'user', content: placeholder });
     }
     
     this._context.post({ type: 'loading', loading: true });
