@@ -32,9 +32,11 @@
 |------|------|
 | 2025-04-11 | 增加 **Git** 支持：编码过程中可自动创建快照，并在 UI 中回滚与管理版本。 |
 | 2025-04-14 | 增加**独立审查**：任务清单审查与代码编辑审查，由独立 LLM 代理提升修改质量。 |
+| 2025-04-16 | **强化 shell 审查与执行**：1) 明确拒绝用 shell 获取项目上下文（强制使用 `read`/`find` 工具） 2) 结构化返回 + 关键错误摘要 3) 注入 todo 与最近执行历史到审查流程 |
 
 > **2025-04-11:** Git snapshots during coding; rollback and history in the UI.  
-> **2025-04-14:** Independent review for todo lists and code edits via separate LLM agents.
+> **2025-04-14:** Independent review for todo lists and code edits via separate LLM agents.  
+> **2025-04-16:** Enhanced shell review & execution: 1) Reject shell for project context (use `read`/`find` instead) 2) Structured output + key error summaries 3) Todo & recent history injection.
 
 <h2 id="project-overview">项目概述 / Project overview</h2>
 
@@ -90,12 +92,22 @@ edit(filePath, startLine, endLine, newContent)
 
 - **plan**：主智能体制定 todo → 审查智能体验证计划 → 不通过则反馈并重规划。
 - **edit**：编辑智能体写入 → 审查智能体验证改动 → 不通过则重改；必要时用户确认 diff。
+- **shell 命令**：主智能体提出命令 → 编辑智能体优化 → 审查智能体验证安全性与合理性 → 不通过则重规划 → 最终返回结构化结果
+
+**Shell 命令审查的关键改进：**
+
+1. **强化安全规则**：明确拒绝使用 shell 获取项目上下文（如 cat/type/dir/grep 等），强制使用 `read_file`/`find_in_file` 工具
+2. **防止命令漂移**：要求命令与用户请求和 todo 上下文保持一致，拒绝无关脚本
+3. **结构化返回**：shell 结果包含 command、cwd、exitCode、durationMs、summary、keyErrors 等字段，便于审查抓取关键信息
+4. **上下文注入**：自动注入 todo 目标与最近 shell 历史到审查流程
+5. **防重复执行**：记录最近执行的命令，避免无意义重复
 
 **主智能体**：需求分析、任务与 `plan` / `edit` 协调、与用户沟通。  
-**审查智能体**：todo 合理性、编辑正确性与风险。  
+**审查智能体**：todo 合理性、编辑正确性与风险、shell 命令安全性。  
 **编辑智能体**：`read_file`、`find_in_file`、`edit`、`run_shell_command` 等具体执行。
 
-> **Primary agent** plans and coordinates; **editing agent** runs tools; **review agent** independently checks plans and edits. Failed reviews trigger rework loops.
+> **Primary agent** plans and coordinates; **editing agent** runs tools; **review agent** independently checks plans and edits. Failed reviews trigger rework loops.  
+> **Shell command improvements**: Strict safety rules, anti-drift enforcement, structured output, context injection, and anti-repeat protection.
 
 <h2 id="other-available-tools">其它辅助工具 / Other tools</h2>
 
@@ -107,7 +119,7 @@ edit(filePath, startLine, endLine, newContent)
 | `get_workspace_info` | 工作区根目录与顶层文件 |
 | `create_directory` | 创建目录（可递归） |
 | `create_todo_list` | 多步骤任务规划（先计划后执行） |
-| `run_shell_command` | 在项目根执行命令；可经 shell 审查与用户确认 |
+| `run_shell_command` | 在项目根执行命令；经 shell 编辑代理优化 + 独立安全审查（含防上下文获取、防漂移、结构化返回） |
 | `complete_todo_item` | 标记 todo 完成 |
 | `compact` | 压缩长对话，节省上下文 |
 | Git 相关 | 快照与历史管理（见新闻） |
