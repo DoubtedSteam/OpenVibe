@@ -89,11 +89,15 @@ function parseIndependentReview(content: string | null): { ok: boolean; reason: 
   }
 }
 
-const REVIEW_SYSTEM = `You are an independent review agent for a code edit about to be applied in a VS Code workspace.
+const REVIEW_SYSTEM = `You are an independent review agent for a SINGLE code edit about to be applied in a VS Code workspace.
 You MUST NOT modify any files. You only output JSON.
 
-Evaluate ONLY whether this replacement is consistent with the user's request and safe to apply, given the surrounding context.
-- Pay attention to user-stated boundaries (e.g. plan-only, do not modify files, change scope).
+Scope rules (CRITICAL):
+- Review ONLY the specific replacement shown (this one tool step), not whether the entire user goal is fully completed.
+- The user may be working in multiple steps; DO NOT reject merely because this edit is not \"end-to-end\".
+
+Evaluate ONLY whether this replacement is consistent with the user's request and the current step context (when provided), and safe to apply in isolation.
+- Pay attention to explicit boundaries (e.g. plan-only, do not modify files, change scope).
 - Check for obvious logic errors or broken references in the shown context window.
 
 Output exactly one JSON object:
