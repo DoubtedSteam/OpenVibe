@@ -134,8 +134,19 @@ async function chatJson(
   log?: (e: AgentLogEntry) => void,
   agent?: string
 ): Promise<string | null> {
+  const messagesLogSummary = messages.map((m) => ({
+    role: m.role,
+    contentChars: typeof m.content === 'string' ? m.content.length : 0,
+    toolCalls: Array.isArray(m.tool_calls) ? m.tool_calls.length : 0,
+  }));
   try {
-    log?.({ at: Date.now(), agent: agent || 'agent', stage: 'request', data: { timeoutMs, messages } });
+    // Avoid logging full message bodies (can be huge and cause sync persistence stalls).
+    log?.({
+      at: Date.now(),
+      agent: agent || 'agent',
+      stage: 'request',
+      data: { timeoutMs, messageCount: messages.length, messages: messagesLogSummary },
+    });
   } catch {
     /* ignore */
   }

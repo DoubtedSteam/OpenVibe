@@ -93,8 +93,20 @@ async function chatJson(
   log?: (e: AgentLogEntry) => void,
   agent?: string
 ): Promise<string | null> {
+  const messagesLogSummary = messages.map((m) => ({
+    role: m.role,
+    contentChars: typeof m.content === 'string' ? m.content.length : 0,
+    toolCalls: Array.isArray(m.tool_calls) ? m.tool_calls.length : 0,
+  }));
   try {
-    log?.({ at: Date.now(), agent: agent || 'agent', stage: 'request', data: { timeoutMs, messages } });
+    // IMPORTANT: Do not log full message bodies here; they can be very large (memory/context)
+    // and would bloat sessions/index.json and block the extension thread on sync persistence.
+    log?.({
+      at: Date.now(),
+      agent: agent || 'agent',
+      stage: 'request',
+      data: { timeoutMs, messageCount: messages.length, messages: messagesLogSummary },
+    });
   } catch {
     /* ignore */
   }
@@ -147,9 +159,10 @@ Evaluate the proposed command:
 1) **Safety**: obvious destructive risk (e.g. rm -rf on broad paths), arbitrary remote code execution, piping curl/wget to shell, disabling security, etc.
 2) **Edit-tool bypass**: shell-based file edits to project source/config (sed/awk/perl one-liners, tee, redirection, PowerShell Set-Content/Out-File) when the task is ordinary code editing — those should use read_file + edit instead. Read-only git/status/log commands are usually fine.
 3) **Fit**: matches the user request and the current step context; reasonable scope.
-4) **No-shell-for-context (CRITICAL)**: Reject commands whose purpose is to view/search/harvest file contents or enumerate the workspace. The workspace provides dedicated tools for that.
-   - Reject examples: cat/type/Get-Content/more/less/head/tail, dir /s, Get-ChildItem -Recurse, find/grep/rg/Select-String used to inspect project files.
-   - If the user needs context, instruct them to use read_file / find_in_file instead (do NOT approve a shell workaround).
+4) **No-shell-for-code-context (CRITICAL)**: Reject commands whose purpose is to view/search/harvest **project source code** or broadly enumerate/search the workspace. The workspace provides dedicated tools for that.
+   - Reject examples (code/context harvesting): cat/type/Get-Content on files under src/ or code extensions (.ts/.js/.py/...), dir /s, Get-ChildItem -Recurse, find/grep/rg/Select-String used to inspect project files.
+   - Allow (read-only, narrow): viewing a **single non-code artifact** explicitly requested by the user (e.g. .log/.txt/.md) with a simple read-only command, no pipes, no recursion.
+   - If the user needs code context, instruct them to use read_file / find_in_file instead (do NOT approve a shell workaround).
 5) **Alignment & drift**: The candidate must remain aligned with the user's request and the current todo context. If the candidate looks unrelated, adds extra scripts, or appears to be a different action than what was requested, FAIL.
 6) **Evidence-driven & anti-repeat**: If you PASS a build/test command, state what evidence is expected (exit code / error code / key output). If the same command was already run recently without new changes, prefer FAIL with a note to avoid redundant reruns.
 

@@ -7,6 +7,9 @@ export class SessionManager {
   private _currentSessionId: string = 'default';
   private _sessions: ChatSession[] = [];
   private _currentWorkspacePath: string | null = null;
+  private _saveTimer: NodeJS.Timeout | null = null;
+  private _saveInFlight = false;
+  private _saveQueued = false;
 
   constructor(
     private readonly _context: vscode.ExtensionContext,
@@ -19,15 +22,15 @@ export class SessionManager {
     const workspaceRoot = this._getWorkspaceRoot();
     if (!workspaceRoot) {
       // No workspace → do not fall back to global storage.
-      // Requirement: sidebar should only reflect the current workspace folder's `.openvibe`.
+      // Requirement: sidebar should only reflect the current workspace folder's `.OpenVibe`.
       return null;
     }
 
-    const sessionsDir = path.join(workspaceRoot, '.openvibe', 'sessions');
-    // Migration: older versions stored sessions under `.OpenVibe/sessions`.
-    // If the new location doesn't exist but legacy index does, copy it once.
+    const sessionsDir = path.join(workspaceRoot, '.OpenVibe', 'sessions');
+    // Migration: some versions stored sessions under `.openvibe/sessions`.
+    // If the target location doesn't exist but legacy index does, copy it once.
     try {
-      const legacyDir = path.join(workspaceRoot, '.OpenVibe', 'sessions');
+      const legacyDir = path.join(workspaceRoot, '.openvibe', 'sessions');
       const legacyIndex = path.join(legacyDir, 'index.json');
       const newIndex = path.join(sessionsDir, 'index.json');
       if (!fs.existsSync(sessionsDir) && fs.existsSync(legacyIndex)) {
@@ -58,7 +61,7 @@ export class SessionManager {
       const newRoot = this._getWorkspaceRoot();
       const changed = newRoot !== this._currentWorkspacePath;
 
-      // 工作区发生变化时重新加载会话（来自新工作区的 .openvibe/sessions）
+      // 工作区发生变化时重新加载会话（来自新工作区的 .OpenVibe/sessions）
       if (changed) {
         // Ensure we don't carry a previous workspace's active session selection.
         this._currentSessionId = 'default';
@@ -183,16 +186,46 @@ export class SessionManager {
   }
 
   private _saveSessions(): void {
+    // IMPORTANT: This runs on the extension host thread. Avoid sync I/O and avoid
+    // saving on every tiny event (agent logs can be frequent). Debounce writes.
+    this._saveQueued = true;
+    if (this._saveTimer) {
+      return;
+    }
+    this._saveTimer = setTimeout(() => {
+      this._saveTimer = null;
+      void this._flushSaveSessions();
+    }, 250);
+  }
+
+  private async _flushSaveSessions(): Promise<void> {
+    if (this._saveInFlight) {
+      return;
+    }
+    if (!this._saveQueued) {
+      return;
+    }
+    this._saveInFlight = true;
+    this._saveQueued = false;
     try {
       const sessionsDir = this._ensureSessionsDir();
       if (!sessionsDir) {
-        // No workspace open → do not persist.
         return;
       }
       const indexFile = path.join(sessionsDir, 'index.json');
-      fs.writeFileSync(indexFile, JSON.stringify(this._sessions, null, 2));
+      const text = JSON.stringify(this._sessions, null, 2);
+      await fs.promises.writeFile(indexFile, text, 'utf-8');
     } catch (err) {
       this._post({ type: 'error', message: `Failed to save sessions: ${err}` });
+    } finally {
+      this._saveInFlight = false;
+      // If new saves were queued while we were writing, flush again quickly.
+      if (this._saveQueued) {
+        this._saveTimer = setTimeout(() => {
+          this._saveTimer = null;
+          void this._flushSaveSessions();
+        }, 50);
+      }
     }
   }
 

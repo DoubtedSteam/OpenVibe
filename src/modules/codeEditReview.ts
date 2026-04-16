@@ -136,7 +136,18 @@ export async function llmIndependentEditReview(params: {
       { role: 'user', content: userMsg },
     ];
     try {
-      params.log?.({ at: Date.now(), agent: 'codeEditReview', stage: 'request', data: { messages } });
+      const messagesLogSummary = messages.map((m) => ({
+        role: m.role,
+        contentChars: typeof m.content === 'string' ? m.content.length : 0,
+        toolCalls: Array.isArray(m.tool_calls) ? m.tool_calls.length : 0,
+      }));
+      // Do not log full message bodies (can be huge and block session persistence).
+      params.log?.({
+        at: Date.now(),
+        agent: 'codeEditReview',
+        stage: 'request',
+        data: { messageCount: messages.length, messages: messagesLogSummary },
+      });
     } catch {
       /* ignore */
     }

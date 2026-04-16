@@ -28,6 +28,117 @@ import {
 } from './todolistReview';
 import type { ShellCommandReviewSettings } from './shellCommandReview';
 import { reviewShellCommand, shellEditorCandidate } from './shellCommandReview';
+import type { ShellReviewAgentResult } from './shellCommandReview';
+
+function detectShellFileOpBypass(command: string): string | null {
+  const c = command.trim();
+  // Obvious shell write/edit primitives (cross-shell).
+  if (/(^|[;&|])\s*(sed|perl|python|node)\b/i.test(c) && /-i\b/.test(c)) {
+    return 'Detected in-place editing via scripting tool (e.g. sed -i / perl -pi). Use read_file + edit instead.';
+  }
+  if (/(^|[;&|])\s*(tee)\b/i.test(c)) {
+    return 'Detected tee-based file writes. Use read_file + edit instead.';
+  }
+  if (/[^\S\r\n]>\s*\S/.test(c) || /[^\S\r\n]>>\s*\S/.test(c)) {
+    return 'Detected output redirection (>, >>). Do not write files via shell; use edit/create_directory tools.';
+  }
+  // PowerShell write primitives.
+  if (/\b(Set-Content|Add-Content|Out-File)\b/i.test(c)) {
+    return 'Detected PowerShell file write command. Use read_file + edit instead.';
+  }
+  // Common batch editors.
+  if (/\b(vim|nvim|nano)\b/i.test(c)) {
+    return 'Detected interactive editor usage. Use read_file + edit tools instead.';
+  }
+  return null;
+}
+
+function detectShellContextHarvest(command: string): string | null {
+  const c = command.trim();
+  // Read/show file contents.
+  const readCmd = /\b(cat|type|more|less|head|tail|Get-Content)\b/i;
+  if (readCmd.test(c)) {
+    // Allow reading a single, clearly non-code file when it's scoped (no pipes) and not under src/.
+    const m = c.match(/\b(?:cat|type|more|less|head|tail|Get-Content)\b\s+("?)([^\s"|;&]+)\1/i);
+    const rawPath = (m?.[2] ?? '').trim();
+    const pathLower = rawPath.replace(/^["']|["']$/g, '').toLowerCase();
+    const ext = pathLower.includes('.') ? pathLower.slice(pathLower.lastIndexOf('.')) : '';
+    const isInSrc = /(^|[\\/])src[\\/]/i.test(pathLower);
+    const hasPipe = /[|]/.test(c);
+    const allowedNonCodeExt = new Set([
+      '.md',
+      '.txt',
+      '.log',
+      '.csv',
+      '.tsv',
+      '.json',
+      '.yaml',
+      '.yml',
+      '.toml',
+      '.ini',
+      '.cfg',
+      '.conf',
+    ]);
+    const disallowedCodeExt = new Set([
+      '.ts',
+      '.tsx',
+      '.js',
+      '.jsx',
+      '.mjs',
+      '.cjs',
+      '.py',
+      '.java',
+      '.cs',
+      '.go',
+      '.rs',
+      '.cpp',
+      '.c',
+      '.h',
+      '.hpp',
+      '.sh',
+      '.ps1',
+      '.bat',
+      '.cmd',
+    ]);
+    const isEnv = ext === '.env' || pathLower.endsWith('.env.local') || pathLower.endsWith('.env.production');
+
+    if (!hasPipe && rawPath && !isInSrc && !isEnv && (allowedNonCodeExt.has(ext) || (ext && !disallowedCodeExt.has(ext)))) {
+      return null;
+    }
+    return 'Shell read of workspace files is restricted. Prefer read_file. If you must read via shell, keep it to a single non-code artifact (e.g. .log/.txt) outside src/ with no pipes.';
+  }
+  // Workspace enumeration/search (especially recursive).
+  if (/\b(dir|ls|tree|Get-ChildItem)\b/i.test(c) && /\b(-Recurse|\/s)\b/i.test(c)) {
+    return 'Command appears to recursively enumerate the workspace via shell. Use get_workspace_info / read_file / find_in_file instead.';
+  }
+  if (/\b(find|grep|rg|Select-String)\b/i.test(c)) {
+    return 'Command appears to search files via shell. Use find_in_file instead.';
+  }
+  // Non-recursive listing can still be context-harvesting; treat as disallowed under current policy.
+  if (/\b(dir|ls|tree|Get-ChildItem)\b/i.test(c)) {
+    return 'Command appears to enumerate workspace files via shell. Use get_file_info + read_file instead (and prefer adding a dedicated tool if directory listing is needed).';
+  }
+  return null;
+}
+
+function shouldEarlyStopOnShellReviewFail(review: ShellReviewAgentResult): boolean {
+  if (review.decision === 'PASS') return false;
+  const text = `${review.summary || ''}\n${(review.notes || []).join('\n')}`.toLowerCase();
+  // If the reviewer is telling us the action itself is inappropriate for shell,
+  // further attempts will be wasted (the assistant should switch to tools).
+  return (
+    text.includes('no-shell-for-context') ||
+    text.includes('use read_file') ||
+    text.includes('use find_in_file') ||
+    text.includes('use edit') ||
+    text.includes('do not use shell') ||
+    text.includes('do not approve a shell workaround') ||
+    text.includes('enumerate') ||
+    text.includes('view/search/harvest') ||
+    text.includes('shell-based file edits') ||
+    text.includes('edit-tool bypass')
+  );
+}
 
 export class ToolExecutor {
   private _todoList: { goal: string; items: { text: string; done: boolean }[] } | null = null;
@@ -250,6 +361,29 @@ ${list}
       return await runShellCommandTool({ command: proposedFromTool });
     }
 
+    // Fast preflight: avoid expensive multi-round LLM review for commands that are policy-rejected anyway.
+    // This fixes cases like "dir src/webview /B" where shell review is guaranteed to FAIL (no-shell-for-context).
+    const bypass = detectShellFileOpBypass(proposedFromTool);
+    if (bypass) {
+      return JSON.stringify({
+        success: false,
+        operation: 'run_shell_command',
+        error: 'Shell command rejected (file operation via shell).',
+        reviewNotesAccumulated: [bypass],
+        originalToolCommand: proposedFromTool,
+      });
+    }
+    const harvest = detectShellContextHarvest(proposedFromTool);
+    if (harvest) {
+      return JSON.stringify({
+        success: false,
+        operation: 'run_shell_command',
+        error: 'Shell command rejected (no-shell-for-context).',
+        reviewNotesAccumulated: [harvest],
+        originalToolCommand: proposedFromTool,
+      });
+    }
+
     const userRequest = this._context.getLastUserTextForTools();
     const relatedContextBase = this._context.getRelatedContextForTodolistReview();
     const memoryExcerpt = loadMemoryExcerpt();
@@ -379,6 +513,23 @@ ${list}
         } catch {
           return execResult;
         }
+      }
+
+      // If the reviewer indicates the shell approach is fundamentally wrong for this step,
+      // stop immediately rather than burning more LLM rounds.
+      if (shouldEarlyStopOnShellReviewFail(review)) {
+        reviewNotes = mergeReviewNotes(reviewNotes, review.notes);
+        return JSON.stringify({
+          success: false,
+          operation: 'run_shell_command',
+          error: 'run_shell_command: reviewer indicates this should not be done via shell; stopping retries.',
+          reviewNotesAccumulated: reviewNotes,
+          lastCandidateCommand: commandCandidate,
+          shellReviewAttempts: attempt,
+          reviewedCommand: commandCandidate,
+          originalToolCommand: proposedFromTool,
+          message: 'No command was executed. Follow reviewer guidance (use workspace tools instead) and retry only if the goal truly requires shell.',
+        });
       }
 
       reviewNotes = mergeReviewNotes(reviewNotes, review.notes);
