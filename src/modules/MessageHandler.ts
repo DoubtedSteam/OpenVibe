@@ -112,7 +112,7 @@ export class MessageHandler {
           }
 
           // Execute each tool call sequentially
-          let taskCompleteRequested = false;
+          let stopAfterTools = false;
           // If the model used MM_OUTPUT sentinel blocks in its visible content, we can
           // safely extract raw payload (avoids JSON string escaping damage for edit/shell).
           const mm = extractFirstMmOutput(response.content);
@@ -146,14 +146,12 @@ export class MessageHandler {
               }
             }
 
-            // task_complete 特殊处理：不执行工具调用，直接结束
+            // task_complete：do not emit extra assistant text; still MUST respond with a tool message.
             if (name === 'task_complete') {
-              // 显示summary（如果提供了的话）
-              const summary = (args['summary'] as string) || '';
-              if (summary.trim()) {
-                this._context.post({ type: 'addMessage', message: { role: 'assistant', content: summary.trim() } });
-              }
-              taskCompleteRequested = true;
+              const result = JSON.stringify({ success: true, operation: 'task_complete' });
+              this._context.post({ type: 'toolResult', name, result });
+              this._context.addMessage({ role: 'tool', content: result, tool_call_id: toolCall.id });
+              stopAfterTools = true;
               break;
             }
 
@@ -176,6 +174,10 @@ export class MessageHandler {
               this._context.addMessage({ role: 'tool', content: result, tool_call_id: toolCall.id });
             }
           } // End of for (const toolCall of response.toolCalls)
+          if (stopAfterTools) {
+            injectedSystemPrompt = '';
+            break;
+          }
           // Go back to the top of the loop to continue the conversation
         } else {
           // Text response (no tool calls)
