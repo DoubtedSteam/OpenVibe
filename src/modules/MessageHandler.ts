@@ -117,10 +117,22 @@ export class MessageHandler {
               break;
             }
 
-            const name = toolCall.function.name;
+             const name = toolCall.function.name;
             let args: Record<string, unknown> = {};
             try { args = JSON.parse(toolCall.function.arguments); } catch { /* keep empty */ }
 
+            // task_complete 特殊处理：不执行工具调用，直接结束
+            if (name === 'task_complete') {
+              // 显示summary（如果提供了的话）
+              const summary = (args['summary'] as string) || '';
+              if (summary.trim()) {
+                this._context.post({ type: 'addMessage', message: { role: 'assistant', content: summary.trim() } });
+              }
+              taskCompleteRequested = true;
+              break;
+            }
+
+            // 其他工具正常处理
             this._context.post({ type: 'toolCall', name, args });
 
             let result: string;
@@ -138,16 +150,6 @@ export class MessageHandler {
             if (name !== 'compact') {
               this._context.addMessage({ role: 'tool', content: result, tool_call_id: toolCall.id });
             }
-
-            if (name === 'task_complete') {
-              taskCompleteRequested = true;
-              break;
-            }
-          }
-
-          if (taskCompleteRequested) {
-            break;
-          }
           // Go back to the top of the loop to continue the conversation
         } else {
           // Text response (no tool calls)

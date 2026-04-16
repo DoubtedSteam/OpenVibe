@@ -104,7 +104,8 @@ export class ToolExecutor {
         if (summary.trim()) {
           this._context.post({ type: 'addMessage', message: { role: 'assistant', content: summary.trim() } });
         }
-        return JSON.stringify({ success: true, message: 'Task marked complete.' });
+        // task_complete 被调用后直接结束，不返回任何信息给LLM
+        return JSON.stringify({ success: true, message: 'Task marked complete.', _immediate_end: true });
       }
 
       case 'create_todo_list':
