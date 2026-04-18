@@ -542,8 +542,26 @@ Uncommitted changes will be lost.`,
   #send:hover { background: var(--vscode-testing-runAction, #4aa844); }
   #stop { background: var(--vscode-errorForeground, #be1100); }
   #stop:hover { background: var(--vscode-errorForeground, #d52222); }
-
-  /* Edit permission toggle */
+  /* Button container layout */
+  .button-container {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    align-items: center;
+    justify-content: flex-end;
+  }
+  
+  .edit-toggle-row {
+    display: flex;
+    justify-content: center;
+    width: 100%;
+  }
+  
+  .action-buttons-row {
+    display: flex;
+    gap: 4px;
+  }
+  
   .edit-toggle {
     display: flex;
     align-items: center;
@@ -749,19 +767,21 @@ Uncommitted changes will be lost.`,
       </div>
       <div id="confirm-meta" class="confirm-meta"></div>
     </div>
-     <div class="input-area">
-       <textarea id="input" rows="3" placeholder="Describe what you want to change…"></textarea>
-       <div class="edit-toggle-group">
-         <button id="edit-toggle" class="edit-toggle on" title="Toggle edit permission - ON: LLM can use edit tools, OFF: read-only mode">
-           <span class="toggle-icon">🔓</span>
-           <span class="toggle-text">Edit ON</span>
-         </button>
-         <button id="send" class="chat-button" title="Send message">▶</button>
-       </div>
-       <button id="stop" class="chat-button" title="Stop current operation" disabled>■</button>
-     </div>
-  </div>
-
+      <div class="input-area">
+        <textarea id="input" rows="3" placeholder="Describe what you want to change…"></textarea>
+        <div class="button-container">
+          <div class="edit-toggle-row">
+            <button id="edit-toggle" class="edit-toggle on" title="Toggle edit permission - ON: LLM can use edit tools, OFF: read-only mode">
+              <span class="toggle-icon">🔓</span>
+              <span class="toggle-text">Edit ON</span>
+            </button>
+          </div>
+          <div class="action-buttons-row">
+            <button id="send" class="chat-button" title="Send message">▶</button>
+            <button id="stop" class="chat-button" title="Stop current operation" disabled>■</button>
+          </div>
+        </div>
+      </div>
 <script src="${scriptUri}"></script>
 </body>
 </html>`;
