@@ -55,16 +55,17 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       },
       userConfirmReplace: (ctx) => this._uiManager.userConfirmReplace(ctx),
       userConfirmShellCommand: (command) => this._uiManager.userConfirmShellCommand(command),
-       getApiConfig: () => this._uiManager.getApiConfig(),
-       getLastUserTextForTools: () => this._conversation.getLastUserTextForTools(),
-       getRelatedContextForTodolistReview: () => this._conversation.getRelatedContextForTodolistReview(),
-       getTodolistReviewSettings: () => ChatViewProvider._readTodolistReviewSettings(),
-       getShellCommandReviewSettings: () => ChatViewProvider._readShellCommandReviewSettings(),
-       getEditPermissionEnabled: () => this._uiManager.getEditPermissionEnabled(),
-       setEditPermissionEnabled: (enabled: boolean) => this._uiManager.setEditPermissionEnabled(enabled),
-       isStopped: () => this._operation.isStopped(),
-       signal: () => this._operation.signal(),
-       log: (e) => this._conversation.addAgentLog(e),
+      getApiConfig: () => this._uiManager.getApiConfig(),
+      getLastUserTextForTools: () => this._conversation.getLastUserTextForTools(),
+      getRelatedContextForTodolistReview: () => this._conversation.getRelatedContextForTodolistReview(),
+      getTodolistReviewSettings: () => ChatViewProvider._readTodolistReviewSettings(),
+      getShellCommandReviewSettings: () => ChatViewProvider._readShellCommandReviewSettings(),
+      getEditPermissionEnabled: () => this._uiManager.getEditPermissionEnabled(),
+      setEditPermissionEnabled: (enabled: boolean) => this._uiManager.setEditPermissionEnabled(enabled),
+      isStopped: () => this._operation.isStopped(),
+      signal: () => this._operation.signal(),
+      log: (e) => this._conversation.addAgentLog(e),
+    });
 
     this._messageHandler = new MessageHandler({
       getApiConfig: () => this._uiManager.getApiConfig(),
@@ -82,7 +83,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       onStopSideEffects: () => this._uiManager.cancelPendingConfirms(),
     });
   }
-
   public setOutputChannel(channel: vscode.OutputChannel): void {
     this._uiManager.setOutputChannel(channel);
   }

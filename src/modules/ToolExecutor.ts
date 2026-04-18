@@ -169,9 +169,9 @@ export class ToolExecutor {
        log?: (entry: AgentLogEntry) => void;
      }
    ) {}
-    } catch {
-      return false;
-    }
+
+  private _stopped(): boolean {
+    return this._context.isStopped?.() ?? false;
   }
 
   private _signal(): AbortSignal | undefined {

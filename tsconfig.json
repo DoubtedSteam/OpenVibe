@@ -6,7 +6,8 @@
     "lib": ["ES2023", "dom"],
     "sourceMap": true,
     "rootDir": "src",
-    "strict": true
+    "strict": true,
+    "downlevelIteration": true
   },
   "exclude": ["node_modules", ".vscode-test"]
 }
