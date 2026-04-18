@@ -4,6 +4,9 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 export class SessionManager {
+  /** Persisted per workspace so reload restores the open conversation. */
+  private static readonly _WORKSPACE_ACTIVE_SESSION_KEY = 'openvibe.currentSessionId';
+
   private _currentSessionId: string = 'default';
   private _sessions: ChatSession[] = [];
   private _currentWorkspacePath: string | null = null;
@@ -99,6 +102,7 @@ export class SessionManager {
     this._sessions = [defaultSession];
     this._currentSessionId = 'default';
     this._saveSessions();
+    void this._persistActiveSessionId();
   }
 
   public getCurrentMessages(): ChatMessage[] {
@@ -179,10 +183,29 @@ export class SessionManager {
       // 确保至少有一个默认会话
       if (this._sessions.length === 0) {
         this._createDefaultSession();
+      } else {
+        this._applyPersistedActiveSession();
       }
     } catch (err) {
       this._post({ type: 'error', message: `Failed to load sessions: ${err}` });
     }
+  }
+
+  /** After loading `index.json`, restore last active session or fix invalid id. */
+  private _applyPersistedActiveSession(): void {
+    const saved = this._context.workspaceState.get<string>(SessionManager._WORKSPACE_ACTIVE_SESSION_KEY);
+    if (saved && this._sessions.some((s) => s.id === saved)) {
+      this._currentSessionId = saved;
+      return;
+    }
+    if (!this._sessions.some((s) => s.id === this._currentSessionId)) {
+      this._currentSessionId = this._sessions[0]!.id;
+    }
+    void this._persistActiveSessionId();
+  }
+
+  private _persistActiveSessionId(): Thenable<void> {
+    return this._context.workspaceState.update(SessionManager._WORKSPACE_ACTIVE_SESSION_KEY, this._currentSessionId);
   }
 
   private _saveSessions(): void {
@@ -252,6 +275,7 @@ export class SessionManager {
 
     this.saveCurrentSession();
     this._currentSessionId = sessionId;
+    void this._persistActiveSessionId();
     this.postSessionsList();
   }
 

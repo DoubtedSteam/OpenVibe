@@ -444,6 +444,10 @@ Uncommitted changes will be lost.`,
     border-radius: 3px;
   }
   .tool-card.expanded .tool-body { display: block; }
+  .tool-card.tool-card-edit-diff .tool-body {
+    max-height: min(46vh, 380px);
+    overflow-y: auto;
+  }
   .tool-card.done .tool-header { background: var(--vscode-testing-runAction, #388a34); color: #fff; }
   .tool-card.error .tool-header { background: var(--vscode-inputValidation-errorBorder, #be1100); color: #fff; }
 
@@ -517,10 +521,16 @@ Uncommitted changes will be lost.`,
   .confirm-btn.cancel:hover { background: var(--vscode-toolbar-hoverBackground); }
   .confirm-meta { margin-top: 6px; font-size: 10px; color: var(--vscode-descriptionForeground); }
 
-  /* Input area */
-  .input-area { display: flex; gap: 6px; align-items: flex-end; }
+  /* Input area: textarea left; right column = Edit (full width) + send/stop (same width block) */
+  .input-area {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 6px;
+    align-items: stretch;
+  }
   #input {
-    flex: 1; padding: 8px 10px;
+    min-width: 0;
+    padding: 8px 10px;
     background: var(--vscode-input-background);
     color: var(--vscode-input-foreground);
     border: 1px solid var(--vscode-input-border, transparent);
@@ -542,24 +552,26 @@ Uncommitted changes will be lost.`,
   #send:hover { background: var(--vscode-testing-runAction, #4aa844); }
   #stop { background: var(--vscode-errorForeground, #be1100); }
   #stop:hover { background: var(--vscode-errorForeground, #d52222); }
-  /* Button container layout */
-  .button-container {
+  .input-actions-column {
     display: flex;
     flex-direction: column;
     gap: 4px;
-    align-items: center;
-    justify-content: flex-end;
+    align-items: stretch;
+    /* At least as wide as two chat buttons + gap; grows if Edit label needs more */
+    width: max(76px, fit-content);
+    max-width: 100%;
+    box-sizing: border-box;
   }
-  
-  .edit-toggle-row {
+  .input-actions-top {
     display: flex;
-    justify-content: center;
     width: 100%;
   }
-  
-  .action-buttons-row {
+  .input-actions-bottom {
     display: flex;
     gap: 4px;
+    width: 100%;
+    justify-content: space-between;
+    flex-wrap: nowrap;
   }
   
   .edit-toggle {
@@ -576,7 +588,9 @@ Uncommitted changes will be lost.`,
     flex-shrink: 0;
     opacity: 0.7;
     transition: opacity 0.15s, border-color 0.15s;
-    margin-right: 4px;
+    box-sizing: border-box;
+    width: 100%;
+    justify-content: center;
   }
   .edit-toggle:hover {
     opacity: 1;
@@ -769,14 +783,14 @@ Uncommitted changes will be lost.`,
     </div>
       <div class="input-area">
         <textarea id="input" rows="3" placeholder="Describe what you want to change…"></textarea>
-        <div class="button-container">
-          <div class="edit-toggle-row">
+        <div class="input-actions-column">
+          <div class="input-actions-top">
             <button id="edit-toggle" class="edit-toggle on" title="Toggle edit permission - ON: LLM can use edit tools, OFF: read-only mode">
               <span class="toggle-icon">🔓</span>
               <span class="toggle-text">Edit ON</span>
             </button>
           </div>
-          <div class="action-buttons-row">
+          <div class="input-actions-bottom">
             <button id="send" class="chat-button" title="Send message">▶</button>
             <button id="stop" class="chat-button" title="Stop current operation" disabled>■</button>
           </div>

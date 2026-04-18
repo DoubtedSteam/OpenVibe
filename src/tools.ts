@@ -382,6 +382,14 @@ export async function replaceLinesTool(
   }
   const unifiedDiff = unifiedDiffLines.join('\n');
 
+  /** Persisted on the tool message so reload/replay can show the same +/- diff as the review card. */
+  const diffMeta = {
+    filePath: params.filePath,
+    startLine: params.startLine,
+    endLine: clampedEnd,
+    unifiedDiff,
+  };
+
   // ── LLM secondary confirmation ─────────────────────────────────────────────
   const check = await llmCheckFn({
     filePath: params.filePath,
@@ -398,6 +406,7 @@ export async function replaceLinesTool(
       message: 'LLM check rejected the replacement — operation cancelled',
       reviewReason: check.reason ?? '',
       reviewNotes: Array.isArray(check.notes) ? check.notes : [],
+      ...diffMeta,
     });
   }
 
@@ -412,7 +421,11 @@ export async function replaceLinesTool(
       unifiedDiff,
     });
     if (!userApproved) {
-      return JSON.stringify({ success: false, message: 'User rejected the replacement — operation cancelled' });
+      return JSON.stringify({
+        success: false,
+        message: 'User rejected the replacement — operation cancelled',
+        ...diffMeta,
+      });
     }
   }
 
@@ -429,7 +442,8 @@ export async function replaceLinesTool(
     totalLines: newTotal,
     linesDelta: newTotal - total,
     message: `Replaced lines ${params.startLine}–${clampedEnd}: removed ${oldLines.length}, added ${newLines.length}. File now has ${newTotal} lines.`,
-    diagnosticsCheck: diagnosticsInfo
+    diagnosticsCheck: diagnosticsInfo,
+    ...diffMeta,
   });
 }
 

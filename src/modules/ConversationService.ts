@@ -207,13 +207,14 @@ export class ConversationService {
           post({ type: 'toolCall', name: tc.function.name, args });
           const tm = messages[i];
           if (tm?.role === 'tool' && tm.tool_call_id === tc.id) {
-            post({ type: 'toolResult', name: tc.function.name, result: tm.content ?? '{}' });
+            post({ type: 'toolResult', name: tc.function.name, result: tm.content ?? '{}', fromReplay: true });
             i++;
           } else {
             post({
               type: 'toolResult',
               name: tc.function.name,
               result: JSON.stringify({ error: 'Missing tool result in saved session' }),
+              fromReplay: true,
             });
           }
         }

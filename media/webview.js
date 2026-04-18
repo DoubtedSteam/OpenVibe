@@ -293,7 +293,36 @@
     return card;
   }
 
-  function resolveToolCard(result) {
+  /** When tool JSON includes unifiedDiff (persisted edit results), show the same style of diff as Replace check cards. */
+  function fillEditDiffBody(card, body, parsed) {
+    var ud = parsed && typeof parsed.unifiedDiff === 'string' ? parsed.unifiedDiff : '';
+    if (!ud) {
+      return false;
+    }
+    card.classList.add('tool-card-edit-diff');
+    body.innerHTML = '';
+    var meta = document.createElement('div');
+    meta.className = 'check-meta';
+    var fp = parsed.filePath != null ? String(parsed.filePath) : '';
+    var sl = parsed.startLine != null ? String(parsed.startLine) : '';
+    var el = parsed.endLine != null ? String(parsed.endLine) : '';
+    var fpSpan = document.createElement('span');
+    fpSpan.className = 'file-path';
+    fpSpan.textContent = fp;
+    var lrSpan = document.createElement('span');
+    lrSpan.className = 'line-range';
+    lrSpan.textContent = 'lines ' + sl + '–' + el;
+    meta.appendChild(fpSpan);
+    meta.appendChild(lrSpan);
+    var pre = document.createElement('pre');
+    pre.className = 'check-diff-unified';
+    pre.textContent = ud;
+    body.appendChild(meta);
+    body.appendChild(pre);
+    return true;
+  }
+
+  function resolveToolCard(result, fromReplay) {
     var card = pendingToolCard;
     if (!card) {
       var allCards = document.querySelectorAll('.tool-card');
@@ -307,16 +336,39 @@
     var parsed;
     try { parsed = JSON.parse(result); } catch (_) { parsed = { raw: result }; }
     var isError = parsed && (parsed.error || parsed.success === false);
-    card.classList.remove('expanded');
+    var toolName = card.dataset.toolName || '';
+    var hasUnifiedDiff = !!(parsed && typeof parsed.unifiedDiff === 'string' && parsed.unifiedDiff.length > 0);
     card.classList.add(isError ? 'error' : 'done');
     var statusEl = card.querySelector('.tool-status');
     if (statusEl) statusEl.textContent = isError ? ('error: ' + (parsed.error || parsed.message || '?')) : (parsed.message || 'done');
     var body = card.querySelector('.tool-body');
+    var filledDiff = false;
     if (body) {
-      var toolName = card.dataset.toolName || '';
-      var cmd = card.dataset.command || '';
-      var resultStr = JSON.stringify(parsed, null, 2);
-      body.textContent = (toolName === 'run_shell_command' && cmd) ? ('Command:\n' + cmd + '\n\nResult:\n' + resultStr) : resultStr;
+      if (fromReplay && (toolName === 'edit' || toolName === 'replace_lines') && hasUnifiedDiff) {
+        filledDiff = fillEditDiffBody(card, body, parsed);
+      }
+      if (!filledDiff) {
+        var cmd = card.dataset.command || '';
+        var forDisplay = parsed;
+        if (!fromReplay && hasUnifiedDiff && (toolName === 'edit' || toolName === 'replace_lines')) {
+          try {
+            forDisplay = JSON.parse(JSON.stringify(parsed));
+            if (forDisplay && typeof forDisplay === 'object') {
+              delete forDisplay.unifiedDiff;
+            }
+          } catch (_) {
+            forDisplay = parsed;
+          }
+        }
+        var resultStr = JSON.stringify(forDisplay, null, 2);
+        body.textContent = (toolName === 'run_shell_command' && cmd) ? ('Command:\n' + cmd + '\n\nResult:\n' + resultStr) : resultStr;
+      }
+    }
+    var expandEdit = (toolName === 'edit' || toolName === 'replace_lines') && (!isError || (fromReplay && hasUnifiedDiff));
+    if (expandEdit) {
+      card.classList.add('expanded');
+    } else {
+      card.classList.remove('expanded');
     }
     scrollBottom();
   }
@@ -533,7 +585,7 @@
       case 'addMessage':     addMessage(msg.message.role, msg.message.content); break;
       case 'addCheckCard':   addCheckCard(msg.data); break;
       case 'toolCall':       addToolCall(msg.name, msg.args); break;
-      case 'toolResult':     resolveToolCard(msg.result); break;
+      case 'toolResult':     resolveToolCard(msg.result, msg.fromReplay === true); break;
       case 'loading':        showLoading(msg.loading); break;
       case 'error':          showError(msg.message); break;
       case 'tokenUsage':     showTokenUsage(msg.usage); break;
