@@ -27,6 +27,19 @@ function resolveWorkspacePath(filePath: string): string {
   return abs;
 }
 
+/** True if the workspace-relative path exists and is a regular file (not a directory). */
+export function workspaceFileExistsRelative(filePath: string): boolean {
+  try {
+    const abs = resolveWorkspacePath(filePath);
+    if (!fs.existsSync(abs)) {
+      return false;
+    }
+    return fs.statSync(abs).isFile();
+  } catch {
+    return false;
+  }
+}
+
 // ─── Line I/O ─────────────────────────────────────────────────────────────────
 
 function readLines(absPath: string): { lines: string[]; crlf: boolean } {
@@ -442,6 +455,9 @@ export async function replaceLinesTool(
     totalLines: newTotal,
     linesDelta: newTotal - total,
     message: `Replaced lines ${params.startLine}–${clampedEnd}: removed ${oldLines.length}, added ${newLines.length}. File now has ${newTotal} lines.`,
+    /** Remind the model: line numbers from any earlier read_file are invalid until the file is read again. */
+    lineRangeStaleHint:
+      'Before another edit on this file, call read_file again: line numbers from prior reads are outdated after this change.',
     diagnosticsCheck: diagnosticsInfo,
     ...diffMeta,
   });

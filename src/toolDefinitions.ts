@@ -87,7 +87,9 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
          'Edit a range of lines in a file with new content. ' +
         'A secondary LLM check will automatically verify the change before it is applied — ' +
         'the LLM focuses on comparing before/after code sections for semantic consistency and logical correctness. ' +
-         'No need to call find_in_file first, just supply the correct line numbers. ' +
+        'HOST ENFORCEMENT (hard rule): If the file already exists in the workspace, you MUST call read_file or find_in_file (with a match) on that exact path after the latest user message and before this edit — the tool will reject edit otherwise. ' +
+        'Exception: creating a brand-new file (path not yet present) does not require a prior read. ' +
+        'After every successful edit on a file, line-query permission is cleared — you must read_file or find_in_file again before another edit on the same file. ' +
         'To insert without removing any lines, set endLine = startLine - 1. ' +
         'To delete lines, set newContent to an empty string \"\". ' +
         'After an edit, call read_file to verify the result.',
@@ -400,19 +402,20 @@ At runtime, a **Host environment** section is appended to this system message (O
 - Terminology unified: use **edit** (no "replace_lines") for file modifications.
 - Shell policy clarified: **never** use shell commands for any workspace file operations (read/write/modify); use tools instead.
 - Disabled legacy git tools removed from the tool list for clarity.
+- **Line query before edit (enforced)**: For existing files, the host rejects **edit** unless **read_file** or **find_in_file** (with a match) was successfully used on that path since the last user message and since the last successful edit on that file.
 
 ## 中文快速要点（按章节）
 - Tools available：只使用列出的工具；文件读写改动只用 "read_file" / "edit" / "create_directory"。
-- MM_OUTPUT 协议：用于 "edit.newContent" 或 "run_shell_command.command" 需要原始多行文本时，避免转义损坏。
+- MM_OUTPUT 协议：用于 edit.newContent 或 run_shell_command.command 需要原始多行文本时，避免转义损坏。**同一轮助手消息里仅允许一个 edit 使用 MM_OUTPUT 补丁**；同轮多个 edit 时，其余必须在 JSON 里写明 newContent，或拆成多轮。
 - Task Planning：多步骤任务先 "create_todo_list"，每步完成后 "complete_todo_item"。
-- Editing workflow：先 "read_file" 拿行号，再 "edit"，最后 "read_file" 复核。
+- Editing workflow（扩展强制）：**对已有文件，每次 edit 前必须先 read_file 或 find_in_file（命中）以取得当前行号**（扩展在代码层拦截，违反则 edit 失败）；用户新消息后或上一次 edit 成功后，都必须重新查询再改同一文件；新建尚不存在的文件可直接 edit。
 - Error handling：遇到工具报错要原样转述错误信息并给出下一步，不要默默放弃。
 
 ## Tools available
 - **get_workspace_info** — Get the workspace root path and top-level file list. Call this first if unsure.
 - **read_file** — Read file contents with line numbers.
 - **find_in_file** — Locate code by content and return its current line number.
-- **edit** — Edit a line range with new text. A built-in LLM check automatically verifies the change before it is committed (focusing on comparing before/after code sections for semantic consistency).
+- **edit** — Edit a line range with new text. **Required first:** read_file or find_in_file on the same path for existing files (host-enforced). A built-in LLM check verifies each replacement before commit.
 - **create_directory** — Create a directory (folder) in the workspace.
 - **task_complete** — Signal that the user request is fully complete and stop.
 - **create_todo_list** — Create a structured task plan before starting multi-step work.
@@ -453,6 +456,7 @@ And in the tool call JSON arguments, set \`command\` to "" (or omit it). The hos
 Protocol rules:
 - Output EXACTLY ONE \`<MM_OUTPUT ...>\` block and NOTHING else when using this mode.
 - Do NOT output both EDIT and SHELL blocks in the same message.
+- If you issue **multiple** \`edit\` tool calls in the **same** assistant message, at most **one** of them may rely on this block for \`newContent\`; put plain \`newContent\` in the JSON for every other \`edit\`, or use separate turns. (The host binds the single MM_PATCH to the first \`edit\` with empty \`newContent\`.)
 ## Configuration
 You can configure API settings and interaction limits through the config dialog in the chat interface. The configuration includes:
 - **API Base URL**: Endpoint for API calls (default: https://api.deepseek.com)

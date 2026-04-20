@@ -116,6 +116,8 @@ export class MessageHandler {
           // If the model used MM_OUTPUT sentinel blocks in its visible content, we can
           // safely extract raw payload (avoids JSON string escaping damage for edit/shell).
           const mm = extractFirstMmOutput(response.content);
+          /** True after the single MM_PATCH has been bound to one `edit` with empty newContent. */
+          let mmEditPayloadUsed = false;
           for (const toolCall of response.toolCalls) {
             // Check for stop request before each tool call
             if (this._context.operation.isStopped()) {
@@ -134,9 +136,16 @@ export class MessageHandler {
               if (name === 'edit' && mm.type === 'EDIT') {
                 const cur = typeof args['newContent'] === 'string' ? String(args['newContent']) : '';
                 if (!cur) {
-                  args['newContent'] = mm.payload;
-                  // Internal marker to keep literal "\n" intact for MM_PATCH payloads.
-                  args['__mmRaw'] = true;
+                  if (mmEditPayloadUsed) {
+                    // Only one edit per assistant message may use MM_OUTPUT; further empty newContent
+                    // would previously all receive the same patch (wrong file regions / duplicates).
+                    args['__mmOutputMultiEditViolation'] = true;
+                  } else {
+                    args['newContent'] = mm.payload;
+                    // Internal marker to keep literal "\n" intact for MM_PATCH payloads.
+                    args['__mmRaw'] = true;
+                    mmEditPayloadUsed = true;
+                  }
                 }
               } else if (name === 'run_shell_command' && mm.type === 'SHELL') {
                 const cur = typeof args['command'] === 'string' ? String(args['command']) : '';

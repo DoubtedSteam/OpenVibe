@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { ChatMessage, ChatSession, AgentLogEntry } from '../types';
+import { ChatMessage, ChatSession, AgentLogEntry, AssistantTodoPersistedState } from '../types';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -342,8 +342,35 @@ export class SessionManager {
     const currentSession = this._sessions.find(s => s.id === this._currentSessionId);
     if (currentSession) {
       currentSession.messages = [];
+      delete currentSession.assistantTodoState;
       currentSession.updated = Date.now();
       this._saveSessions();
     }
+  }
+
+  public getCurrentSessionAssistantTodoState(): AssistantTodoPersistedState | null {
+    const currentSession = this._sessions.find((s) => s.id === this._currentSessionId);
+    const st = currentSession?.assistantTodoState;
+    if (!st || typeof st.goal !== 'string' || !Array.isArray(st.items)) {
+      return null;
+    }
+    return st;
+  }
+
+  public setCurrentSessionAssistantTodoState(state: AssistantTodoPersistedState | null): void {
+    const currentSession = this._sessions.find((s) => s.id === this._currentSessionId);
+    if (!currentSession) {
+      return;
+    }
+    if (state == null) {
+      delete currentSession.assistantTodoState;
+    } else {
+      currentSession.assistantTodoState = {
+        goal: state.goal,
+        items: state.items.map((i) => ({ text: String(i.text), done: !!i.done })),
+      };
+    }
+    currentSession.updated = Date.now();
+    this._saveSessions();
   }
 }

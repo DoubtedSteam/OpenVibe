@@ -35,6 +35,17 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
     this._toolExecutor = new ToolExecutor({
       post: (msg) => this._uiManager.post(msg),
+      persistAssistantUiEcho: (content: string) => {
+        this._conversation.addMessage({ role: 'assistant', content, hiddenFromLlm: true });
+        this._uiManager.post({ type: 'addMessage', message: { role: 'assistant', content } });
+      },
+      persistAssistantTodoState: (state) => {
+        this._sessionManager.setCurrentSessionAssistantTodoState(
+          state === null
+            ? null
+            : { goal: state.goal, items: state.items.map((i) => ({ text: i.text, done: i.done })) }
+        );
+      },
       llmCheckReplace: async (ctx) => {
         // Independent code-edit review (includes user request + related context + memory excerpt).
         const { llmIndependentEditReview } = await import('./codeEditReview.js');
@@ -66,6 +77,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       signal: () => this._operation.signal(),
       log: (e) => this._conversation.addAgentLog(e),
     });
+    this._toolExecutor.restorePersistedTodoState(this._sessionManager.getCurrentSessionAssistantTodoState());
 
     this._messageHandler = new MessageHandler({
       getApiConfig: () => this._uiManager.getApiConfig(),
@@ -156,6 +168,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       }
       if (msg.type === 'switchSession') {
         await this._sessionManager.switchSession(msg.sessionId);
+        this._toolExecutor.restorePersistedTodoState(this._sessionManager.getCurrentSessionAssistantTodoState());
         this._uiManager.post({ type: 'clearMessages' });
         this._replayWebview();
       }
@@ -163,6 +176,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         const wasCurrent = this._sessionManager.getCurrentSessionId() === msg.sessionId;
         const deleted = await this._sessionManager.deleteSession(msg.sessionId);
         if (deleted && wasCurrent) {
+          this._toolExecutor.restorePersistedTodoState(this._sessionManager.getCurrentSessionAssistantTodoState());
           this._uiManager.post({ type: 'clearMessages' });
           this._replayWebview();
         }
@@ -223,6 +237,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
   private async _createNewSession(): Promise<void> {
     await this._sessionManager.createSession();
+    this._toolExecutor.restorePersistedTodoState(this._sessionManager.getCurrentSessionAssistantTodoState());
     this._uiManager.post({ type: 'clearMessages' });
     this._replayWebview();
   }

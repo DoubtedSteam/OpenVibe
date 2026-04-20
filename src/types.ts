@@ -12,6 +12,11 @@ export interface ChatMessage {
   content: string | null;
   tool_calls?: ToolCall[];
   tool_call_id?: string;
+  /**
+   * Persisted for chat UI / replay only. Omitted from {@link ConversationService.buildMessagesForLlm}
+   * so tool-injected bubbles (e.g. todo list display) do not break the assistant/tool message sequence.
+   */
+  hiddenFromLlm?: boolean;
 }
 
 export interface AgentLogEntry {
@@ -32,6 +37,12 @@ export interface GitSnapshot {
   gitTag?: string;
 }
 
+/** Mirrors in-memory todo state in {@link ToolExecutor}; persisted per session for reload. */
+export interface AssistantTodoPersistedState {
+  goal: string;
+  items: { text: string; done: boolean }[];
+}
+
 export interface ChatSession {
   id: string;
   title: string;
@@ -41,6 +52,8 @@ export interface ChatSession {
   snapshots?: GitSnapshot[];
   agentLogs?: AgentLogEntry[];
   isActive?: boolean;
+  /** Last assistant todo list (create_todo_list / complete_todo_item); restored after window reload. */
+  assistantTodoState?: AssistantTodoPersistedState | null;
 }
 
 export interface ApiConfig {

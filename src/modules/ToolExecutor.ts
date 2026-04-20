@@ -1,3 +1,4 @@
+import * as path from 'path';
 import {
   readFileTool,
   findInFileTool,
@@ -12,10 +13,11 @@ import {
   runShellCommandTool,
   gitSnapshotTool,
   gitRollbackTool,
-  listGitSnapshotsTool
+  listGitSnapshotsTool,
+  workspaceFileExistsRelative,
 } from '../tools';
 import type { ReplaceCheckContext, ReplaceCheckResult } from '../tools';
-import type { ApiConfig, AgentLogEntry } from '../types';
+import type { ApiConfig, AgentLogEntry, AssistantTodoPersistedState } from '../types';
 import type { TodolistReviewSettings, TodoState } from './todolistReview';
 import {
   applyExpandToClone,
@@ -149,9 +151,20 @@ export class ToolExecutor {
 
   /** Increments per `edit` LLM check in the current user turn (shown on Replace check cards). */
   private _editReviewRound = 0;
-   constructor(
+
+  /**
+   * Per file path: read_file or find_in_file (match) has run since last user message / invalidation,
+   * so line numbers are considered current for enforcing edit order.
+   */
+  private _lineQueryFresh = new Map<string, boolean>();
+
+  constructor(
      private readonly _context: {
        post: (message: any) => void;
+       /** Persist assistant-only UI lines (todo/shell/review) so webview reload can replay them. */
+       persistAssistantUiEcho: (content: string) => void;
+       /** Persist todo list state per session so reload restores `getTodoControlInfo`. */
+       persistAssistantTodoState: (state: TodoState | null) => void;
        llmCheckReplace: (ctx: ReplaceCheckContext) => Promise<ReplaceCheckResult>;
        userConfirmReplace: (ctx: ReplaceCheckContext) => Promise<boolean>;
        userConfirmShellCommand: (command: string) => Promise<boolean>;
@@ -190,9 +203,49 @@ export class ToolExecutor {
     }
   }
 
-  /** Call when the user sends a new message (not empty "continue") so edit check numbering restarts. */
+  private _postUiEcho(content: string): void {
+    this._context.persistAssistantUiEcho(content);
+  }
+
+  private _notifyTodoPersisted(): void {
+    this._context.persistAssistantTodoState(this._cloneTodoState());
+  }
+
+  /** Restore todo state from workspace session file after extension / window reload. */
+  public restorePersistedTodoState(state: AssistantTodoPersistedState | null): void {
+    if (!state || typeof state.goal !== 'string' || !Array.isArray(state.items)) {
+      this._todoList = null;
+      return;
+    }
+    this._todoList = {
+      goal: state.goal,
+      items: state.items.map((i) => ({ text: String(i.text), done: !!i.done })),
+    };
+  }
+
+  /**
+   * Call when the user sends a new message (not empty "continue") so edit check numbering restarts
+   * and line-query gates are cleared (each edit must be preceded by read_file / find_in_file again).
+   */
   public resetReviewUiCounters(): void {
     this._editReviewRound = 0;
+    this._lineQueryFresh.clear();
+  }
+
+  private _normalizeFileKey(filePath: string): string {
+    return path.normalize(filePath.trim()).replace(/\\/g, '/');
+  }
+
+  private _markLineQueryFresh(filePath: string): void {
+    this._lineQueryFresh.set(this._normalizeFileKey(filePath), true);
+  }
+
+  private _invalidateLineQuery(filePath: string): void {
+    this._lineQueryFresh.delete(this._normalizeFileKey(filePath));
+  }
+
+  private _isLineQueryFresh(filePath: string): boolean {
+    return this._lineQueryFresh.get(this._normalizeFileKey(filePath)) === true;
   }
 
   /** Next sequence number for Replace check cards this turn. */
@@ -206,7 +259,7 @@ export class ToolExecutor {
      const editTools = ['edit', 'create_directory'];
      if (editTools.includes(name) && !this._context.getEditPermissionEnabled()) {
        const message = `Edit permission is currently disabled. The ${name} tool cannot be used while edit permission is turned off. Please enable edit permission or use read-only tools only.`;
-       this._context.post({ type: 'addMessage', message: { role: 'assistant', content: message } });
+       this._postUiEcho(message);
        return JSON.stringify({ error: message });
      }
      
@@ -214,26 +267,65 @@ export class ToolExecutor {
       case 'get_workspace_info':
         return getWorkspaceInfoTool();
 
-      case 'read_file':
-        return readFileTool({
-          filePath: args.filePath as string,
+      case 'read_file': {
+        const fp = args.filePath as string;
+        const result = readFileTool({
+          filePath: fp,
           startLine: args.startLine as number | undefined,
           endLine: args.endLine as number | undefined,
         });
+        try {
+          const o = JSON.parse(result) as { error?: string };
+          if (!o.error) {
+            this._markLineQueryFresh(fp);
+          }
+        } catch {
+          /* ignore */
+        }
+        return result;
+      }
 
-      case 'find_in_file':
-        return findInFileTool({
-          filePath: args.filePath as string,
+      case 'find_in_file': {
+        const fp = args.filePath as string;
+        const result = findInFileTool({
+          filePath: fp,
           searchString: args.searchString as string,
           contextBefore: args.contextBefore as number | undefined,
           contextAfter: args.contextAfter as number | undefined,
           occurrence: args.occurrence as number | undefined,
         });
+        try {
+          const o = JSON.parse(result) as { error?: string; found?: boolean };
+          if (!o.error && o.found === true) {
+            this._markLineQueryFresh(fp);
+          }
+        } catch {
+          /* ignore */
+        }
+        return result;
+      }
 
-      case 'edit':
-        return replaceLinesTool(
+      case 'edit': {
+        if (args['__mmOutputMultiEditViolation'] === true) {
+          const msg =
+            'Only one edit tool call per assistant message may use <MM_OUTPUT> for newContent. ' +
+            'Provide newContent in the JSON for additional edit calls in the same message, ' +
+            'or send another assistant turn. (Previously every empty newContent incorrectly received the same patch.)';
+          return JSON.stringify({ error: msg });
+        }
+        const fp = args.filePath as string;
+        const existedBefore = workspaceFileExistsRelative(fp);
+        if (existedBefore && !this._isLineQueryFresh(fp)) {
+          return JSON.stringify({
+            error:
+              'edit blocked: you must call read_file or find_in_file (successful match) on this file first to obtain current line numbers. ' +
+              'This is enforced at the start of each user message and again after each successful edit that changes the file. ' +
+              '新建不存在的文件时可直接 edit；若文件已存在则必须先查询行号。',
+          });
+        }
+        const result = await replaceLinesTool(
           {
-            filePath: args.filePath as string,
+            filePath: fp,
             startLine: args.startLine as number,
             endLine: args.endLine as number,
             newContent: args.newContent as string,
@@ -242,6 +334,17 @@ export class ToolExecutor {
           (ctx) => this._context.llmCheckReplace(ctx),
           this._context.getApiConfig().confirmChanges !== false ? (ctx) => this._context.userConfirmReplace(ctx) : undefined
         );
+        try {
+          const o = JSON.parse(result) as { success?: boolean };
+          if (o.success === true) {
+            // Next edit on this file must read_file / find_in_file again (strict gate).
+            this._invalidateLineQuery(fp);
+          }
+        } catch {
+          /* ignore */
+        }
+        return result;
+      }
 
       case 'create_directory':
         return createDirectoryTool({
@@ -252,7 +355,7 @@ export class ToolExecutor {
       case 'task_complete': {
         const summary = (args['summary'] as string) || '';
         if (summary.trim()) {
-          this._context.post({ type: 'addMessage', message: { role: 'assistant', content: summary.trim() } });
+          this._postUiEcho(summary.trim());
         }
         // task_complete 被调用后直接结束，不返回任何信息给LLM
         return JSON.stringify({ success: true, message: 'Task marked complete.', _immediate_end: true });
@@ -289,8 +392,9 @@ export class ToolExecutor {
 ${list}
 
 **Remaining**: ${remaining} item(s)`;
-        this._context.post({ type: 'addMessage', message: { role: 'assistant', content: todoListDisplay } });
-        
+        this._postUiEcho(todoListDisplay);
+        this._notifyTodoPersisted();
+
         return result;
       }
 
@@ -481,14 +585,9 @@ ${list}
 
       if (review.decision === 'PASS') {
         if (attempt > 1) {
-          this._context.post({
-            type: 'addMessage',
-            message: {
-              role: 'assistant',
-              content:
-                `✅ **Shell review** · passed on round **${attempt}/${cfg.maxAttempts}** (command was refined until review passed).`,
-            },
-          });
+          this._postUiEcho(
+            `✅ **Shell review** · passed on round **${attempt}/${cfg.maxAttempts}** (command was refined until review passed).`
+          );
         }
         if (confirmShell) {
           if (this._stopped()) {
@@ -554,16 +653,11 @@ ${list}
         });
       }
 
-      this._context.post({
-        type: 'addMessage',
-        message: {
-          role: 'assistant',
-          content:
-            `🔁 **Shell review** · round **${attempt}/${cfg.maxAttempts}** — not passed\n\n` +
-            `${review.summary || 'See tool result for reviewer notes.'}\n\n` +
-            `_Regenerating command…_`,
-        },
-      });
+      this._postUiEcho(
+        `🔁 **Shell review** · round **${attempt}/${cfg.maxAttempts}** — not passed\n\n` +
+          `${review.summary || 'See tool result for reviewer notes.'}\n\n` +
+          `_Regenerating command…_`
+      );
     }
 
     return JSON.stringify({
@@ -577,6 +671,7 @@ ${list}
 
   public clearTodoList(): void {
     this._todoList = null;
+    this._notifyTodoPersisted();
   }
 
   /**
@@ -609,18 +704,11 @@ ${list}
 
   private _postTodoDisplay(kind: 'created' | 'expanded', goal: string, list: string, remaining: number): void {
     if (kind === 'expanded') {
-      this._context.post({
-        type: 'addMessage',
-        message: {
-          role: 'assistant',
-          content: `Todo list expanded:\n\n**Goal**: ${goal}\n\n**Items**:\n${list}\n\n**Remaining**: ${remaining} item(s)`,
-        },
-      });
+      this._postUiEcho(
+        `Todo list expanded:\n\n**Goal**: ${goal}\n\n**Items**:\n${list}\n\n**Remaining**: ${remaining} item(s)`
+      );
     } else {
-      this._context.post({
-        type: 'addMessage',
-        message: { role: 'assistant', content: `Todo list created:\n\n**Goal**: ${goal}\n\n**Items**:\n${list}` },
-      });
+      this._postUiEcho(`Todo list created:\n\n**Goal**: ${goal}\n\n**Items**:\n${list}`);
     }
   }
 
@@ -647,6 +735,7 @@ ${list}
         remaining,
       });
       this._postTodoDisplay('expanded', this._todoList.goal, list, remaining);
+      this._notifyTodoPersisted();
       return result;
     }
 
@@ -659,6 +748,7 @@ ${list}
       items: list,
     });
     this._postTodoDisplay('created', goal, list, this._todoList.items.filter((i) => !i.done).length);
+    this._notifyTodoPersisted();
     return result;
   }
 
@@ -750,15 +840,9 @@ ${list}
             reviewAttempts: attempt,
           });
           this._postTodoDisplay('expanded', this._todoList.goal, list, remaining);
+          this._notifyTodoPersisted();
           if (attempt > 1) {
-            this._context.post({
-              type: 'addMessage',
-              message: {
-                role: 'assistant',
-                content:
-                  `✅ **Todo list (expand) review** · passed on round **${attempt}/${cfg.maxAttempts}**.`,
-              },
-            });
+            this._postUiEcho(`✅ **Todo list (expand) review** · passed on round **${attempt}/${cfg.maxAttempts}**.`);
           }
           return result;
         }
@@ -774,16 +858,11 @@ ${list}
           });
         }
 
-        this._context.post({
-          type: 'addMessage',
-          message: {
-            role: 'assistant',
-            content:
-              `🔁 **Todo list (expand) review** · round **${attempt}/${cfg.maxAttempts}** — not passed\n\n` +
-              `${review.summary || 'See reviewer notes in tool result.'}\n\n` +
-              `_Regenerating expanded items…_`,
-          },
-        });
+        this._postUiEcho(
+          `🔁 **Todo list (expand) review** · round **${attempt}/${cfg.maxAttempts}** — not passed\n\n` +
+            `${review.summary || 'See reviewer notes in tool result.'}\n\n` +
+            `_Regenerating expanded items…_`
+        );
 
         try {
           this._log('todolistWriter', 'request', { operation: 'edit', attempt, expandIndex, proposedNewItems: intentReplacement, reviewNotes });
@@ -859,15 +938,9 @@ ${list}
           reviewAttempts: attempt,
         });
         this._postTodoDisplay('created', cg, list, remaining);
+        this._notifyTodoPersisted();
         if (attempt > 1) {
-          this._context.post({
-            type: 'addMessage',
-            message: {
-              role: 'assistant',
-              content:
-                `✅ **Todo list (generate) review** · passed on round **${attempt}/${cfg.maxAttempts}**.`,
-            },
-          });
+          this._postUiEcho(`✅ **Todo list (generate) review** · passed on round **${attempt}/${cfg.maxAttempts}**.`);
         }
         return result;
       }
@@ -883,16 +956,11 @@ ${list}
         });
       }
 
-      this._context.post({
-        type: 'addMessage',
-        message: {
-          role: 'assistant',
-          content:
-            `🔁 **Todo list (generate) review** · round **${attempt}/${cfg.maxAttempts}** — not passed\n\n` +
-            `${review.summary || 'See reviewer notes in tool result.'}\n\n` +
-            `_Regenerating goal and items…_`,
-        },
-      });
+      this._postUiEcho(
+        `🔁 **Todo list (generate) review** · round **${attempt}/${cfg.maxAttempts}** — not passed\n\n` +
+          `${review.summary || 'See reviewer notes in tool result.'}\n\n` +
+          `_Regenerating goal and items…_`
+      );
 
       try {
         this._log('todolistWriter', 'request', { operation: 'generate', attempt, priorGoal: cg, priorItems: ci, reviewNotes });

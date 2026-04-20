@@ -46,7 +46,8 @@ export class ConversationService {
    * adding orchestrators, sub-agents, or shared scratchpad context.
    */
   buildMessagesForLlm(systemPrompt: string): ChatMessage[] {
-    return [{ role: 'system', content: systemPrompt }, ...this.getCurrentMessages()];
+    const visible = this.getCurrentMessages().filter((m) => !m.hiddenFromLlm);
+    return [{ role: 'system', content: systemPrompt }, ...visible];
   }
 
   /**
@@ -113,6 +114,7 @@ export class ConversationService {
       const apiConfig = this._getApiConfig();
 
       const historyText = messages
+        .filter((m) => !m.hiddenFromLlm)
         .filter(m => m.role !== 'tool' || !!m.content)
         .map(m => {
           const roleLabel =
@@ -205,6 +207,11 @@ export class ConversationService {
             /* keep empty */
           }
           post({ type: 'toolCall', name: tc.function.name, args });
+          // Tool execution may append UI-only assistant bubbles (hiddenFromLlm) before the tool row.
+          while (i < messages.length && messages[i].role === 'assistant' && messages[i].hiddenFromLlm && messages[i].content) {
+            post({ type: 'addMessage', message: { role: 'assistant', content: messages[i].content! } });
+            i++;
+          }
           const tm = messages[i];
           if (tm?.role === 'tool' && tm.tool_call_id === tc.id) {
             post({ type: 'toolResult', name: tc.function.name, result: tm.content ?? '{}', fromReplay: true });
@@ -220,8 +227,12 @@ export class ConversationService {
         }
         continue;
       }
-      if (m.role === 'assistant' && m.content) {
+      if (m.role === 'assistant' && m.content && !m.hiddenFromLlm) {
         post({ type: 'addMessage', message: { role: 'assistant', content: m.content } });
+        i++;
+        continue;
+      }
+      if (m.role === 'assistant' && m.hiddenFromLlm) {
         i++;
         continue;
       }
@@ -265,7 +276,7 @@ export class ConversationService {
     const messages = this.getCurrentMessages();
     for (let i = messages.length - 1; i >= 0; i--) {
       const m = messages[i];
-      if (m.role !== 'assistant') {
+      if (m.role !== 'assistant' || m.hiddenFromLlm) {
         continue;
       }
       const c = typeof m.content === 'string' ? m.content.trim() : '';
