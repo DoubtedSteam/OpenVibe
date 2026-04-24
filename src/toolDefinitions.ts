@@ -398,7 +398,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
     function: {
       name: 'list_skills',
       description:
-        'List all available skill directories under the skills/ folder. ' +
+         'List all available skill directories under the .OpenVibe/skills/ folder. ' +
         'Returns an array of skill names (directory names). Use this to discover which skills are available to load.',
       parameters: {
         type: 'object',
@@ -419,7 +419,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
         properties: {
           name: {
             type: 'string',
-            description: 'Name of the skill directory under skills/ (e.g. "paper-revision-router")',
+            description: 'Name of the skill directory under .OpenVibe/skills/ (e.g. "paper-revision-router")',
           },
         },
         required: ['name'],

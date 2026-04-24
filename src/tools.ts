@@ -1472,9 +1472,9 @@ function parseFrontmatter(raw: string): { attributes: Record<string, any>; body:
 export function listSkillsTool(): string {
   try {
     const root = getWorkspaceRoot();
-    const skillsDir = path.join(root, 'skills');
+    const skillsDir = path.join(root, '.OpenVibe', 'skills');
     if (!fs.existsSync(skillsDir)) {
-      return JSON.stringify({ skills: [], message: 'No skills/ directory found.' });
+      return JSON.stringify({ skills: [], message: 'No .OpenVibe/skills/ directory found.' });
     }
     const entries = fs.readdirSync(skillsDir, { withFileTypes: true });
     const skillNames = entries
@@ -1493,10 +1493,10 @@ export function listSkillsTool(): string {
 export function loadSkillTool(params: SkillLoadParams): string {
   try {
     const root = getWorkspaceRoot();
-    const skillPath = path.join(root, 'skills', params.name, 'SKILL.md');
+    const skillPath = path.join(root, '.OpenVibe', 'skills', params.name, 'SKILL.md');
     if (!fs.existsSync(skillPath)) {
       return JSON.stringify({
-        error: `Skill not found: ${params.name} (SKILL.md not found at skills/${params.name}/SKILL.md)`,
+        error: `Skill not found: ${params.name} (SKILL.md not found at .OpenVibe/skills/${params.name}/SKILL.md)`,
       });
     }
     const raw = fs.readFileSync(skillPath, 'utf-8');
@@ -1513,7 +1513,7 @@ export function loadSkillTool(params: SkillLoadParams): string {
       description,
       instruction: body,
       subSkills,
-      filePath: `skills/${params.name}/SKILL.md`,
+      filePath: `.OpenVibe/skills/${params.name}/SKILL.md`,
     });
   } catch (e: any) {
     return JSON.stringify({ error: `Failed to load skill: ${e.message}` });
