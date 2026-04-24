@@ -83,10 +83,12 @@ export class MessageHandler {
           this._context.post({ type: 'info', message: 'Operation stopped by user.' });
           break;
         }
+        // Build language instruction based on user's setting
+        const langInstr = this._buildLanguageInstruction(apiConfig.language);
 
-        const allMessages = this._context.buildMessagesForLlm(
-          SYSTEM_PROMPT + '\n\n' + getAgentRuntimeContextBlock() + injectedSystemPrompt
-        );
+        const allMessages = this._context.buildMessagesForLlm(SYSTEM_PROMPT + '
+
+' + getAgentRuntimeContextBlock() + langInstr + injectedSystemPrompt);
 
         const response = await sendChatMessage(allMessages, apiConfig, TOOL_DEFINITIONS, this._context.operation.signal());
 
@@ -251,4 +253,24 @@ export class MessageHandler {
       this._context.post({ type: 'info', message: 'Stopping current operation...' });
     }
   }
+  /**
+   * Build a language instruction block appended to the system prompt.
+   * Tells the AI to respond in the user's preferred language.
+   */
+  private _buildLanguageInstruction(lang: string | undefined): string {
+    switch (lang) {
+      case 'zh-CN':
+        return `
+
+## Language Instruction
+请使用简体中文回复用户。所有工具调用的说明和输出、错误处理、修改总结等都请使用中文。`;
+      case 'en':
+      case 'en':
+        return '';
+      default:
+        // Fallback: auto-detected but unknown — stay neutral
+        return '';
+    }
+  }
+}
 }

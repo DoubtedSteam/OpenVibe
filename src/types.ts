@@ -66,6 +66,8 @@ export interface ApiConfig {
   confirmShellCommand?: boolean;
   maxInteractions?: number; // -1 means unlimited
   maxSequenceLength?: number;
+  /** Language for AI interaction: 'auto' | 'en' | 'zh-CN' */
+  language?: string;
 }
 export interface ToolDefinition {
   type: 'function';

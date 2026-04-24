@@ -96,6 +96,14 @@ export class UIManager {
     if (!apiKey) {
       throw new Error('API key not configured. Please set vibe-coding.apiKey in Settings.');
     }
+    // Resolve language setting: "auto" → detect from VS Code UI language
+    const rawLang = cfg.get<string>('language', 'auto');
+    let resolvedLang = rawLang;
+    if (rawLang === 'auto') {
+      const uiLang = vscode.env.language;
+      // If UI language starts with "zh" (zh-CN, zh-TW, etc.), use zh-CN; otherwise use English
+      resolvedLang = uiLang.startsWith('zh') ? 'zh-CN' : 'en';
+    }
     return {
       baseUrl: cfg.get<string>('apiBaseUrl', 'https://api.openai.com/v1'),
       apiKey,
@@ -104,6 +112,7 @@ export class UIManager {
       confirmShellCommand: cfg.get<boolean>('confirmShellCommand', true),
       maxInteractions: cfg.get<number>('maxInteractions', -1),
       maxSequenceLength: cfg.get<number>('maxSequenceLength', 2000),
+      language: resolvedLang,
     };
   }
 

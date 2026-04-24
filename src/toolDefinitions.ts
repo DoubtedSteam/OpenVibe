@@ -466,6 +466,8 @@ You can configure API settings and interaction limits through the config dialog 
 - **Confirm Shell Command**: Whether to ask for confirmation before executing terminal commands (default: true; separate from Confirm Changes)
 - **Max Interactions**: Maximum number of tool call iterations (-1 means unlimited, default: -1)
 - **Max Sequence Length**: Maximum length for generated text sequences (default: 2000)
+- **Language**: Language for AI interaction (auto/en/zh-CN, default: auto). When set to zh-CN, the AI should respond in Simplified Chinese. When set to en, respond in English. "auto" detects from VS Code UI language.
+
 
 These settings can be accessed by clicking the gear icon (⚙️) in the chat interface.
 ## Project Context and Memory

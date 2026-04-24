@@ -85,6 +85,17 @@
           "default": 1000000,
           "description": "Maximum length for generated text sequences"
         },
+        "vibe-coding.language": {
+          "type": "string",
+          "default": "auto",
+          "enum": ["auto", "en", "zh-CN"],
+          "enumDescriptions": [
+            "Auto-detect based on user's VS Code display language (English if UI is English, Chinese if UI is Chinese)",
+            "Always use English",
+            "Always use Simplified Chinese"
+          ],
+          "description": "Language for AI assistant interaction. Controls the language used in system prompts, tool descriptions, and assistant responses."
+        },
         "vibe-coding.todolistReview.enabled": {
           "type": "boolean",
           "default": true,
