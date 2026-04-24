@@ -124,9 +124,87 @@ edit(filePath, startLine, endLine, newContent)
 | `run_shell_command` | 在项目根执行命令；**禁止使用 shell 进行任何文件读写操作**（强制使用专用工具），经 shell 编辑代理优化 + 独立安全审查（含防上下文获取、防漂移、结构化返回、多级审查流程）。对于复杂多行命令，可使用 **MM_OUTPUT** 特殊标记传递原始脚本，避免转义问题 |
 | `complete_todo_item` | 标记 todo 完成 |
 | `compact` | 压缩长对话，节省上下文 |
+| `list_skills` | 列出 `.OpenVibe/skills/` 下所有可用的技能 |
+| `load_skill` | 加载指定技能的 SKILL.md 文件并返回结构化指令内容 |
 | Git 相关 | 快照与历史管理（见新闻） |
 
 </details>
+
+<h2 id="skills-system">技能系统 / Skills</h2>
+
+技能系统允许你为 AI 助手预设**角色、行为模式和专业知识**，通过 `.OpenVibe/skills/` 目录中的结构化 Markdown 文件来定义。每次与助手对话时，可通过工具动态加载所需技能，让助手立即获得对应领域的上下文和指令。
+
+### 如何创建技能
+
+1. 在 `.OpenVibe/skills/` 下创建一个子目录，名称即技能标识（如 `code-reviewer`）
+2. 在该目录中创建 `SKILL.md` 文件，格式如下：
+
+```markdown
+---
+name: 代码审查员
+description: 专门负责 Pull Request 代码审查，重点关注安全性和性能
+subSkills: [security-review, perf-review]
+---
+
+# 技能指令
+
+你是一个经验丰富的代码审查员。审查代码时请重点关注：
+- **安全性**：SQL 注入、XSS、权限泄露
+- **性能**：不必要的循环、内存泄漏
+- **可维护性**：命名规范、模块耦合度
+
+请始终以表格形式输出审查结果。
+```
+
+**SKILL.md 结构说明：**
+
+| 部分 | 必需 | 说明 |
+|------|------|------|
+| `---` YAML 前置元数据 | 否 | 包含 `name`（名称）、`description`（描述）、`subSkills`（关联子技能列表） |
+| 正文 Markdown | 是 | 完整的指令文本，加载后作为 `instruction` 字段注入 AI 系统提示 |
+
+> **注意**：`subSkills` 是对其他技能目录名的引用，其值应在 `.OpenVibe/skills/` 下存在对应子目录。
+
+### 如何激活
+
+在对话中直接使用工具即可：
+
+**第一步：查看可用技能**
+```
+list_skills
+```
+返回示例：`{ "skills": ["code-reviewer", "paper-revision-router"], "total": 2 }`
+
+**第二步：加载技能**
+```
+load_skill(name="paper-revision-router")
+```
+返回结构化的 `SkillInfo` 对象，包含 `name`、`description`、`instruction`（完整指令文本）和 `subSkills`。
+
+**第三步：告诉助手你将使用该技能**
+加载后，助手会自动将 `instruction` 纳入系统提示上下文，从而按照技能定义的角色和行为模式工作。
+
+### 典型工作流
+
+```
+1. list_skills                    ← 发现可用技能
+2. load_skill(name="xxxx")        ← 加载目标技能
+3. 提出你的需求                    ← 助手按技能角色响应
+```
+
+你可以在一次对话中加载**多个技能**（重复 `load_skill` 即可），或将技能系统与任务规划（`create_todo_list`）结合使用。
+
+### 目录结构参考
+
+```
+.OpenVibe/
+├── skills/
+│   ├── code-reviewer/
+│   │   └── SKILL.md
+│   └── paper-revision-router/
+│       └── SKILL.md
+└── memory.md
+```
 
 <h2 id="installation">安装 / Installation</h2>
 
