@@ -265,7 +265,6 @@ export class MessageHandler {
 ## Language Instruction
 请使用简体中文回复用户。所有工具调用的说明和输出、错误处理、修改总结等都请使用中文。`;
       case 'en':
-      case 'en':
         return '';
       default:
         // Fallback: auto-detected but unknown — stay neutral
