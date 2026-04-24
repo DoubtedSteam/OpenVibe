@@ -1411,3 +1411,111 @@ export function listGitSnapshotsTool(): string {
     });
   }
 }
+
+
+// ─── Skill functions ────────────────────────────────────────────────────────────
+
+export interface SkillLoadParams {
+  name: string;
+}
+
+/**
+ * Parse YAML frontmatter (text between `---` delimiters) from a markdown file.
+ * Returns { attributes, body } where attributes is a flat key-value map,
+ * and body is the markdown content after the frontmatter.
+ */
+function parseFrontmatter(raw: string): { attributes: Record<string, any>; body: string } {
+  const lines = raw.split(/\x0d?\x0a/);
+  const attrs: Record<string, any> = {};
+  let bodyStart = 0;
+
+  if (lines.length > 0 && lines[0].trim() === '---') {
+    let endIdx = -1;
+    for (let i = 1; i < lines.length; i++) {
+      if (lines[i].trim() === '---') {
+        endIdx = i;
+        break;
+      }
+    }
+    if (endIdx !== -1) {
+      // Parse YAML-like lines between the two --- markers
+      for (let i = 1; i < endIdx; i++) {
+        const line = lines[i];
+        const colonIdx = line.indexOf(':');
+        if (colonIdx !== -1) {
+          const key = line.slice(0, colonIdx).trim();
+          let value: any = line.slice(colonIdx + 1).trim();
+          // Strip surrounding quotes
+          if ((value.startsWith('"') && value.endsWith('"')) ||
+              (value.startsWith("'") && value.endsWith("'"))) {
+            value = value.slice(1, -1);
+          }
+          // Handle array values like [a, b, c]
+          if (typeof value === 'string' && value.startsWith('[') && value.endsWith(']')) {
+            const inner = value.slice(1, -1);
+            value = inner.split(',').map((s: string) => s.trim().replace(/^["']|["']$/g, '')).filter(Boolean);
+          }
+          attrs[key] = value;
+        }
+      }
+      bodyStart = endIdx + 1;
+    }
+  }
+
+  const body = lines.slice(bodyStart).join('\x0a').trim();
+  return { attributes: attrs, body };
+}
+
+/**
+ * Get all skill directory names under the skills/ folder.
+ */
+export function listSkillsTool(): string {
+  try {
+    const root = getWorkspaceRoot();
+    const skillsDir = path.join(root, 'skills');
+    if (!fs.existsSync(skillsDir)) {
+      return JSON.stringify({ skills: [], message: 'No skills/ directory found.' });
+    }
+    const entries = fs.readdirSync(skillsDir, { withFileTypes: true });
+    const skillNames = entries
+      .filter(e => e.isDirectory() && !e.name.startsWith('.'))
+      .map(e => e.name)
+      .sort();
+    return JSON.stringify({ skills: skillNames, total: skillNames.length });
+  } catch (e: any) {
+    return JSON.stringify({ error: `Failed to list skills: ${e.message}` });
+  }
+}
+
+/**
+ * Load a skill's SKILL.md file, parse frontmatter, and return structured SkillInfo.
+ */
+export function loadSkillTool(params: SkillLoadParams): string {
+  try {
+    const root = getWorkspaceRoot();
+    const skillPath = path.join(root, 'skills', params.name, 'SKILL.md');
+    if (!fs.existsSync(skillPath)) {
+      return JSON.stringify({
+        error: `Skill not found: ${params.name} (SKILL.md not found at skills/${params.name}/SKILL.md)`,
+      });
+    }
+    const raw = fs.readFileSync(skillPath, 'utf-8');
+    const { attributes, body } = parseFrontmatter(raw);
+
+    const name = attributes.name ?? params.name;
+    const description = attributes.description ?? '';
+    const subSkills: string[] = Array.isArray(attributes.subSkills)
+      ? attributes.subSkills
+      : (typeof attributes.subSkills === 'string' ? [attributes.subSkills] : []);
+
+    return JSON.stringify({
+      name,
+      description,
+      instruction: body,
+      subSkills,
+      filePath: `skills/${params.name}/SKILL.md`,
+    });
+  } catch (e: any) {
+    return JSON.stringify({ error: `Failed to load skill: ${e.message}` });
+  }
+}

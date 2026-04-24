@@ -82,6 +82,15 @@ export interface ToolDefinition {
   };
 }
 
+export interface SkillInfo {
+  name: string;
+  description: string;
+  /** Full instruction text (persona + behavior) extracted from SKILL.md */
+  instruction: string;
+  /** Sub-skills referenced in the SKILL.md frontmatter, e.g. ["skill-a", "skill-b"] */
+  subSkills: string[];
+}
+
 export interface TokenUsage {
   prompt_tokens: number;
   completion_tokens: number;

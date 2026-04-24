@@ -393,6 +393,40 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'list_skills',
+      description:
+        'List all available skill directories under the skills/ folder. ' +
+        'Returns an array of skill names (directory names). Use this to discover which skills are available to load.',
+      parameters: {
+        type: 'object',
+        properties: {},
+        required: [],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'load_skill',
+      description:
+        'Load a skill\'s SKILL.md file, parse its YAML frontmatter, and return the structured content. ' +
+        'Skills are instruction sets that describe a persona or behavior. The returned object includes the skill name, description, full instruction text, and any sub-skills referenced.',
+      parameters: {
+        type: 'object',
+        properties: {
+          name: {
+            type: 'string',
+            description: 'Name of the skill directory under skills/ (e.g. "paper-revision-router")',
+          },
+        },
+        required: ['name'],
+      },
+    },
+  },
+
 ];
 export const SYSTEM_PROMPT = `You are Vibe Coding Assistant — an AI that can directly read and edit files inside the user's VS Code workspace.
 

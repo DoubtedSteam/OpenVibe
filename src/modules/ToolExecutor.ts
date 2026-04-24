@@ -15,6 +15,8 @@ import {
   gitRollbackTool,
   listGitSnapshotsTool,
   workspaceFileExistsRelative,
+  listSkillsTool,
+  loadSkillTool,
 } from '../tools';
 import type { ReplaceCheckContext, ReplaceCheckResult } from '../tools';
 import type { ApiConfig, AgentLogEntry, AssistantTodoPersistedState } from '../types';
@@ -445,6 +447,14 @@ ${list}
 
       case 'list_git_snapshots': {
         return listGitSnapshotsTool();
+      }
+
+      case 'list_skills': {
+        return listSkillsTool();
+      }
+
+      case 'load_skill': {
+        return loadSkillTool({ name: args.name as string });
       }
 
       default:
