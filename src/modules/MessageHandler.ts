@@ -86,9 +86,9 @@ export class MessageHandler {
         // Build language instruction based on user's setting
         const langInstr = this._buildLanguageInstruction(apiConfig.language);
 
-        const allMessages = this._context.buildMessagesForLlm(SYSTEM_PROMPT + '
+        const allMessages = this._context.buildMessagesForLlm(SYSTEM_PROMPT + `
 
-' + getAgentRuntimeContextBlock() + langInstr + injectedSystemPrompt);
+` + getAgentRuntimeContextBlock() + langInstr + injectedSystemPrompt);
 
         const response = await sendChatMessage(allMessages, apiConfig, TOOL_DEFINITIONS, this._context.operation.signal());
 
@@ -272,5 +272,4 @@ export class MessageHandler {
         return '';
     }
   }
-}
 }
