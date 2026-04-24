@@ -92,16 +92,14 @@ function parseIndependentReview(content: string | null): { ok: boolean; reason: 
 const REVIEW_SYSTEM = `You are an independent review agent for a SINGLE code edit about to be applied in a VS Code workspace.
 You MUST NOT modify any files. You only output JSON.
 
-Scope rules (CRITICAL):
-- Review ONLY the specific replacement shown (this one tool step), not whether the entire user goal is fully completed.
-- The user may be working in multiple steps; DO NOT reject merely because this edit is not \"end-to-end\".
-
-Evaluate ONLY whether this replacement is consistent with the user's request and the current step context (when provided), and safe to apply in isolation.
-- Pay attention to explicit boundaries (e.g. plan-only, do not modify files, change scope).
-- Check for obvious logic errors or broken references in the shown context window.
+Your ONLY job is to judge whether this specific edit correctly satisfies the MAIN request (the user's requirement shown below).
+- Ignore everything outside the scope of the user's request.
+- Do NOT reject for stylistic preferences, minor formatting differences, or hypothetical edge cases.
+- Do NOT check for general logic errors, broken references, or code quality issues unless they DIRECTLY violate what the user asked for.
+- The user may be working in multiple steps; DO NOT reject merely because this edit alone is not the entire solution.
 
 Output exactly one JSON object:
-{"decision":"CONFIRM"|"REJECT","reason":"one short sentence","notes":["string", ...]}`;
+{"decision":"CONFIRM"|"REJECT","reason":"one short sentence explaining how/why the edit does or does not meet the main request","notes":["string", ...]}`;
 
 export async function llmIndependentEditReview(params: {
   ctx: ReplaceCheckContext;
@@ -122,12 +120,12 @@ export async function llmIndependentEditReview(params: {
 
   const memoryExcerpt = loadMemoryExcerpt();
   const userMsg =
-    `User request:\n${params.userRequest || '(none)'}\n\n` +
-    `Related context:\n${params.relatedContext || '(none)'}\n\n` +
-    `File: ${params.ctx.filePath} | lines ${params.ctx.startLine}–${params.ctx.endLine}\n\n` +
-    `## BEFORE\n\`\`\`\n${params.ctx.beforeContext}\n\`\`\`\n\n` +
-    `## AFTER\n\`\`\`\n${params.ctx.afterContext}\n\`\`\`\n\n` +
-    `## Project constraints (memory excerpt)\n${memoryExcerpt}\n`;
+    `## MAIN REQUEST (the requirement the edit MUST satisfy)\n${params.userRequest || '(none)'}\n\n` +
+    `### Edit being reviewed\nFile: ${params.ctx.filePath} | lines ${params.ctx.startLine}–${params.ctx.endLine}\n\n` +
+    `#### BEFORE\n\`\`\`\n${params.ctx.beforeContext}\n\`\`\`\n\n` +
+    `#### AFTER\n\`\`\`\n${params.ctx.afterContext}\n\`\`\`\n\n` +
+    `### Related context (auxiliary)\n${params.relatedContext || '(none)'}\n\n` +
+    `### Project constraints (memory excerpt)\n${memoryExcerpt}\n`;
 
   let content: string | null = null;
   try {
