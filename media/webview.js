@@ -154,15 +154,43 @@
       output.push(isOrderedList ? '</ol>' : '</ul>');
     }
     
-    result = output.join('\n');
+    result = output.join(String.fromCharCode(10));
     
-    // Paragraphs
+    // Tables - pipe-delimited markdown tables
+    result = result.replace(/^(\|.+\x0a\|[-:| ]+\|(?:\x0a\|.+)*)$/gm, function(tableBlock) {
+      var NL = String.fromCharCode(10);
+      var tLines = tableBlock.split(NL);
+      var html = '<table>' + NL + '<thead>' + NL + '<tr>';
+      var headerCells = tLines[0].split('|');
+      for (var hi = 0; hi < headerCells.length; hi++) {
+        var hc = headerCells[hi].trim();
+        if (hc) html += '<th>' + hc + '</th>';
+      }
+      html += '</tr>' + NL + '</thead>' + NL + '<tbody>' + NL;
+      for (var ri = 2; ri < tLines.length; ri++) {
+        var rowCells = tLines[ri].split('|');
+        var hasContent = false;
+        for (var ci = 0; ci < rowCells.length; ci++) {
+          if (rowCells[ci].trim() !== '') { hasContent = true; break; }
+        }
+        if (!hasContent) continue;
+        html += '<tr>';
+        for (var ci = 0; ci < rowCells.length; ci++) {
+          var rc = rowCells[ci].trim();
+          if (rc) html += '<td>' + rc + '</td>';
+        }
+        html += '</tr>' + NL;
+      }
+      html += '</tbody>' + NL + '</table>';
+      return html;
+    });
+    
     var paragraphs = result.split(/\n\n+/);
     result = paragraphs.map(function(p) {
       p = p.trim();
       if (!p) return '';
       // Don't wrap if it's already a block element
-      if (p.startsWith('<h') || p.startsWith('<ul') || p.startsWith('<ol') || 
+      if (p.startsWith('<h') || p.startsWith('<table') || p.startsWith('<ul') || p.startsWith('<ol') || 
           p.startsWith('<li') || p.startsWith('<pre') || p.startsWith('<code')) {
         return p;
       }
