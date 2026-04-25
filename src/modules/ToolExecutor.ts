@@ -308,13 +308,6 @@ export class ToolExecutor {
       }
 
       case 'edit': {
-        if (args['__mmOutputMultiEditViolation'] === true) {
-          const msg =
-            'Only one edit tool call per assistant message may use <MM_OUTPUT> for newContent. ' +
-            'Provide newContent in the JSON for additional edit calls in the same message, ' +
-            'or send another assistant turn. (Previously every empty newContent incorrectly received the same patch.)';
-          return JSON.stringify({ error: msg });
-        }
         const fp = args.filePath as string;
         const existedBefore = workspaceFileExistsRelative(fp);
         if (existedBefore && !this._isLineQueryFresh(fp)) {
@@ -331,7 +324,6 @@ export class ToolExecutor {
             startLine: args.startLine as number,
             endLine: args.endLine as number,
             newContent: args.newContent as string,
-            raw: args['__mmRaw'] === true,
           },
           (ctx) => this._context.llmCheckReplace(ctx),
           this._context.getApiConfig().confirmChanges !== false ? (ctx) => this._context.userConfirmReplace(ctx) : undefined

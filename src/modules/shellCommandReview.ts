@@ -1,7 +1,6 @@
 import { getAgentRuntimeContextBlock } from '../agentRuntimeContext';
 import { sendChatMessage } from '../api';
 import type { ApiConfig, ChatMessage, AgentLogEntry } from '../types';
-import { extractFirstMmOutput } from '../mmOutput';
 export interface ShellCommandReviewSettings {
   enabled: boolean;
   maxAttempts: number;
@@ -67,15 +66,6 @@ function parseShellReviewResult(content: string | null): ShellReviewAgentResult 
 function parseEditorCommand(content: string | null): { command: string } {
   if (!content?.trim()) {
     throw new Error('Empty model response for shell command JSON');
-  }
-  // Allow raw, zero-escape command payload via MM_OUTPUT sentinel protocol.
-  const mm = extractFirstMmOutput(content);
-  if (mm.ok && mm.type === 'SHELL' && mm.payload != null) {
-    const cmd = mm.payload;
-    if (!cmd.trim()) {
-      throw new Error('MM_SHELL payload is empty');
-    }
-    return { command: cmd.trim() };
   }
   const raw = extractJsonObject(content) as Record<string, unknown>;
   const command = typeof raw.command === 'string' ? raw.command.trim() : '';

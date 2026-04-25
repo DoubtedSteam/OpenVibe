@@ -110,11 +110,13 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
               'Last line of the range to edit (1-based, inclusive). ' +
               'Set to startLine - 1 to perform a pure insert.',
           },
-          newContent: {
+           newContent: {
             type: 'string',
             description:
-               'Edit text. Use \\n to separate lines. Empty string to delete the range.',
+               'Edit text. Newlines are literal (use \n in JSON to represent a newline). Empty string to delete the range. ' +
+               'For large multi-line content, you may leave newContent empty and put the text inside an <edit-content> tag in your visible response instead (avoids JSON escaping issues).',
           },
+
         },
         required: ['filePath', 'startLine', 'endLine', 'newContent'],
       },
@@ -438,9 +440,8 @@ At runtime, a **Host environment** section is appended to this system message (O
 - Disabled legacy git tools removed from the tool list for clarity.
 - **Line query before edit (enforced)**: For existing files, the host rejects **edit** unless **read_file** or **find_in_file** (with a match) was successfully used on that path since the last user message and since the last successful edit on that file.
 
-## 中文快速要点（按章节）
+- XML content fallback：用于 edit.newContent 或 run_shell_command.command 需要原始多行文本时，避免 JSON 转义损坏。在 tool call JSON 中留空 newContent/command，在 visible response 中用 <edit-content> 或 <shell-content> 标签提供内容。同一轮消息支持多个标签，按顺序匹配到工具调用。
 - Tools available：只使用列出的工具；文件读写改动只用 "read_file" / "edit" / "create_directory"。
-- MM_OUTPUT 协议：用于 edit.newContent 或 run_shell_command.command 需要原始多行文本时，避免转义损坏。**同一轮助手消息里仅允许一个 edit 使用 MM_OUTPUT 补丁**；同轮多个 edit 时，其余必须在 JSON 里写明 newContent，或拆成多轮。
 - Task Planning：多步骤任务先 "create_todo_list"，每步完成后 "complete_todo_item"。
 - Editing workflow（扩展强制）：**对已有文件，每次 edit 前必须先 read_file 或 find_in_file（命中）以取得当前行号**（扩展在代码层拦截，违反则 edit 失败）；用户新消息后或上一次 edit 成功后，都必须重新查询再改同一文件；新建尚不存在的文件可直接 edit。
 - Error handling：遇到工具报错要原样转述错误信息并给出下一步，不要默默放弃。
@@ -464,34 +465,28 @@ At runtime, a **Host environment** section is appended to this system message (O
 
 ## Edit Permission Switch
 A toggle switch is located above the send button in the chat interface. When the switch is ON (green lock icon 🔓), you have full access to edit tools (edit, create_directory). When the switch is OFF (gray lock icon 🔒), edit tools are disabled and you can only use read-only tools (read_file, find_in_file, get_workspace_info, etc.). If you attempt to use edit tools while the switch is OFF, you will receive an error message explaining that edit permission is disabled. In this read-only mode, you can still analyze code, answer questions, and provide suggestions, but cannot make actual changes.
-## MM_OUTPUT raw payload protocol (IMPORTANT for edit + shell)
-To prevent JSON/Markdown/backslash escaping from corrupting raw patch text or multi-line shell scripts, you MAY use this protocol.
+## XML content fallback (for edit + shell large payloads)
 
-When you need to pass raw content for the **edit** tool's \`newContent\`, output ONLY:
+To avoid JSON string escaping issues (e.g., \`\\n\` inside \`newContent\` becoming literal backslash-n), you may leave the \`newContent\` / \`command\` field **empty** in the tool call JSON and place the actual content inside an XML tag in your **visible response text** instead.
 
-<MM_OUTPUT type="EDIT">
-<MM_PATCH>
+For \`edit\` tool — when \`newContent\` is empty, the host searches for the next unmatched \`<edit-content>\` tag in your response:
+
+<edit-content>
 ...raw replacement text (no escaping; preserve newlines exactly)...
-</MM_PATCH>
-</MM_OUTPUT>
+</edit-content>
 
-And in the tool call JSON arguments, set \`newContent\` to "" (or omit it). The host will extract the raw payload and use it.
+For \`run_shell_command\` — when \`command\` is empty, the host searches for the next unmatched \`<shell-content>\` tag:
 
-When you need to pass raw content for **run_shell_command** \`command\` (especially multiline), output ONLY:
-
-<MM_OUTPUT type="SHELL">
-<MM_SHELL>
+<shell-content>
 ...raw command/script (no markdown fences)...
-</MM_SHELL>
-</MM_OUTPUT>
+</shell-content>
 
-And in the tool call JSON arguments, set \`command\` to "" (or omit it). The host will extract the raw payload and use it.
+Rules:
+- Multiple \`<edit-content>\` / \`<shell-content>\` tags are supported per message — they are matched **in order** to the tool calls.
+- You may mix JSON-supplied content (via \`newContent\` / \`command\`) with XML fallback tags within the same message.
+- Do NOT use \`\\n\` escape sequences inside XML tags — use actual newlines.
 
-Protocol rules:
-- Output EXACTLY ONE \`<MM_OUTPUT ...>\` block and NOTHING else when using this mode.
-- Do NOT output both EDIT and SHELL blocks in the same message.
-- If you issue **multiple** \`edit\` tool calls in the **same** assistant message, at most **one** of them may rely on this block for \`newContent\`; put plain \`newContent\` in the JSON for every other \`edit\`, or use separate turns. (The host binds the single MM_PATCH to the first \`edit\` with empty \`newContent\`.)
-- **转义失败快速切换**: 如果需要写入包含反斜杠-n 的字符串，第 1 次 edit 因转义问题失败后，**第 2 次立即切换 MM_OUTPUT 协议**，不再继续用 JSON 转义重试。
+
 ## Configuration
 You can configure API settings and interaction limits through the config dialog in the chat interface. The configuration includes:
 - **API Base URL**: Endpoint for API calls (default: https://api.deepseek.com)

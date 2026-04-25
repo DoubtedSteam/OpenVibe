@@ -4,7 +4,7 @@ import { SYSTEM_PROMPT, TOOL_DEFINITIONS } from '../toolDefinitions';
 import { sendChatMessage } from '../api';
 import { gitSnapshotTool } from '../tools';
 import { AUTO_COMPACT_TOKEN_THRESHOLD, MAX_TOOL_ITERATIONS } from '../constants';
-import { extractFirstMmOutput } from '../mmOutput';
+import { extractXmlContents } from '../mmOutput';
 import type { OperationController } from '../operationController';
 
 export class MessageHandler {
@@ -115,11 +115,10 @@ export class MessageHandler {
 
           // Execute each tool call sequentially
           let stopAfterTools = false;
-          // If the model used MM_OUTPUT sentinel blocks in its visible content, we can
-          // safely extract raw payload (avoids JSON string escaping damage for edit/shell).
-          const mm = extractFirstMmOutput(response.content);
-          /** True after the single MM_PATCH has been bound to one `edit` with empty newContent. */
-          let mmEditPayloadUsed = false;
+          // Extract <edit-content>/<shell-content> from visible content as a fallback
+          // source for large string parameters (avoids JSON escaping issues).
+          const xmlItems = extractXmlContents(response.content);
+          let xmlIndex = 0;
           for (const toolCall of response.toolCalls) {
             // Check for stop request before each tool call
             if (this._context.operation.isStopped()) {
@@ -131,28 +130,21 @@ export class MessageHandler {
             let args: Record<string, unknown> = {};
             try { args = JSON.parse(toolCall.function.arguments); } catch { /* keep empty */ }
 
-            // MM_OUTPUT integration (edit + run_shell_command):
-            // If args are missing/empty (or the model intentionally left placeholders),
-            // fill them from the extracted sentinel payload when type matches.
-            if (mm.ok && mm.payload != null) {
-              if (name === 'edit' && mm.type === 'EDIT') {
+            // XML content fallback (edit + run_shell_command):
+            // If newContent/command in JSON is empty, try to fill from matching XML tags
+            // in document order. This avoids JSON string escaping issues for large text payloads.
+            if (xmlIndex < xmlItems.length) {
+              if (name === 'edit') {
                 const cur = typeof args['newContent'] === 'string' ? String(args['newContent']) : '';
-                if (!cur) {
-                  if (mmEditPayloadUsed) {
-                    // Only one edit per assistant message may use MM_OUTPUT; further empty newContent
-                    // would previously all receive the same patch (wrong file regions / duplicates).
-                    args['__mmOutputMultiEditViolation'] = true;
-                  } else {
-                    args['newContent'] = mm.payload;
-                    // Internal marker to keep literal "\n" intact for MM_PATCH payloads.
-                    args['__mmRaw'] = true;
-                    mmEditPayloadUsed = true;
-                  }
+                if (!cur && xmlItems[xmlIndex].type === 'edit') {
+                  args['newContent'] = xmlItems[xmlIndex].payload;
+                  xmlIndex++;
                 }
-              } else if (name === 'run_shell_command' && mm.type === 'SHELL') {
+              } else if (name === 'run_shell_command') {
                 const cur = typeof args['command'] === 'string' ? String(args['command']) : '';
-                if (!cur.trim()) {
-                  args['command'] = mm.payload;
+                if (!cur.trim() && xmlItems[xmlIndex].type === 'shell') {
+                  args['command'] = xmlItems[xmlIndex].payload;
+                  xmlIndex++;
                 }
               }
             }
