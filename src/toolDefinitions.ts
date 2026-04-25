@@ -21,7 +21,10 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
     function: {
       name: 'read_file',
       description:
-        'Read lines from a file in the workspace. Returns numbered lines and the total line count. ' +
+        'Read lines from a file, or list directory contents if the path points to a folder. ' +
+        'For files: returns numbered lines and the total line count. ' +
+        'For directories: returns isDirectory=true, path, entries (with name/type/size), and totalEntries. ' +
+        'Entries are sorted with directories first, then files, both alphabetically. ' +
         'Use this to understand code structure before making edits.',
       parameters: {
         type: 'object',
