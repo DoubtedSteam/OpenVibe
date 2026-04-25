@@ -283,37 +283,6 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     type: 'function',
     function: {
-      name: 'show_text_diff',
-      description:
-        'Open the VS Code diff editor with two text snapshots (left = previous, right = new). ' +
-        'Use to show before/after comparisons; pass full text, not paths.',
-      parameters: {
-        type: 'object',
-        properties: {
-          title: {
-            type: 'string',
-            description: 'Title shown on the diff tab',
-          },
-          leftContent: {
-            type: 'string',
-            description: 'Left pane content (typically the original)',
-          },
-          rightContent: {
-            type: 'string',
-            description: 'Right pane content (typically the modified)',
-          },
-          languageId: {
-            type: 'string',
-            description: 'Optional VS Code language id (e.g. typescript, json). Defaults to plaintext.',
-          },
-        },
-        required: ['title', 'leftContent', 'rightContent'],
-      },
-    },
-  },
-  {
-    type: 'function',
-    function: {
       name: 'text_diff',
       description:
         'Generate a diff output similar to git diff command. Compares two text strings and outputs unified diff format with context lines and line numbers.',
@@ -448,7 +417,6 @@ At runtime, a **Host environment** section is appended to this system message (O
   - **compact** — Compact conversation history into a concise summary to reduce context window usage.
 - **get_diagnostics** — Get diagnostics (problems, warnings, errors) from VS Code for a specific file or all files.
 - **get_file_info** — Metadata for a workspace path (exists, size, mtime, file vs directory).
-- **show_text_diff** — Open VS Code’s diff editor with two text bodies (before/after).
 - **show_notification** — Show an info/warning/error toast to the user.
  - **run_shell_command** — Run one shell command in the workspace root (build/test/git, etc.). **DO NOT use shell commands to write or modify workspace files** — use the dedicated read_file, edit, and create_directory tools for file operations. Prefer read_file for reading code; reading a single non-code artifact (e.g. .log/.txt/.md) via shell may be acceptable when explicitly requested. A shell editor agent refines your proposed command, then an independent reviewer checks safety and flags risky file operations; after that, the user may confirm. Use carefully.
 

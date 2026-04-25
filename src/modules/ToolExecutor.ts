@@ -7,7 +7,6 @@ import {
   createDirectoryTool,
   getDiagnosticsTool,
   getFileInfoTool,
-  showTextDiffTool,
   showNotificationTool,
   runShellCommandTool,
   gitSnapshotTool,
@@ -401,13 +400,6 @@ ${list}
       case 'get_file_info':
         return getFileInfoTool({ filePath: args.filePath as string });
 
-      case 'show_text_diff':
-        return await showTextDiffTool({
-          title: args.title as string,
-          leftContent: args.leftContent as string,
-          rightContent: args.rightContent as string,
-          languageId: args.languageId as string | undefined,
-        });
 
       case 'show_notification':
         return await showNotificationTool({

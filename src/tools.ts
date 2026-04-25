@@ -449,7 +449,27 @@ export async function replaceLinesTool(
     });
   }
 
-  // ── User confirmation (after LLM check passes) ─────────────────────────────
+  // ── Show diff editor before user confirmation ────────────────────────────
+  if (userConfirmFn) {
+    const langId = path.extname(params.filePath).slice(1) || 'plaintext';
+    const leftContent = existedBefore ? lines.join('\n') : '';
+    const rightContent = afterLines.join('\n');
+    try {
+      const leftDoc = await vscode.workspace.openTextDocument({ content: leftContent, language: langId });
+      const rightDoc = await vscode.workspace.openTextDocument({ content: rightContent, language: langId });
+      await vscode.commands.executeCommand(
+        'vscode.diff',
+        leftDoc.uri,
+        rightDoc.uri,
+        `Edit: ${params.filePath}`,
+        { preview: true }
+      );
+    } catch {
+      // diff 展示失败不阻塞流程
+    }
+  }
+
+  // ── User confirmation (after LLM check passes and diff is shown) ─────────
   if (userConfirmFn) {
     const userApproved = await userConfirmFn({
       filePath: params.filePath,
@@ -459,6 +479,12 @@ export async function replaceLinesTool(
       afterContext,
       unifiedDiff,
     });
+    // 关闭 diff 编辑器
+    try {
+      await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+    } catch {
+      // 关闭失败不阻塞流程
+    }
     if (!userApproved) {
       return JSON.stringify({
         success: false,
@@ -870,35 +896,6 @@ export function getFileInfoTool(params: GetFileInfoParams): string {
   }
 }
 
-// ─── show_text_diff (side-by-side in diff editor) ────────────────────────────
-
-export interface ShowTextDiffParams {
-  title: string;
-  leftContent: string;
-  rightContent: string;
-  languageId?: string;
-}
-
-export async function showTextDiffTool(params: ShowTextDiffParams): Promise<string> {
-  try {
-    const lang = params.languageId?.trim() || 'plaintext';
-    const leftDoc = await vscode.workspace.openTextDocument({ content: params.leftContent, language: lang });
-    const rightDoc = await vscode.workspace.openTextDocument({ content: params.rightContent, language: lang });
-    await vscode.commands.executeCommand(
-      'vscode.diff',
-      leftDoc.uri,
-      rightDoc.uri,
-      params.title,
-      { preview: true }
-    );
-    return JSON.stringify({
-      success: true,
-      message: 'Opened the diff editor. Compare left (previous) vs right (new).',
-    });
-  } catch (e: any) {
-    return JSON.stringify({ error: `Failed to open diff: ${e.message}` });
-  }
-}
 // ─── text_diff (generate diff output like git diff) ──────────────────────────────
 
 export interface TextDiffParams {

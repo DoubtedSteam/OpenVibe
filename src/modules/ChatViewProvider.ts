@@ -6,7 +6,7 @@ import { UIManager } from './UIManager';
 import { ConversationService } from './ConversationService';
 import type { TodolistReviewSettings } from './todolistReview';
 import type { ShellCommandReviewSettings } from './shellCommandReview';
-import { gitRollbackTool, listGitSnapshotsTool, showTextDiffTool } from '../tools';
+import { gitRollbackTool, listGitSnapshotsTool } from '../tools';
 import { OperationController } from '../operationController';
 
 export class ChatViewProvider implements vscode.WebviewViewProvider {
@@ -209,18 +209,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           !!msg.approved
         );
       }
-      if (msg.type === 'openCheckDiff') {
-        const title =
-          typeof msg.title === 'string' && msg.title.trim()
-            ? msg.title.trim()
-            : 'Replace check';
-        await showTextDiffTool({
-          title,
-          leftContent: typeof msg.leftContent === 'string' ? msg.leftContent : '',
-           rightContent: typeof msg.rightContent === 'string' ? msg.rightContent : '',
-           languageId: typeof msg.languageId === 'string' ? msg.languageId : undefined,
-         });
-       }
        if (msg.type === 'setEditPermission') {
          this._uiManager.setEditPermissionEnabled(!!msg.enabled);
        }
