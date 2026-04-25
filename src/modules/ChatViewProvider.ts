@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as path from 'path';
 import { MessageHandler } from './MessageHandler';
 import { ToolExecutor } from './ToolExecutor';
 import { SessionManager } from './SessionManager';
@@ -6,7 +7,7 @@ import { UIManager } from './UIManager';
 import { ConversationService } from './ConversationService';
 import type { TodolistReviewSettings } from './todolistReview';
 import type { ShellCommandReviewSettings } from './shellCommandReview';
-import { gitRollbackTool, listGitSnapshotsTool } from '../tools';
+import { gitRollbackTool, listGitSnapshotsTool, setGlobalSkillsDir } from '../tools';
 import { OperationController } from '../operationController';
 
 export class ChatViewProvider implements vscode.WebviewViewProvider {
@@ -18,11 +19,14 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   private _uiManager: UIManager;
   private _conversation: ConversationService;
   private _operation = new OperationController();
-
   constructor(
     private readonly _extensionUri: vscode.Uri,
     private readonly _context: vscode.ExtensionContext
   ) {
+    // ── Initialize global skills pool (shared across all workspaces) ──────
+    const globalSkillsDir = path.join(_context.globalStorageUri.fsPath, 'skills');
+    setGlobalSkillsDir(globalSkillsDir);
+
     this._uiManager = new UIManager(_context);
 
     this._sessionManager = new SessionManager(_context, (msg: any) => this._uiManager.post(msg));
@@ -74,6 +78,26 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       signal: () => this._operation.signal(),
       log: (e) => this._conversation.addAgentLog(e),
     });
+
+    // ── Wire up activated skills persistence ──────────────────────────────
+    // ToolExecutor <-> SessionManager: activate/deactivate skills propagate
+    this._toolExecutor.registerActivatedSkillsPersister(
+      () => this._sessionManager.getCurrentSessionActivatedSkills(),
+      (skills) => { this._sessionManager.setCurrentSessionActivatedSkills(skills); }
+    );
+
+    // Restore activated skills from persisted session
+    const persistedSkills = this._sessionManager.getCurrentSessionActivatedSkills();
+    if (persistedSkills.length > 0) {
+      this._toolExecutor.restoreActivatedSkills(persistedSkills);
+    }
+
+    // Wire up ConversationService so buildMessagesForLlm can read activated skills
+    this._conversation.setActivatedSkillsGetter(
+      () => this._toolExecutor.getActivatedSkills()
+    );
+
+    // ── Restore todo state ────────────────────────────────────────────────
     this._toolExecutor.restorePersistedTodoState(this._sessionManager.getCurrentSessionAssistantTodoState());
 
     this._messageHandler = new MessageHandler({
@@ -167,6 +191,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       if (msg.type === 'switchSession') {
         await this._sessionManager.switchSession(msg.sessionId);
         this._toolExecutor.restorePersistedTodoState(this._sessionManager.getCurrentSessionAssistantTodoState());
+        // Restore activated skills for the switched-to conversation
+        const switchedSkills = this._sessionManager.getCurrentSessionActivatedSkills();
+        this._toolExecutor.restoreActivatedSkills(switchedSkills);
         this._uiManager.post({ type: 'clearMessages' });
         this._replayWebview();
       }

@@ -54,6 +54,8 @@ export interface ChatSession {
   isActive?: boolean;
   /** Last assistant todo list (create_todo_list / complete_todo_item); restored after window reload. */
   assistantTodoState?: AssistantTodoPersistedState | null;
+  /** Skill names activated in this conversation, loaded from global skills pool. */
+  activatedSkills?: string[];
 }
 
 export interface ApiConfig {

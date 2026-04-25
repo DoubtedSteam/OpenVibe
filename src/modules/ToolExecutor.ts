@@ -16,6 +16,10 @@ import {
   workspaceFileExistsRelative,
   listSkillsTool,
   loadSkillTool,
+  activateSkillTool,
+  deactivateSkillTool,
+  listActivatedSkillsTool,
+  setActivatedSkillsCallbacks,
 } from '../tools';
 import type { ReplaceCheckContext, ReplaceCheckResult } from '../tools';
 import type { ApiConfig, AgentLogEntry, AssistantTodoPersistedState } from '../types';
@@ -446,9 +450,88 @@ ${list}
         return loadSkillTool({ name: args.name as string });
       }
 
+      case 'activate_skill': {
+        const actSkills = this._getActivatedSkills();
+        const actResult = activateSkillTool({ name: args.name as string });
+        const actParsed = JSON.parse(actResult) as { activatedSkills?: string[]; error?: string };
+        if (actParsed.activatedSkills) {
+          this._setActivatedSkills(actParsed.activatedSkills);
+        }
+        return actResult;
+      }
+
+      case 'deactivate_skill': {
+        const deactSkills = this._getActivatedSkills();
+        const deactResult = deactivateSkillTool({ name: args.name as string });
+        const deactParsed = JSON.parse(deactResult) as { activatedSkills?: string[]; error?: string };
+        if (deactParsed.activatedSkills) {
+          this._setActivatedSkills(deactParsed.activatedSkills);
+        }
+        return deactResult;
+      }
+
+      case 'list_activated_skills': {
+        return listActivatedSkillsTool();
+      }
+
       default:
         return JSON.stringify({ error: `Unknown tool: ${name}` });
     }
+  }
+
+  // ─── Activated skills management ──────────────────────────────────────────
+  private _activatedSkills: string[] = [];
+
+  /** Callback: persist activated skills to current conversation session. */
+  private _persistActivatedSkills: ((skills: string[]) => void) | null = null;
+
+  /**
+   * Register persistence callback so that activate/deactivate skill tools
+   * can propagate changes to the current conversation session.
+   */
+  public registerActivatedSkillsPersister(
+    getter: () => string[],
+    setter: (skills: string[]) => void
+  ): void {
+    this._activatedSkills = getter();
+    this._persistActivatedSkills = setter;
+    // Wire up tools.ts callbacks so pure-tool calls inside tools.ts also work.
+    setActivatedSkillsCallbacks(
+      () => this._activatedSkills,
+      (skills) => {
+        this._activatedSkills = skills;
+        this._persistActivatedSkills?.(skills);
+      }
+    );
+  }
+
+  /** Restore activated skills from session (extension reload). */
+  public restoreActivatedSkills(skills: string[]): void {
+    this._activatedSkills = skills;
+    this._persistActivatedSkills?.(skills);
+    setActivatedSkillsCallbacks(
+      () => this._activatedSkills,
+      (skills) => {
+        this._activatedSkills = skills;
+        this._persistActivatedSkills?.(skills);
+      }
+    );
+  }
+
+  /** Get current activated skills. */
+  private _getActivatedSkills(): string[] {
+    return [...this._activatedSkills];
+  }
+
+  /** Set current activated skills and persist. */
+  private _setActivatedSkills(skills: string[]): void {
+    this._activatedSkills = [...skills];
+    this._persistActivatedSkills?.(this._activatedSkills);
+  }
+
+  /** Public getter for activated skills (used by ConversationService). */
+  public getActivatedSkills(): string[] {
+    return [...this._activatedSkills];
   }
 
   private async _handleRunShellCommand(args: Record<string, unknown>): Promise<string> {

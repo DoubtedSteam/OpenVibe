@@ -373,4 +373,30 @@ export class SessionManager {
     currentSession.updated = Date.now();
     this._saveSessions();
   }
+
+  // ─── Activated skills (conversation-scoped) ───────────────────────────────
+
+  /**
+   * Get activated skill names for the current conversation.
+   */
+  public getCurrentSessionActivatedSkills(): string[] {
+    const currentSession = this._sessions.find((s) => s.id === this._currentSessionId);
+    if (!currentSession?.activatedSkills || !Array.isArray(currentSession.activatedSkills)) {
+      return [];
+    }
+    return currentSession.activatedSkills.filter((s): s is string => typeof s === 'string');
+  }
+
+  /**
+   * Set activated skill names for the current conversation and persist.
+   */
+  public setCurrentSessionActivatedSkills(skills: string[]): void {
+    const currentSession = this._sessions.find((s) => s.id === this._currentSessionId);
+    if (!currentSession) {
+      return;
+    }
+    currentSession.activatedSkills = [...skills];
+    currentSession.updated = Date.now();
+    this._saveSessions();
+  }
 }

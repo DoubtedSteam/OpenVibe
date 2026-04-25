@@ -329,8 +329,8 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
     function: {
       name: 'list_skills',
       description:
-         'List all available skill directories under the .OpenVibe/skills/ folder. ' +
-        'Returns an array of skill names (directory names). Use this to discover which skills are available to load.',
+         'List all available skill directories from both the workspace-local (.OpenVibe/skills/) and the global skills pool. ' +
+        'Returns an array of skill names (directory names). Workspace-local skills take precedence over global ones with the same name. Use this to discover which skills are available to load or activate.',
       parameters: {
         type: 'object',
         properties: {},
@@ -343,17 +343,71 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
     function: {
       name: 'load_skill',
       description:
-        'Load a skill\'s SKILL.md file, parse its YAML frontmatter, and return the structured content. ' +
+        'Load a skill (SKILL.md file), parse its YAML frontmatter, and return the structured content. ' +
+        'Searches workspace-local (.OpenVibe/skills/) first, then the global skills pool. ' +
         'Skills are instruction sets that describe a persona or behavior. The returned object includes the skill name, description, full instruction text, and any sub-skills referenced.',
       parameters: {
         type: 'object',
         properties: {
           name: {
             type: 'string',
-            description: 'Name of the skill directory under .OpenVibe/skills/ (e.g. "paper-revision-router")',
+            description: 'Name of the skill directory (e.g. "paper-revision-router")',
           },
         },
         required: ['name'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'activate_skill',
+      description:
+        'Activate a skill for the current conversation. The activated skill instructions will be injected into the system prompt for all subsequent AI responses in this conversation. ' +
+        'The skill must exist in either workspace-local (.OpenVibe/skills/) or the global skills pool. ' +
+        'Use deactivate_skill to remove it, and list_activated_skills to see which skills are active. ' +
+        'Skill activation is persisted per conversation so it survives window reloads.',
+      parameters: {
+        type: 'object',
+        properties: {
+          name: {
+            type: 'string',
+            description: 'Name of the skill to activate (e.g. "paper-revision-router")',
+          },
+        },
+        required: ['name'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'deactivate_skill',
+      description:
+        'Deactivate a skill for the current conversation. The skill instructions will no longer be injected into the system prompt. ' +
+        'Use list_activated_skills to see which skills are currently active.',
+      parameters: {
+        type: 'object',
+        properties: {
+          name: {
+            type: 'string',
+            description: 'Name of the skill to deactivate',
+          },
+        },
+        required: ['name'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'list_activated_skills',
+      description:
+        'List all skills currently activated in this conversation. Returns an array of skill names whose instructions are being injected into the system prompt.',
+      parameters: {
+        type: 'object',
+        properties: {},
+        required: [],
       },
     },
   },
@@ -413,6 +467,11 @@ At runtime, a **Host environment** section is appended to this system message (O
 - **get_diagnostics** — Get diagnostics (problems, warnings, errors) from VS Code for a specific file or all files.
 - **get_file_info** — Metadata for a workspace path (exists, size, mtime, file vs directory).
 - **show_notification** — Show an info/warning/error toast to the user.
+- **list_skills** — List all available skills from workspace-local (.OpenVibe/skills/) and the global skill pool.
+- **load_skill** — Load a skill's full instruction text (SKILL.md) from any skill pool.
+- **activate_skill** — Activate a skill for the current conversation. The activated skill's instructions will be injected into the system prompt for all subsequent turns. Skill activation is persisted per conversation.
+- **deactivate_skill** — Remove a skill from the current conversation's active set.
+- **list_activated_skills** — Show which skills are currently active in this conversation.
 - **ask_human** — Request human assistance for tasks only a human can do (manual testing, design decisions, gathering info not in the workspace, running the app to verify behavior). Execution **pauses** until the user clicks "Done" (they performed the task) or "Cancel". After they click Done, the conversation continues normally.
  - **run_shell_command** — Run one shell command in the workspace root (build/test/git, etc.). **DO NOT use shell commands to write or modify workspace files** — use the dedicated read_file, edit, and create_directory tools for file operations. Prefer read_file for reading code; reading a single non-code artifact (e.g. .log/.txt/.md) via shell may be acceptable when explicitly requested. A shell editor agent refines your proposed command, then an independent reviewer checks safety and flags risky file operations; after that, the user may confirm. Use carefully.
 

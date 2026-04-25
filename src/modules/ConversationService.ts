@@ -2,6 +2,7 @@ import { ChatMessage, ToolCall, ApiConfig, AgentLogEntry } from '../types';
 import { getAgentRuntimeContextBlock } from '../agentRuntimeContext';
 import { sendChatMessage } from '../api';
 import { SessionManager } from './SessionManager';
+import { loadActivatedSkillInstruction } from '../tools';
 
 /**
  * Owns conversation state and operations on top of {@link SessionManager}.
@@ -14,8 +15,15 @@ export class ConversationService {
   constructor(
     private readonly _session: SessionManager,
     private readonly _getApiConfig: () => ApiConfig,
-    private readonly _post: (msg: any) => void
+    private readonly _post: (msg: any) => void,
+    /** Callback to retrieve current conversation's activated skill names. */
+    private readonly _getActivatedSkills?: () => string[]
   ) {}
+
+  /** Set the activated skills getter after construction (e.g. for circular dependency). */
+  public setActivatedSkillsGetter(getter: () => string[]): void {
+    (this as any)._getActivatedSkills = getter;
+  }
 
   getCurrentMessages(): ChatMessage[] {
     return this._session.getCurrentMessages();
@@ -82,12 +90,35 @@ export class ConversationService {
     }
   }
   /**
-   * Assembles the message list for the main LLM call. Replace or wrap this when
-   * adding orchestrators, sub-agents, or shared scratchpad context.
+   * Assembles the message list for the main LLM call. 
+   * If any skills are activated in this conversation, their instructions 
+   * are appended to the system prompt.
    */
   buildMessagesForLlm(systemPrompt: string): ChatMessage[] {
     const visible = this.getCurrentMessages().filter((m) => !m.hiddenFromLlm);
-    return [{ role: 'system', content: systemPrompt }, ...visible];
+
+    // Append activated skill instructions to the system prompt
+    let enrichedPrompt = systemPrompt;
+    const skillNames = this._getActivatedSkills?.() ?? [];
+    if (skillNames.length > 0) {
+      const blocks: string[] = [];
+      for (const name of skillNames) {
+        const instruction = loadActivatedSkillInstruction(name);
+        if (instruction) {
+          blocks.push(
+            `## Activated skill: ${name}\n${instruction}`
+          );
+        }
+      }
+      if (blocks.length > 0) {
+        enrichedPrompt +=
+          `\n\n---\n## Activated Skills\n` +
+          `The following skills are currently active in this conversation. Follow their instructions carefully.\n\n` +
+          blocks.join('\n\n');
+      }
+    }
+
+    return [{ role: 'system', content: enrichedPrompt }, ...visible];
   }
 
   /**

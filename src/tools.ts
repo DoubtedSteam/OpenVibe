@@ -5,6 +5,33 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import { getRuntimeEnvironmentSummary } from './agentRuntimeContext';
 
+// ─── Global skills pool ──────────────────────────────────────────────────────
+// Skills directory shared across all workspaces (VS Code globalStorage area).
+let _globalSkillsDir: string | null = null;
+
+/**
+ * Set the global skills pool directory path. Called once during extension activation.
+ * Skills stored here are accessible from any workspace.
+ */
+export function setGlobalSkillsDir(dir: string): void {
+  _globalSkillsDir = dir;
+}
+
+/**
+ * Get the global skills pool directory, ensuring it exists.
+ */
+function getOrCreateGlobalSkillsDir(): string | null {
+  if (!_globalSkillsDir) return null;
+  try {
+    if (!fs.existsSync(_globalSkillsDir)) {
+      fs.mkdirSync(_globalSkillsDir, { recursive: true });
+    }
+    return _globalSkillsDir;
+  } catch {
+    return null;
+  }
+}
+
 const execAsync = promisify(exec);
 
 // ─── Path helpers ─────────────────────────────────────────────────────────────
@@ -1360,10 +1387,8 @@ export function listGitSnapshotsTool(): string {
 
 
 // ─── Skill functions ────────────────────────────────────────────────────────────
+// (SkillLoadParams now defined alongside loadSkillTool below)
 
-export interface SkillLoadParams {
-  name: string;
-}
 
 /**
  * Parse YAML frontmatter (text between `---` delimiters) from a markdown file.
@@ -1411,41 +1436,100 @@ function parseFrontmatter(raw: string): { attributes: Record<string, any>; body:
   const body = lines.slice(bodyStart).join('\x0a').trim();
   return { attributes: attrs, body };
 }
+// ─── Skill pool lookup helpers ────────────────────────────────────────────────
 
 /**
- * Get all skill directory names under the skills/ folder.
+ * Resolve skill search paths: [workspace-local, global] so local overrides global.
+ */
+function _skillSearchPaths(workspaceRoot: string): string[] {
+  const paths: string[] = [];
+  const local = path.join(workspaceRoot, '.OpenVibe', 'skills');
+  paths.push(local);
+  if (_globalSkillsDir) {
+    paths.push(_globalSkillsDir);
+  }
+  return paths;
+}
+
+/**
+ * Find the first SKILL.md for a given skill name across workspace-local and global pools.
+ * Returns { skillPath, poolLabel } or null if not found.
+ */
+function _findSkillAcrossPools(name: string): { skillPath: string; poolLabel: string } | null {
+  try {
+    const root = getWorkspaceRoot();
+    const searchPaths = _skillSearchPaths(root);
+    for (const base of searchPaths) {
+      const sp = path.join(base, name, 'SKILL.md');
+      if (fs.existsSync(sp)) {
+        const poolLabel = base === searchPaths[0] ? 'workspace' : 'global';
+        return { skillPath: sp, poolLabel };
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+/** List skills from a single directory. */
+function _listSkillsFromDir(dir: string): string[] {
+  try {
+    if (!fs.existsSync(dir)) return [];
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    return entries
+      .filter(e => e.isDirectory() && !e.name.startsWith('.'))
+      .map(e => e.name);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Get all skill directory names across ALL pools (workspace-local + global).
+ * Workspace-local skills take precedence — if the same name exists in both,
+ * only the workspace-local one is listed.
  */
 export function listSkillsTool(): string {
   try {
     const root = getWorkspaceRoot();
-    const skillsDir = path.join(root, '.OpenVibe', 'skills');
-    if (!fs.existsSync(skillsDir)) {
-      return JSON.stringify({ skills: [], message: 'No .OpenVibe/skills/ directory found.' });
+    const searchPaths = _skillSearchPaths(root);
+    const seen = new Set<string>();
+    const allSkills: string[] = [];
+
+    for (const base of searchPaths) {
+      const names = _listSkillsFromDir(base);
+      for (const n of names) {
+        if (!seen.has(n)) {
+          seen.add(n);
+          allSkills.push(n);
+        }
+      }
     }
-    const entries = fs.readdirSync(skillsDir, { withFileTypes: true });
-    const skillNames = entries
-      .filter(e => e.isDirectory() && !e.name.startsWith('.'))
-      .map(e => e.name)
-      .sort();
-    return JSON.stringify({ skills: skillNames, total: skillNames.length });
+    allSkills.sort();
+    return JSON.stringify({ skills: allSkills, total: allSkills.length });
   } catch (e: any) {
     return JSON.stringify({ error: `Failed to list skills: ${e.message}` });
   }
 }
 
+export interface SkillLoadParams {
+  name: string;
+}
+
 /**
- * Load a skill's SKILL.md file, parse frontmatter, and return structured SkillInfo.
+ * Load a skill's SKILL.md file from workspace-local first, then global pool.
+ * Returns structured SkillInfo.
  */
 export function loadSkillTool(params: SkillLoadParams): string {
   try {
-    const root = getWorkspaceRoot();
-    const skillPath = path.join(root, '.OpenVibe', 'skills', params.name, 'SKILL.md');
-    if (!fs.existsSync(skillPath)) {
+    const found = _findSkillAcrossPools(params.name);
+    if (!found) {
       return JSON.stringify({
-        error: `Skill not found: ${params.name} (SKILL.md not found at .OpenVibe/skills/${params.name}/SKILL.md)`,
+        error: `Skill not found: ${params.name} (not found in workspace or global skill pool)`,
       });
     }
-    const raw = fs.readFileSync(skillPath, 'utf-8');
+    const raw = fs.readFileSync(found.skillPath, 'utf-8');
     const { attributes, body } = parseFrontmatter(raw);
 
     const name = attributes.name ?? params.name;
@@ -1459,9 +1543,116 @@ export function loadSkillTool(params: SkillLoadParams): string {
       description,
       instruction: body,
       subSkills,
-      filePath: `.OpenVibe/skills/${params.name}/SKILL.md`,
+      filePath: found.skillPath,
+      pool: found.poolLabel,
     });
   } catch (e: any) {
     return JSON.stringify({ error: `Failed to load skill: ${e.message}` });
+  }
+}
+
+// ─── Session-level skill activation (conversation-scoped) ────────────────────
+
+let _getActivatedSkills: () => string[] = () => [];
+let _setActivatedSkills: (skills: string[]) => void = () => {};
+
+/**
+ * Set callbacks for reading/writing the current conversation's activated skills.
+ * Called from ToolExecutor during initialization.
+ */
+export function setActivatedSkillsCallbacks(
+  getter: () => string[],
+  setter: (skills: string[]) => void
+): void {
+  _getActivatedSkills = getter;
+  _setActivatedSkills = setter;
+}
+
+/**
+ * Activate a skill in the current conversation. Returns the updated activated list.
+ * The skill must exist in either workspace-local or global pool.
+ */
+export function activateSkillTool(params: { name: string }): string {
+  try {
+    // Verify the skill exists before activating
+    const found = _findSkillAcrossPools(params.name);
+    if (!found) {
+      return JSON.stringify({
+        error: `Cannot activate: skill "${params.name}" not found in any skill pool. Use list_skills to see available skills.`,
+      });
+    }
+
+    const current = _getActivatedSkills();
+    if (current.includes(params.name)) {
+      return JSON.stringify({
+        success: true,
+        message: `Skill "${params.name}" is already active.`,
+        activatedSkills: current,
+      });
+    }
+
+    const updated = [...current, params.name];
+    _setActivatedSkills(updated);
+    return JSON.stringify({
+      success: true,
+      message: `Skill "${params.name}" activated for this conversation.`,
+      activatedSkills: updated,
+    });
+  } catch (e: any) {
+    return JSON.stringify({ error: `Failed to activate skill: ${e.message}` });
+  }
+}
+
+/**
+ * Deactivate a skill in the current conversation. Returns the updated activated list.
+ */
+export function deactivateSkillTool(params: { name: string }): string {
+  try {
+    const current = _getActivatedSkills();
+    if (!current.includes(params.name)) {
+      return JSON.stringify({
+        success: true,
+        message: `Skill "${params.name}" is not active in this conversation.`,
+        activatedSkills: current,
+      });
+    }
+
+    const updated = current.filter(s => s !== params.name);
+    _setActivatedSkills(updated);
+    return JSON.stringify({
+      success: true,
+      message: `Skill "${params.name}" deactivated for this conversation.`,
+      activatedSkills: updated,
+    });
+  } catch (e: any) {
+    return JSON.stringify({ error: `Failed to deactivate skill: ${e.message}` });
+  }
+}
+
+/**
+ * List all currently activated skills for this conversation.
+ */
+export function listActivatedSkillsTool(): string {
+  try {
+    const skills = _getActivatedSkills();
+    return JSON.stringify({
+      activatedSkills: skills,
+      total: skills.length,
+    });
+  } catch (e: any) {
+    return JSON.stringify({ error: `Failed to list activated skills: ${e.message}` });
+  }
+}
+
+/** Load the instruction text for an already-activated skill. Returns null on any failure. */
+export function loadActivatedSkillInstruction(name: string): string | null {
+  try {
+    const found = _findSkillAcrossPools(name);
+    if (!found) return null;
+    const raw = fs.readFileSync(found.skillPath, 'utf-8');
+    const { body } = parseFrontmatter(raw);
+    return body || null;
+  } catch {
+    return null;
   }
 }
