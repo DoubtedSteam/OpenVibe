@@ -45,9 +45,7 @@ function trimForWebview(s: string): { text: string; truncated: boolean } {
   if (s.length <= MAX_CONTEXT_CHARS) {
     return { text: s, truncated: false };
   }
-  return { text: s.slice(0, MAX_CONTEXT_CHARS) + '
-
-… [truncated for chat view]', truncated: true };
+  return { text: s.slice(0, MAX_CONTEXT_CHARS) + '\n\n… [truncated for chat view]', truncated: true };
 }
 
 function readEditReviewSettings(): { enabled: boolean; timeoutMs: number } {
@@ -138,7 +136,6 @@ ${params.ctx.afterContext}
     const messages: ChatMessage[] = [
       { role: 'system', content: REVIEW_SYSTEM },
       { role: 'user', content: userMsg },
-    ];
     ];
     try {
       const messagesLogSummary = messages.map((m) => ({
