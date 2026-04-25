@@ -1002,16 +1002,16 @@ export interface ShowNotificationParams {
   severity?: 'info' | 'warning' | 'error';
 }
 
-export async function showNotificationTool(params: ShowNotificationParams): Promise<string> {
+export function showNotificationTool(params: ShowNotificationParams): string {
   try {
     const msg = params.message;
     const sev = params.severity ?? 'info';
     if (sev === 'error') {
-      await vscode.window.showErrorMessage(msg);
+      void vscode.window.showErrorMessage(msg);
     } else if (sev === 'warning') {
-      await vscode.window.showWarningMessage(msg);
+      void vscode.window.showWarningMessage(msg);
     } else {
-      await vscode.window.showInformationMessage(msg);
+      void vscode.window.showInformationMessage(msg);
     }
     return JSON.stringify({ success: true, message: 'Notification shown.' });
   } catch (e: any) {

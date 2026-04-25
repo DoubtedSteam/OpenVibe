@@ -402,7 +402,7 @@ ${list}
 
 
       case 'show_notification':
-        return await showNotificationTool({
+        return showNotificationTool({
           message: args.message as string,
           severity: args.severity as 'info' | 'warning' | 'error' | undefined,
         });
