@@ -42,6 +42,46 @@ export class ConversationService {
   }
 
   /**
+   * Calls a lightweight LLM to generate a short title (≤6 words) from the first user message,
+   * then updates the current session title. Designed to be called fire-and-forget.
+   * Non-critical: on any error (network, API, invalid response) it fails silently.
+   */
+  async autoNameSession(): Promise<void> {
+    // Find the first non-empty user message.
+    const messages = this._session.getCurrentMessages();
+    const firstUserMsg = messages.find(
+      (m) => m.role === 'user' && typeof m.content === 'string' && m.content.trim()
+    );
+    if (!firstUserMsg || typeof firstUserMsg.content !== 'string') return;
+    const text = firstUserMsg.content.trim().slice(0, 400);
+
+    try {
+      const apiConfig = this._getApiConfig();
+      const titlePrompt =
+        `You are a conversation-naming assistant. Read the user's first message and generate a VERY SHORT title (at most 6 words, preferably 2–4 words) that captures the topic.` +
+        `\n\nRules:\n- Respond with ONLY the title — no quotes, no punctuation, no extra text.\n- Keep it under 6 words.\n- Use the same language as the user message.\n- Be specific but concise.\n\nUser message:\n"""\n${text}\n"""\n\nTitle:`;
+
+      const response = await sendChatMessage(
+        [
+          { role: 'system', content: getAgentRuntimeContextBlock() },
+          { role: 'user', content: titlePrompt },
+        ],
+        { ...apiConfig },
+        undefined,
+        undefined,
+        { timeoutMs: 15000 }
+      );
+
+      const title = response.content?.trim() ?? '';
+      if (title && title.length > 0 && title.length <= 60) {
+        const sessionId = this._session.getCurrentSessionId();
+        this._session.updateSessionTitle(sessionId, title);
+      }
+    } catch {
+      // Non-critical — fail silently.
+    }
+  }
+  /**
    * Assembles the message list for the main LLM call. Replace or wrap this when
    * adding orchestrators, sub-agents, or shared scratchpad context.
    */

@@ -90,6 +90,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       onUserInstructionStart: () => this._toolExecutor.resetReviewUiCounters(),
       operation: this._operation,
       onStopSideEffects: () => this._uiManager.cancelPendingConfirms(),
+      autoNameSession: () => { void this._conversation.autoNameSession(); },
     });
   }
   public setOutputChannel(channel: vscode.OutputChannel): void {

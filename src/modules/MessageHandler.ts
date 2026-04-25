@@ -26,9 +26,12 @@ export class MessageHandler {
       /** Reset per-turn UI counters (e.g. edit review #) when the user sends a new instruction. */
       onUserInstructionStart?: () => void;
       /** Shared operation controller used across main + sub agents. */
+      /** Shared operation controller used across main + sub agents. */
       operation: OperationController;
       /** Side-effects to run on stop (e.g. resolve confirm bars). */
       onStopSideEffects?: () => void;
+      /** Fire-and-forget: auto-name the session after the first user message. */
+      autoNameSession?: () => void;
     }
   ) {}
 
@@ -57,6 +60,8 @@ export class MessageHandler {
       
       this._context.post({ type: 'addMessage', message: { role: 'user', content: text } });
       this._context.addMessage({ role: 'user', content: text });
+      // Fire-and-forget: auto-name the session from the first user message.
+      this._context.autoNameSession?.();
     } else {
       // 空消息：添加占位消息，让LLM知道用户想继续
       const placeholder = "[继续]";
