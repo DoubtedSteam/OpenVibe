@@ -406,8 +406,8 @@ Uncommitted changes will be lost.`,
     margin: 8px 0; padding-left: 12px;
     color: var(--vscode-descriptionForeground); font-style: italic;
   }
-  .bubble table { border-collapse: collapse; margin: 8px 0; width: 100%; }
-  .bubble th, .bubble td { border: 1px solid var(--vscode-input-border); padding: 6px 8px; text-align: left; }
+  .bubble table { border-collapse: collapse; margin: 8px 0; width: 100%; table-layout: fixed; overflow-wrap: break-word; }
+  .bubble th, .bubble td { border: 1px solid var(--vscode-input-border); padding: 6px 8px; text-align: left; word-break: break-word; }
   .bubble th { background-color: var(--vscode-list-hoverBackground); font-weight: 600; }
   .bubble a { color: var(--vscode-textLink-foreground); text-decoration: none; }
   .bubble a:hover { text-decoration: underline; }
