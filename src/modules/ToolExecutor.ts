@@ -9,7 +9,6 @@ import {
   getFileInfoTool,
   showTextDiffTool,
   showNotificationTool,
-  getThemeInfoTool,
   runShellCommandTool,
   gitSnapshotTool,
   gitRollbackTool,
@@ -415,9 +414,6 @@ ${list}
           message: args.message as string,
           severity: args.severity as 'info' | 'warning' | 'error' | undefined,
         });
-
-      case 'get_theme_info':
-        return getThemeInfoTool();
 
       case 'run_shell_command':
         return await this._handleRunShellCommand(args);

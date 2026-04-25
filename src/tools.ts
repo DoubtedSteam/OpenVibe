@@ -990,27 +990,6 @@ export async function showNotificationTool(params: ShowNotificationParams): Prom
   }
 }
 
-// ─── get_theme_info ───────────────────────────────────────────────────────────
-
-export function getThemeInfoTool(): string {
-  const t = vscode.window.activeColorTheme as {
-    id?: string;
-    label?: string;
-    kind: vscode.ColorThemeKind;
-  };
-  let kindStr = 'highContrast';
-  if (t.kind === vscode.ColorThemeKind.Light) {
-    kindStr = 'light';
-  } else if (t.kind === vscode.ColorThemeKind.Dark) {
-    kindStr = 'dark';
-  }
-  return JSON.stringify({
-    success: true,
-    themeId: t.id ?? t.label ?? 'unknown',
-    kind: kindStr,
-  });
-}
-
 // ─── run_shell_command ───────────────────────────────────────────────────────
 
 export interface RunShellCommandParams {

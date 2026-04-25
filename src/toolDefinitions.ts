@@ -361,19 +361,6 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     type: 'function',
     function: {
-      name: 'get_theme_info',
-      description:
-        'Return the active VS Code color theme id and kind (light/dark/highContrast).',
-      parameters: {
-        type: 'object',
-        properties: {},
-        required: [],
-      },
-    },
-  },
-  {
-    type: 'function',
-    function: {
       name: 'run_shell_command',
       description:
         'Run a shell command with the workspace folder as current working directory. ' +
@@ -460,7 +447,6 @@ At runtime, a **Host environment** section is appended to this system message (O
 - **get_file_info** — Metadata for a workspace path (exists, size, mtime, file vs directory).
 - **show_text_diff** — Open VS Code’s diff editor with two text bodies (before/after).
 - **show_notification** — Show an info/warning/error toast to the user.
-- **get_theme_info** — Active color theme id and light/dark/highContrast kind.
  - **run_shell_command** — Run one shell command in the workspace root (build/test/git, etc.). **DO NOT use shell commands to write or modify workspace files** — use the dedicated read_file, edit, and create_directory tools for file operations. Prefer read_file for reading code; reading a single non-code artifact (e.g. .log/.txt/.md) via shell may be acceptable when explicitly requested. A shell editor agent refines your proposed command, then an independent reviewer checks safety and flags risky file operations; after that, the user may confirm. Use carefully.
 
 ## Edit Permission Switch
