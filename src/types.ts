@@ -90,9 +90,22 @@ export interface SkillInfo {
   /** Sub-skills referenced in the SKILL.md frontmatter, e.g. ["skill-a", "skill-b"] */
   subSkills: string[];
 }
-
 export interface TokenUsage {
   prompt_tokens: number;
   completion_tokens: number;
   total_tokens: number;
+}
+
+export interface HumanAssistanceResult {
+  /** Unique request ID for tracking the confirmation. */
+  requestId: string;
+  /** The question/instruction that was presented to the user. */
+  question: string;
+  /** Timestamp when the user confirmed completion. */
+  completedAt: number;
+}
+
+export interface HumanAssistanceParams {
+  /** Instruction/question to present to the user. Describe clearly what the user needs to do. */
+  question: string;
 }

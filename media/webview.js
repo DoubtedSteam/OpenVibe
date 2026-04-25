@@ -39,6 +39,10 @@
    var confirmApplyBtn = byId('confirm-apply');
    var confirmCancelBtn = byId('confirm-cancel');
    var confirmTitleEl = qs('#replace-confirm .confirm-title');
+   var humanAssistBar = byId('human-assistance-confirm');
+   var humanAssistQuestion = byId('human-assistance-question');
+   var humanAssistDoneBtn = byId('human-assistance-done');
+   var humanAssistCancelBtn = byId('human-assistance-cancel');
   var TOOL_ICONS = {
     read_file: '📄',
     find_in_file: '🔍',
@@ -551,16 +555,20 @@
   function respondConfirm(approved) {
     if (!pendingConfirm || !pendingConfirm.requestId) {
       if (confirmBar) confirmBar.classList.remove('show');
+      if (humanAssistBar) humanAssistBar.classList.remove('show');
       return;
     }
     var kind = pendingConfirm.kind || 'replace';
     if (kind === 'shell') {
       safePost({ type: 'shellConfirmResponse', requestId: pendingConfirm.requestId, approved: approved });
+    } else if (kind === 'humanAssistance') {
+      safePost({ type: 'humanAssistanceConfirmResponse', requestId: pendingConfirm.requestId, approved: approved });
     } else {
       safePost({ type: 'replaceConfirmResponse', requestId: pendingConfirm.requestId, approved: approved });
     }
     pendingConfirm = null;
     if (confirmBar) confirmBar.classList.remove('show');
+    if (humanAssistBar) humanAssistBar.classList.remove('show');
   }
 
   // Sidebar bindings
@@ -584,7 +592,8 @@
 
   if (confirmApplyBtn) confirmApplyBtn.addEventListener('click', function () { respondConfirm(true); });
   if (confirmCancelBtn) confirmCancelBtn.addEventListener('click', function () { respondConfirm(false); });
-
+  if (humanAssistDoneBtn) humanAssistDoneBtn.addEventListener('click', function () { respondConfirm(true); });
+  if (humanAssistCancelBtn) humanAssistCancelBtn.addEventListener('click', function () { respondConfirm(false); });
   if (sendBtn) sendBtn.addEventListener('click', function () {
     if (!input) return;
     var text = input.value.trim();
@@ -638,6 +647,16 @@
         if (confirmTitleEl) confirmTitleEl.textContent = 'Run this command?';
         if (confirmBar) confirmBar.classList.add('show');
         scrollBottom();
+        scrollBottom();
+        break;
+      }
+      case 'requestHumanAssistanceConfirm': {
+        pendingConfirm = msg.data || null;
+        if (pendingConfirm) pendingConfirm.kind = 'humanAssistance';
+        var qText = pendingConfirm && pendingConfirm.question ? String(pendingConfirm.question) : '';
+        if (humanAssistQuestion) humanAssistQuestion.textContent = qText;
+        if (humanAssistBar) humanAssistBar.classList.add('show');
+        scrollBottom();
         break;
       }
       case 'clearMessages':
@@ -645,6 +664,7 @@
         pendingToolCard = null;
         pendingConfirm = null;
         if (confirmBar) confirmBar.classList.remove('show');
+        if (humanAssistBar) humanAssistBar.classList.remove('show');
         break;
       case 'sessionsList':
         updateSessionsList(msg.sessions);

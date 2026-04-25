@@ -62,6 +62,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       },
       userConfirmReplace: (ctx) => this._uiManager.userConfirmReplace(ctx),
       userConfirmShellCommand: (command) => this._uiManager.userConfirmShellCommand(command),
+      userConfirmHumanAssistance: (question) => this._uiManager.userConfirmHumanAssistance(question),
       getApiConfig: () => this._uiManager.getApiConfig(),
       getLastUserTextForTools: () => this._conversation.getLastUserTextForTools(),
       getRelatedContextForTodolistReview: () => this._conversation.getRelatedContextForTodolistReview(),
@@ -205,6 +206,12 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       }
       if (msg.type === 'shellConfirmResponse') {
         this._uiManager.resolveShellConfirm(
+          typeof msg.requestId === 'string' ? msg.requestId : '',
+          !!msg.approved
+        );
+      }
+      if (msg.type === 'humanAssistanceConfirmResponse') {
+        this._uiManager.resolveHumanAssistanceConfirm(
           typeof msg.requestId === 'string' ? msg.requestId : '',
           !!msg.approved
         );
@@ -501,7 +508,17 @@ Uncommitted changes will be lost.`,
     padding: 8px 10px;
     background: var(--vscode-editor-background);
     box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+  #replace-confirm.show { display: block; }
+  #human-assistance-confirm {
+    display: none;
+    border: 1px solid var(--vscode-input-border, #555);
+    border-radius: 8px;
+    padding: 8px 10px;
+    background: var(--vscode-editor-background);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.25);
   }
+  #human-assistance-confirm.show { display: block; }
+  .confirm-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
   #replace-confirm.show { display: block; }
   .confirm-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
   .confirm-title { font-size: 12px; font-weight: 600; }
@@ -779,6 +796,17 @@ Uncommitted changes will be lost.`,
         </div>
       </div>
       <div id="confirm-meta" class="confirm-meta"></div>
+      <div id="confirm-meta" class="confirm-meta"></div>
+    </div>
+    <div id="human-assistance-confirm">
+      <div class="confirm-row">
+        <div class="confirm-title">🧑 Human Assistance Requested</div>
+        <div class="confirm-actions">
+          <button id="human-assistance-done" class="confirm-btn apply" type="button">✅ Done</button>
+          <button id="human-assistance-cancel" class="confirm-btn cancel" type="button">Cancel</button>
+        </div>
+      </div>
+      <div id="human-assistance-question" class="confirm-meta"></div>
     </div>
       <div class="input-area">
         <textarea id="input" rows="3" placeholder="Describe what you want to change…"></textarea>

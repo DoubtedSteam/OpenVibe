@@ -387,6 +387,31 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'ask_human',
+      description:
+        'Request human assistance for a task that cannot be performed by AI alone. ' +
+        'Use this when you need the user to: manually test a feature, confirm a design decision, ' +
+        'run an app/program to verify behavior, provide information not in the workspace, ' +
+        'or perform any interactive action that requires human eyes and hands. ' +
+        'Execution PAUSES until the user clicks "Done" (they performed the task) or "Cancel". ' +
+        'The tool returns a success response when the user confirms completion, allowing your conversation to continue.',
+      parameters: {
+        type: 'object',
+        properties: {
+          question: {
+            type: 'string',
+            description:
+              'A clear, specific instruction describing what the human needs to do. ' +
+              'Be precise — explain exactly what action to take, what to look for, and what information (if any) to provide back.',
+          },
+        },
+        required: ['question'],
+      },
+    },
+  },
 
 ];
 export const SYSTEM_PROMPT = `You are Vibe Coding Assistant — an AI that can directly read and edit files inside the user's VS Code workspace.
@@ -418,6 +443,7 @@ At runtime, a **Host environment** section is appended to this system message (O
 - **get_diagnostics** — Get diagnostics (problems, warnings, errors) from VS Code for a specific file or all files.
 - **get_file_info** — Metadata for a workspace path (exists, size, mtime, file vs directory).
 - **show_notification** — Show an info/warning/error toast to the user.
+- **ask_human** — Request human assistance for tasks only a human can do (manual testing, design decisions, gathering info not in the workspace, running the app to verify behavior). Execution **pauses** until the user clicks "Done" (they performed the task) or "Cancel". After they click Done, the conversation continues normally.
  - **run_shell_command** — Run one shell command in the workspace root (build/test/git, etc.). **DO NOT use shell commands to write or modify workspace files** — use the dedicated read_file, edit, and create_directory tools for file operations. Prefer read_file for reading code; reading a single non-code artifact (e.g. .log/.txt/.md) via shell may be acceptable when explicitly requested. A shell editor agent refines your proposed command, then an independent reviewer checks safety and flags risky file operations; after that, the user may confirm. Use carefully.
 
 ## Edit Permission Switch

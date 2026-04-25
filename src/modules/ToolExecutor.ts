@@ -8,6 +8,7 @@ import {
   getDiagnosticsTool,
   getFileInfoTool,
   showNotificationTool,
+  askHumanTool,
   runShellCommandTool,
   gitSnapshotTool,
   gitRollbackTool,
@@ -168,6 +169,8 @@ export class ToolExecutor {
        llmCheckReplace: (ctx: ReplaceCheckContext) => Promise<ReplaceCheckResult>;
        userConfirmReplace: (ctx: ReplaceCheckContext) => Promise<boolean>;
        userConfirmShellCommand: (command: string) => Promise<boolean>;
+       /** Ask human: show a dialog and wait for user to click Done/Cancel. */
+       userConfirmHumanAssistance: (question: string) => Promise<boolean>;
        getApiConfig: () => ApiConfig;
        getLastUserTextForTools: () => string;
        getRelatedContextForTodolistReview: () => string;
@@ -406,6 +409,12 @@ ${list}
           message: args.message as string,
           severity: args.severity as 'info' | 'warning' | 'error' | undefined,
         });
+
+      case 'ask_human':
+        return await askHumanTool(
+          { question: args.question as string },
+          (q) => this._context.userConfirmHumanAssistance(q)
+        );
 
       case 'run_shell_command':
         return await this._handleRunShellCommand(args);

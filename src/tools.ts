@@ -1019,6 +1019,49 @@ export function showNotificationTool(params: ShowNotificationParams): string {
   }
 }
 
+// ─── ask_human ─────────────────────────────────────────────────────────────────
+
+export interface AskHumanParams {
+  /** The question, instruction, or task description to present to the user. */
+  question: string;
+}
+
+/**
+ * Ask the human user to perform a task interactively (e.g., manual testing, gathering info,
+ * confirming a design decision). Execution pauses until the user clicks "Done" in the UI.
+ * Returns a JSON string with { requestId, question, completedAt } when confirmed,
+ * or { error: "cancelled" } if the user cancels.
+ */
+export async function askHumanTool(
+  params: AskHumanParams,
+  userConfirmFn: (question: string) => Promise<boolean>
+): Promise<string> {
+  try {
+    const question = (params.question ?? '').trim();
+    if (!question) {
+      return JSON.stringify({ error: 'ask_human requires a non-empty question.' });
+    }
+    const approved = await userConfirmFn(question);
+    if (approved) {
+      return JSON.stringify({
+        success: true,
+        requestId: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        question,
+        completedAt: Date.now(),
+        message: 'User confirmed completion of the requested task.',
+      });
+    } else {
+      return JSON.stringify({
+        success: false,
+        error: 'cancelled',
+        message: 'User cancelled the assistance request.',
+      });
+    }
+  } catch (e: any) {
+    return JSON.stringify({ error: e.message });
+  }
+}
+
 // ─── run_shell_command ───────────────────────────────────────────────────────
 
 export interface RunShellCommandParams {

@@ -58,8 +58,8 @@ export class UIManager {
   private _abortController: AbortController = new AbortController();
    private _pendingReplaceConfirms: Map<string, (approved: boolean) => void> = new Map();
    private _pendingShellConfirms: Map<string, (approved: boolean) => void> = new Map();
+   private _pendingHumanAssistanceConfirms: Map<string, (approved: boolean) => void> = new Map();
    private _editPermissionEnabled: boolean = true;
-
    constructor(private readonly _context: vscode.ExtensionContext) {}
 
    public setView(view: vscode.WebviewView | undefined): void {
@@ -263,6 +263,43 @@ ${ctx.afterContext}
     }
   }
 
+  public async userConfirmHumanAssistance(question: string): Promise<boolean> {
+    if (!this._view) {
+      // No UI surface to ask the user; treat as cancelled.
+      return false;
+    }
+
+    const requestId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+    this.post({
+      type: 'requestHumanAssistanceConfirm',
+      data: {
+        requestId,
+        question,
+      },
+    });
+
+    return await new Promise<boolean>((resolve) => {
+      const timer = setTimeout(() => {
+        this._pendingHumanAssistanceConfirms.delete(requestId);
+        resolve(false);
+      }, 30 * 60 * 1000); // 30 min timeout
+
+      this._pendingHumanAssistanceConfirms.set(requestId, (approved) => {
+        clearTimeout(timer);
+        this._pendingHumanAssistanceConfirms.delete(requestId);
+        resolve(approved);
+      });
+    });
+  }
+
+  public resolveHumanAssistanceConfirm(requestId: string, approved: boolean): void {
+    const resolver = this._pendingHumanAssistanceConfirms.get(requestId);
+    if (resolver) {
+      resolver(approved);
+    }
+  }
+
   /** Called when the user hits Stop: resolve any pending confirms as "cancel". */
   public cancelPendingConfirms(): void {
     for (const [id, resolver] of this._pendingReplaceConfirms.entries()) {
@@ -272,6 +309,10 @@ ${ctx.afterContext}
     for (const [id, resolver] of this._pendingShellConfirms.entries()) {
       try { resolver(false); } catch { /* ignore */ }
       this._pendingShellConfirms.delete(id);
+    }
+    for (const [id, resolver] of this._pendingHumanAssistanceConfirms.entries()) {
+      try { resolver(false); } catch { /* ignore */ }
+      this._pendingHumanAssistanceConfirms.delete(id);
     }
   }
 }
