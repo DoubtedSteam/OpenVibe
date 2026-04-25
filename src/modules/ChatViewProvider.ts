@@ -508,6 +508,7 @@ Uncommitted changes will be lost.`,
     padding: 8px 10px;
     background: var(--vscode-editor-background);
     box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+  }
   #replace-confirm.show { display: block; }
   #human-assistance-confirm {
     display: none;
@@ -518,8 +519,6 @@ Uncommitted changes will be lost.`,
     box-shadow: 0 4px 16px rgba(0,0,0,0.25);
   }
   #human-assistance-confirm.show { display: block; }
-  .confirm-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-  #replace-confirm.show { display: block; }
   .confirm-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
   .confirm-title { font-size: 12px; font-weight: 600; }
   .confirm-actions { display: flex; gap: 8px; }
@@ -795,7 +794,6 @@ Uncommitted changes will be lost.`,
           <button id="confirm-cancel" class="confirm-btn cancel" type="button">Cancel</button>
         </div>
       </div>
-      <div id="confirm-meta" class="confirm-meta"></div>
       <div id="confirm-meta" class="confirm-meta"></div>
     </div>
     <div id="human-assistance-confirm">
