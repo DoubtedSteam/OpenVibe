@@ -3,7 +3,6 @@ import { getAgentRuntimeContextBlock } from '../agentRuntimeContext';
 import { sendChatMessage } from '../api';
 import type { ApiConfig, ChatMessage, AgentLogEntry } from '../types';
 import type { ReplaceCheckContext, ReplaceCheckResult } from '../tools';
-import { loadMemoryExcerpt } from './todolistReview';
 
 /** Avoid oversized webview payloads; mirror UIManager behavior. */
 const MAX_CONTEXT_CHARS = 120_000;
@@ -92,20 +91,18 @@ function parseIndependentReview(content: string | null): { ok: boolean; reason: 
 const REVIEW_SYSTEM = `You are an independent review agent for a SINGLE code edit about to be applied in a VS Code workspace.
 You MUST NOT modify any files. You only output JSON.
 
-Your ONLY job is to judge whether this specific edit correctly satisfies the MAIN request (the user's requirement shown below).
-- Ignore everything outside the scope of the user's request.
+Your ONLY job is to judge whether this specific code edit (BEFORE → AFTER) is logically consistent and correct at the code level.
+- Verify that the replacement code is syntactically valid and maintains structural integrity (e.g., brackets match, indentation is preserved).
+- Verify that the replacement does not introduce obvious errors (e.g., unmatched brackets, undefined variables within the changed scope).
 - Do NOT reject for stylistic preferences, minor formatting differences, or hypothetical edge cases.
-- Do NOT check for general logic errors, broken references, or code quality issues unless they DIRECTLY violate what the user asked for.
-- The user may be working in multiple steps; DO NOT reject merely because this edit alone is not the entire solution.
+- Do NOT check for broader logic beyond the scope of the changed lines.
 
 Output exactly one JSON object:
-{"decision":"CONFIRM"|"REJECT","reason":"one short sentence explaining how/why the edit does or does not meet the main request","notes":["string", ...]}`;
+{"decision":"CONFIRM"|"REJECT","reason":"one short sentence explaining the verdict","notes":["string", ...]}`;
 
 export async function llmIndependentEditReview(params: {
   ctx: ReplaceCheckContext;
   apiConfig: ApiConfig;
-  userRequest: string;
-  relatedContext: string;
   post: (msg: any) => void;
   /** 1-based index of this Replace check in the current user instruction (shown on the card). */
   reviewRound?: number;
@@ -118,14 +115,22 @@ export async function llmIndependentEditReview(params: {
     return { ok: true, reason: 'Independent edit review disabled', notes: [] };
   }
 
-  const memoryExcerpt = loadMemoryExcerpt();
   const userMsg =
-    `## MAIN REQUEST (the requirement the edit MUST satisfy)\n${params.userRequest || '(none)'}\n\n` +
-    `### Edit being reviewed\nFile: ${params.ctx.filePath} | lines ${params.ctx.startLine}–${params.ctx.endLine}\n\n` +
-    `#### BEFORE\n\`\`\`\n${params.ctx.beforeContext}\n\`\`\`\n\n` +
-    `#### AFTER\n\`\`\`\n${params.ctx.afterContext}\n\`\`\`\n\n` +
-    `### Related context (auxiliary)\n${params.relatedContext || '(none)'}\n\n` +
-    `### Project constraints (memory excerpt)\n${memoryExcerpt}\n`;
+    `## Edit being reviewed
+File: ${params.ctx.filePath} | lines ${params.ctx.startLine}–${params.ctx.endLine}
+
+` +
+    `#### BEFORE
+\`\`\`
+${params.ctx.beforeContext}
+\`\`\`
+
+` +
+    `#### AFTER
+\`\`\`
+${params.ctx.afterContext}
+\`\`\`
+`;
 
   let content: string | null = null;
   try {

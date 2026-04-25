@@ -95,7 +95,7 @@
             "Always use Simplified Chinese"
           ],
           "description": "Language for AI assistant interaction. Controls the language used in system prompts, tool descriptions, and assistant responses."
-        }
+        },
         "vibe-coding.todolistReview.enabled": {
           "type": "boolean",
           "default": true,
