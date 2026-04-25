@@ -1,5 +1,4 @@
 import * as vscode from 'vscode';
-import { getAgentRuntimeContextBlock } from '../agentRuntimeContext';
 import { sendChatMessage } from '../api';
 import type { ApiConfig, ChatMessage, AgentLogEntry } from '../types';
 import type { ReplaceCheckContext, ReplaceCheckResult } from '../tools';
@@ -46,7 +45,9 @@ function trimForWebview(s: string): { text: string; truncated: boolean } {
   if (s.length <= MAX_CONTEXT_CHARS) {
     return { text: s, truncated: false };
   }
-  return { text: s.slice(0, MAX_CONTEXT_CHARS) + '\n\n… [truncated for chat view]', truncated: true };
+  return { text: s.slice(0, MAX_CONTEXT_CHARS) + '
+
+… [truncated for chat view]', truncated: true };
 }
 
 function readEditReviewSettings(): { enabled: boolean; timeoutMs: number } {
@@ -91,11 +92,11 @@ function parseIndependentReview(content: string | null): { ok: boolean; reason: 
 const REVIEW_SYSTEM = `You are an independent review agent for a SINGLE code edit about to be applied in a VS Code workspace.
 You MUST NOT modify any files. You only output JSON.
 
-Your ONLY job is to judge whether this specific code edit (BEFORE → AFTER) is logically consistent and correct at the code level.
-- Verify that the replacement code is syntactically valid and maintains structural integrity (e.g., brackets match, indentation is preserved).
-- Verify that the replacement does not introduce obvious errors (e.g., unmatched brackets, undefined variables within the changed scope).
+Your ONLY job is to check whether this specific code edit (BEFORE → AFTER) is syntactically valid and structurally sound.
+- Verify that the replacement code is syntactically valid (no syntax errors).
+- Verify that the replacement maintains structural integrity (e.g., brackets match, indentation is preserved).
+- Do NOT check for semantic correctness, logical consistency, or undefined variables — those are outside your scope.
 - Do NOT reject for stylistic preferences, minor formatting differences, or hypothetical edge cases.
-- Do NOT check for broader logic beyond the scope of the changed lines.
 
 Output exactly one JSON object:
 {"decision":"CONFIRM"|"REJECT","reason":"one short sentence explaining the verdict","notes":["string", ...]}`;
@@ -135,8 +136,9 @@ ${params.ctx.afterContext}
   let content: string | null = null;
   try {
     const messages: ChatMessage[] = [
-      { role: 'system', content: REVIEW_SYSTEM + '\n\n' + getAgentRuntimeContextBlock() },
+      { role: 'system', content: REVIEW_SYSTEM },
       { role: 'user', content: userMsg },
+    ];
     ];
     try {
       const messagesLogSummary = messages.map((m) => ({
