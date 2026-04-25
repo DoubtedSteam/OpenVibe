@@ -33,7 +33,7 @@
 | 2026-04-11 | 增加 **Git** 支持：编码过程中可自动创建快照，并在 UI 中回滚与管理版本。 |
 | 2026-04-14 | 增加**独立审查**：任务清单审查与代码编辑审查，由独立 LLM 代理提升修改质量。 |
 | 2026-04-16 | **强化 shell 审查与执行**：1) 严格禁止使用 shell 进行任何文件读写操作（强制使用专用工具） 2) 结构化返回 + 关键错误摘要 3) 注入 todo 与最近执行历史到审查流程 4) 多级审查流程：主智能体→shell 编辑代理→独立安全审查→用户确认 |
-| 2026-04-16 | **新增转义字符处理协议**：引入 `MM_OUTPUT` 特殊标记，允许 `edit` 和 `run_shell_command` 工具直接传递原始文本，避免 JSON/Markdown 转义问题。 |
+| 2026-04-16 | **新增转义字符处理协议**（已废弃，改用 XML content fallback）：引入 `MM_OUTPUT` 特殊标记，允许 `edit` 和 `run_shell_command` 工具直接传递原始文本，避免 JSON/Markdown 转义问题。 |
 | 2026-04-25 | **技能系统 + 多语言支持 + 工作流改进规范 + 更多**：1) 动态技能加载（`list_skills`/`load_skill`） 2) `vibe-coding.language` 多语言交互配置 3) `ask_human` 人工协助工具 4) 会话自动命名 5) XML content fallback 传递原始文本 6) Memory 即时更新规范 7) 增量编译验证与 Bug 异常处理规范 8) 工作流改进四大规范（Memory 使用、Todo 异常处理、工具调用策略、会话节奏控制）。🎉 感谢 **DeepSeek V4** 的发布，让 OpenVibe 在强大模型驱动下真正胜任实际开发工作！ |
 > **2026-04-11:** Git snapshots during coding; rollback and history in the UI.  
 
@@ -41,7 +41,7 @@
 
 > **2026-04-16:** Enhanced shell review & execution: 1) Strict prohibition on shell file operations (use dedicated tools) 2) Structured output + key error summaries 3) Todo & recent history injection 4) Multi-level review flow: primary agent → shell editor agent → independent security review → user confirmation.
 
-> **2026-04-16:** Raw payload protocol `MM_OUTPUT` for `edit` and `run_shell_command` tools — bypass JSON/Markdown escaping for complex multiline code and shell scripts.
+> **2026-04-16:** Raw payload protocol `MM_OUTPUT` for `edit` and `run_shell_command` tools (deprecated, use XML content fallback instead) — bypass JSON/Markdown escaping for complex multiline code and shell scripts.
 
 > **2026-04-25:** Skills system + multi-language support + workflow guidelines + more: 1) Dynamic skill loading (`list_skills`/`load_skill`) 2) `vibe-coding.language` config 3) `ask_human` tool 4) Session auto-naming 5) XML content fallback for raw text 6) Memory instant-update rule 7) Incremental compilation & Bug exception handling 8) Workflow improvement guidelines (Memory usage, Todo exception handling, tool call strategy, session rhythm control). 🎉 Thanks to **DeepSeek V4** — OpenVibe is now truly capable of real-world development work with such a powerful model under the hood!
 
@@ -89,7 +89,7 @@ find_in_file(filePath, searchString, contextBefore, contextAfter)
 edit(filePath, startLine, endLine, newContent)
 ```
 
-替换指定行范围；可选经独立 LLM 审查后再应用。对于多行代码或复杂脚本，可以使用 **MM_OUTPUT raw payload protocol** 或 **XML content fallback** 避免 JSON/Markdown 转义问题——将 `newContent` 留空并在 visible response 中使用 `<edit-content>…</edit-content>` 标签传递原始文本，或使用 `<MM_OUTPUT type="EDIT">…</MM_OUTPUT>` 特殊标记。同一轮消息支持多个标签按顺序匹配。
+替换指定行范围；可选经独立 LLM 审查后再应用。对于多行代码或复杂脚本，可以使用 **XML content fallback** 避免 JSON/Markdown 转义问题——将 `newContent` 留空并在 visible response 中使用 `<edit-content>…</edit-content>` 标签传递原始文本，同一轮消息支持多个标签按顺序匹配。
 
 <h2 id="multi-agent-architecture">多智能体架构 / Multi-agent architecture</h2>
 
@@ -104,7 +104,7 @@ edit(filePath, startLine, endLine, newContent)
 2. **防止命令漂移**：审查时会检查命令是否与用户请求和当前 todo 上下文保持一致，拒绝无关脚本和执行代码生成等高风险操作
 3. **结构化返回格式**：shell 执行结果包含 `command`、`cwd`、`exitCode`、`durationMs`、`summary`、`keyErrors` 等字段，便于审查抓取关键信息
 4. **多级审查流程**：主智能体提出命令 → shell 编辑代理优化 → 独立安全审查验证 → 用户确认（可选）→ 执行并返回结构化结果
-5. **转义字符处理**：对于复杂的多行脚本，可以使用 **XML content fallback**（`<shell-content>…</shell-content>` 标签）或 **MM_OUTPUT raw payload protocol**（`<MM_OUTPUT type="SHELL">…</MM_OUTPUT>`）直接传递原始文本，避免 JSON/Markdown 转义问题
+5. **转义字符处理**：对于复杂的多行脚本，可以使用 **XML content fallback**（`<shell-content>…</shell-content>` 标签）直接传递原始文本，避免 JSON/Markdown 转义问题
 6. **上下文注入**：自动注入 todo 目标与最近 shell 执行历史到审查流程，确保命令与当前任务一致
 7. **防重复执行**：记录最近执行的命令，避免无意义重复，提升执行效率
 **主智能体**：需求分析、任务与 `plan` / `edit` / `shell` 协调、与用户沟通。  
@@ -124,7 +124,7 @@ edit(filePath, startLine, endLine, newContent)
 | `get_workspace_info` | 工作区根目录与顶层文件 |
 | `create_directory` | 创建目录（可递归） |
 | `create_todo_list` | 多步骤任务规划（先计划后执行），经独立 LLM 审查验证 |
-| `run_shell_command` | 在项目根执行命令；**禁止使用 shell 进行任何文件读写操作**（强制使用专用工具），经 shell 编辑代理优化 + 独立安全审查（含防上下文获取、防漂移、结构化返回、多级审查流程）。对于复杂多行命令，可使用 **XML content fallback**（`<shell-content>` 标签）或 **MM_OUTPUT** 特殊标记传递原始脚本，避免转义问题 |
+| `run_shell_command` | 在项目根执行命令；**禁止使用 shell 进行任何文件读写操作**（强制使用专用工具），经 shell 编辑代理优化 + 独立安全审查（含防上下文获取、防漂移、结构化返回、多级审查流程）。对于复杂多行命令，可使用 **XML content fallback**（`<shell-content>` 标签）传递原始脚本，避免转义问题 |
 | `complete_todo_item` | 标记 todo 完成，支持按 index 或名称标记 |
 | `compact` | 压缩长对话，节省上下文 |
 | `list_skills` | 列出 `.OpenVibe/skills/` 下所有可用的技能 |
