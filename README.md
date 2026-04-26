@@ -46,6 +46,7 @@
 
 > **2026-04-25:** Skills system + multi-language support + workflow guidelines + more: 1) Dynamic skill loading (`list_skills`/`load_skill`) 2) `vibe-coding.language` config 3) `ask_human` tool 4) Session auto-naming 5) XML content fallback for raw text 6) Memory instant-update rule 7) Incremental compilation & Bug exception handling 8) Workflow improvement guidelines (Memory usage, Todo exception handling, tool call strategy, session rhythm control). 🎉 Thanks to **DeepSeek V4** — OpenVibe is now truly capable of real-world development work with such a powerful model under the hood!
 
+> **2026-04-26:** Web Fetch optimization + ask_human interaction improvements: 1) `web_fetch` HTML processing overhaul — heading hierarchy preserved (h1-h6 to Markdown), block-level line breaks, `<pre>/<code>` code formatting, link list and meta description extraction, `<noscript>` removal 2) `ask_human` dialog now includes a text input field and Send button, allowing users to type and send messages back to the AI 3) System prompt now links `web_fetch` with `ask_human`: when the AI doesn't know a URL, it automatically asks the user to help find the page
 <h2 id="project-overview">项目概述 / Project overview</h2>
 
 OpenVibe 在本地工作区中完成「读 → 找 → 改」的闭环：
