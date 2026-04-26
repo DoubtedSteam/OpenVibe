@@ -79,6 +79,13 @@ export class MessageHandler {
       // Used to nudge the model when it returns plain text without tool calls (it should either call tools or task_complete).
       // IMPORTANT: Do not append this as a visible chat message.
       let injectedSystemPrompt = '';
+
+      // If a todo list is active, remind the LLM that it may need to update it
+      // when the user's new message changes requirements. Not visible to the user.
+      const todoInfo = this._context.getTodoControlInfo();
+      if (todoInfo && todoInfo.remaining > 0) {
+        injectedSystemPrompt = '\n\n[INTERNAL NUDGE]\n如有需要，请变更todo list。\n[END INTERNAL NUDGE]\n';
+      }
       
       while (iterations < maxIterations && !this._context.operation.isStopped()) {
         iterations++;
