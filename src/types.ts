@@ -138,4 +138,8 @@ export interface WebFetchResult {
   statusCode: number;
   /** Content type header value (e.g. "text/html"). */
   contentType: string;
+  /** Extracted links from <a href="..."> tags (only for HTML content). */
+  links?: Array<{ url: string; text: string }>;
+  /** Meta description extracted from <meta name="description"> tag. */
+  description?: string;
 }
