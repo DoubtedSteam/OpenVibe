@@ -436,6 +436,49 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'web_fetch',
+      description:
+        'Fetch a web page and extract its plain-text content. ' +
+        'Use this to read documentation, API references, or any URL the user provides. ' +
+        'Supports optional cookie and custom headers for accessing authenticated pages. ' +
+        'Only supports http:// and https:// URLs. ' +
+        'Results are truncated per maxLength (default 16000 characters).',
+      parameters: {
+        type: 'object',
+        properties: {
+          url: {
+            type: 'string',
+            description:
+              'Full URL to fetch, including https:// prefix (e.g. "https://example.com/docs").',
+          },
+          maxLength: {
+            type: 'number',
+            description: 'Maximum characters to return from the extracted content (default 16000, max 50000).',
+          },
+          cookie: {
+            type: 'string',
+            description:
+              'Optional cookie string to send with the request (e.g. "session=abc123; token=xyz"). ' +
+              'Use this to access pages that require login. The user can copy cookies from their browser developer tools.',
+          },
+          headers: {
+            type: 'string',
+            description:
+              'Optional JSON object of custom HTTP headers (e.g. \'{"Authorization":"Bearer xxx"}\'). ' +
+              'If both cookie and headers provide Cookie/authorization, headers take precedence.',
+          },
+          timeoutMs: {
+            type: 'number',
+            description: 'Request timeout in milliseconds (default 15000, max 30000).',
+          },
+        },
+        required: ['url'],
+      },
+    },
+  },
 
 ];
 export const SYSTEM_PROMPT = `You are Vibe Coding Assistant — an AI that can directly read and edit files inside the user's VS Code workspace.
@@ -473,6 +516,8 @@ At runtime, a **Host environment** section is appended to this system message (O
 - **deactivate_skill** — Remove a skill from the current conversation's active set.
 - **list_activated_skills** — Show which skills are currently active in this conversation.
 - **ask_human** — Request human assistance for tasks only a human can do (manual testing, design decisions, gathering info not in the workspace, running the app to verify behavior). Execution **pauses** until the user clicks "Done" (they performed the task) or "Cancel". After they click Done, the conversation continues normally.
+ - **web_fetch** — Fetch and extract plain-text content from a URL. Use to read web documentation, API references, or any page the user provides. Supports http/https. Optional cookie/headers allow accessing authenticated pages (user can paste cookies from browser DevTools). Results truncated per maxLength (default 16000 chars, max 50000).
+ - **run_shell_command** — Run one shell command in the workspace root (build/test/git, etc.). **DO NOT use shell commands to write or modify workspace files** — use the dedicated read_file, edit, and create_directory tools for file operations. Prefer read_file for reading code; reading a single non-code artifact (e.g. .log/.txt/.md) via shell may be acceptable when explicitly requested. A shell editor agent refines your proposed command, then an independent reviewer checks safety and flags risky file operations; after that, the user may confirm. Use carefully.
  - **run_shell_command** — Run one shell command in the workspace root (build/test/git, etc.). **DO NOT use shell commands to write or modify workspace files** — use the dedicated read_file, edit, and create_directory tools for file operations. Prefer read_file for reading code; reading a single non-code artifact (e.g. .log/.txt/.md) via shell may be acceptable when explicitly requested. A shell editor agent refines your proposed command, then an independent reviewer checks safety and flags risky file operations; after that, the user may confirm. Use carefully.
 
 ## Edit Permission Switch

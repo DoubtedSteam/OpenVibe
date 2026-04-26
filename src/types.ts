@@ -113,3 +113,29 @@ export interface HumanAssistanceParams {
   /** Instruction/question to present to the user. Describe clearly what the user needs to do. */
   question: string;
 }
+
+export interface WebFetchParams {
+  /** Target URL to fetch (must start with http:// or https://). */
+  url: string;
+  /** Maximum text length to return (characters), default 16000. */
+  maxLength?: number;
+  /** Optional raw cookie string (e.g. "session=abc; token=xyz") for accessing authenticated pages. */
+  cookie?: string;
+  /** Optional custom headers as JSON string, e.g. '{"Authorization":"Bearer xxx"}'. */
+  headers?: string;
+  /** Timeout in milliseconds, default 15000. */
+  timeoutMs?: number;
+}
+
+export interface WebFetchResult {
+  /** Page title extracted from <title> tag. */
+  title: string;
+  /** Extracted plain-text content (truncated per maxLength). */
+  content: string;
+  /** Final URL (may differ from requested URL due to redirects). */
+  url: string;
+  /** HTTP status code. */
+  statusCode: number;
+  /** Content type header value (e.g. "text/html"). */
+  contentType: string;
+}

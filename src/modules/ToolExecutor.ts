@@ -20,6 +20,7 @@ import {
   deactivateSkillTool,
   listActivatedSkillsTool,
   setActivatedSkillsCallbacks,
+  webFetchTool,
 } from '../tools';
 import type { ReplaceCheckContext, ReplaceCheckResult } from '../tools';
 import type { ApiConfig, AgentLogEntry, AssistantTodoPersistedState } from '../types';
@@ -472,6 +473,16 @@ ${list}
 
       case 'list_activated_skills': {
         return listActivatedSkillsTool();
+      }
+
+      case 'web_fetch': {
+        return webFetchTool({
+          url: args.url as string,
+          maxLength: args.maxLength as number | undefined,
+          cookie: args.cookie as string | undefined,
+          headers: args.headers as string | undefined,
+          timeoutMs: args.timeoutMs as number | undefined,
+        });
       }
 
       default:
