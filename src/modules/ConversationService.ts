@@ -77,7 +77,7 @@ export class ConversationService {
         { ...apiConfig },
         undefined,
         undefined,
-        { timeoutMs: 15000 }
+        { timeoutMs: 30000 }
       );
 
       const title = response.content?.trim() ?? '';
