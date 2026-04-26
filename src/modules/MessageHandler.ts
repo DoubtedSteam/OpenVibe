@@ -4,7 +4,7 @@ import { SYSTEM_PROMPT, TOOL_DEFINITIONS } from '../toolDefinitions';
 import { sendChatMessage } from '../api';
 import { gitSnapshotTool } from '../tools';
 import { AUTO_COMPACT_TOKEN_THRESHOLD, MAX_TOOL_ITERATIONS } from '../constants';
-import { extractXmlContents } from '../mmOutput';
+import { extractXmlContents, extractAndDecodeXmlFromJson } from '../mmOutput';
 import type { OperationController } from '../operationController';
 
 export class MessageHandler {
@@ -119,10 +119,10 @@ export class MessageHandler {
             this._context.post({ type: 'addMessage', message: { role: 'assistant', content: response.content } });
           }
 
-          // Execute each tool call sequentially
+
+          // Extract <edit-content>/<shell-content> from visible content as a primary
+          // source for large string parameters (raw unescaped text).
           let stopAfterTools = false;
-          // Extract <edit-content>/<shell-content> from visible content as a fallback
-          // source for large string parameters (avoids JSON escaping issues).
           const xmlItems = extractXmlContents(response.content);
           let xmlIndex = 0;
           for (const toolCall of response.toolCalls) {
@@ -132,46 +132,54 @@ export class MessageHandler {
               break;
             }
 
-             const name = toolCall.function.name;
+            const name = toolCall.function.name;
+            const rawArgs = toolCall.function.arguments; // keep original for JSON-path extraction
             let args: Record<string, unknown> = {};
-            try { args = JSON.parse(toolCall.function.arguments); } catch { /* keep empty */ }
+            try { args = JSON.parse(rawArgs); } catch { /* keep empty */ }
 
-
-            // XML content fallback (edit + run_shell_command):
-            // If newContent/command in JSON is empty, try to fill from matching XML tags
-            // in document order. This avoids JSON string escaping issues for large text payloads.
-            if (xmlIndex < xmlItems.length) {
-              if (name === 'edit') {
-                const cur = typeof args['newContent'] === 'string' ? String(args['newContent']) : '';
-                if (!cur && xmlItems[xmlIndex].type === 'edit') {
+            // ── XML content fallback (edit + run_shell_command) ──────────────
+            // Two paths, tried in order:
+            //  1. Content path — tag in visible content text (raw, no escaping).
+            //  2. JSON path — tag inside the newContent/command JSON string value
+            //     (JSON-encoded; we decode it back).
+            if (name === 'edit') {
+              const cur = typeof args['newContent'] === 'string' ? String(args['newContent']) : '';
+              if (!cur) {
+                // 1. Content path
+                if (xmlIndex < xmlItems.length && xmlItems[xmlIndex].type === 'edit') {
                   args['newContent'] = xmlItems[xmlIndex].payload;
                   xmlIndex++;
-                } else if (!cur && xmlItems[xmlIndex].type === 'shell') {
-                  this._context.post({ type: 'info', message: 'XML fallback: edit expects <edit-content> but next tag is <shell-content>. Tag skipped.' });
-                }
-              } else if (name === 'run_shell_command') {
-                const cur = typeof args['command'] === 'string' ? String(args['command']) : '';
-                if (!cur.trim() && xmlItems[xmlIndex].type === 'shell') {
-                  args['command'] = xmlItems[xmlIndex].payload;
-                  xmlIndex++;
-                } else if (!cur.trim() && xmlItems[xmlIndex].type === 'edit') {
-                  this._context.post({ type: 'info', message: 'XML fallback: shell expects <shell-content> but next tag is <edit-content>. Tag skipped.' });
+                } else {
+                  // 2. JSON path: tag embedded in the tool-call arguments JSON
+                  const jsonItems = extractAndDecodeXmlFromJson(rawArgs);
+                  const found = jsonItems.find(item => item.type === 'edit');
+                  if (found) {
+                    args['newContent'] = found.payload;
+                  } else {
+                    this._context.post({ type: 'info', message: 'XML fallback: edit tool has empty newContent but no <edit-content> tag found in content text or JSON arguments. Place the tag in your visible response text or inside the newContent JSON string.' });
+                  }
                 }
               }
-            } else {
-              // Diagnostic: tool needs XML fallback but no matching tag found.
-              if (name === 'edit') {
-                const cur = typeof args['newContent'] === 'string' ? String(args['newContent']) : '';
-                if (!cur) {
-                  this._context.post({ type: 'info', message: 'XML fallback: edit tool has empty newContent but no <edit-content> tag found in response content. Ensure tags are in visible text output.' });
-                }
-              } else if (name === 'run_shell_command') {
-                const cur = typeof args['command'] === 'string' ? String(args['command']) : '';
-                if (!cur.trim()) {
-                  this._context.post({ type: 'info', message: 'XML fallback: shell tool has empty command but no <shell-content> tag found in response content. Ensure tags are in visible text output.' });
+            } else if (name === 'run_shell_command') {
+              const cur = typeof args['command'] === 'string' ? String(args['command']) : '';
+              if (!cur.trim()) {
+                // 1. Content path
+                if (xmlIndex < xmlItems.length && xmlItems[xmlIndex].type === 'shell') {
+                  args['command'] = xmlItems[xmlIndex].payload;
+                  xmlIndex++;
+                } else {
+                  // 2. JSON path
+                  const jsonItems = extractAndDecodeXmlFromJson(rawArgs);
+                  const found = jsonItems.find(item => item.type === 'shell');
+                  if (found) {
+                    args['command'] = found.payload;
+                  } else {
+                    this._context.post({ type: 'info', message: 'XML fallback: shell tool has empty command but no <shell-content> tag found in content text or JSON arguments. Place the tag in your visible response text or inside the command JSON string.' });
+                  }
                 }
               }
             }
+
 
 
             // task_complete：do not emit extra assistant text; still MUST respond with a tool message.
