@@ -541,7 +541,10 @@ For \`run_shell_command\` — when \`command\` is empty, the host searches for t
 Rules:
 - Multiple \`<edit-content>\` / \`<shell-content>\` tags are supported per message — they are matched **in order** to the tool calls.
 - You may mix JSON-supplied content (via \`newContent\` / \`command\`) with XML fallback tags within the same message.
+
 - Do NOT use \`\\n\` escape sequences inside XML tags — use actual newlines.
+
+- **CRITICAL**: The XML tags are extracted from your **visible content text** (the text you output to the user). If you only output tool calls without content text, the fallback WILL NOT work and the edit/shell command will receive an empty string. Always output the <edit-content> / <shell-content> tags in your visible response text alongside the tool call.
 
 
 ## Configuration

@@ -136,6 +136,7 @@ export class MessageHandler {
             let args: Record<string, unknown> = {};
             try { args = JSON.parse(toolCall.function.arguments); } catch { /* keep empty */ }
 
+
             // XML content fallback (edit + run_shell_command):
             // If newContent/command in JSON is empty, try to fill from matching XML tags
             // in document order. This avoids JSON string escaping issues for large text payloads.
@@ -145,15 +146,33 @@ export class MessageHandler {
                 if (!cur && xmlItems[xmlIndex].type === 'edit') {
                   args['newContent'] = xmlItems[xmlIndex].payload;
                   xmlIndex++;
+                } else if (!cur && xmlItems[xmlIndex].type === 'shell') {
+                  this._context.post({ type: 'info', message: 'XML fallback: edit expects <edit-content> but next tag is <shell-content>. Tag skipped.' });
                 }
               } else if (name === 'run_shell_command') {
                 const cur = typeof args['command'] === 'string' ? String(args['command']) : '';
                 if (!cur.trim() && xmlItems[xmlIndex].type === 'shell') {
                   args['command'] = xmlItems[xmlIndex].payload;
                   xmlIndex++;
+                } else if (!cur.trim() && xmlItems[xmlIndex].type === 'edit') {
+                  this._context.post({ type: 'info', message: 'XML fallback: shell expects <shell-content> but next tag is <edit-content>. Tag skipped.' });
+                }
+              }
+            } else {
+              // Diagnostic: tool needs XML fallback but no matching tag found.
+              if (name === 'edit') {
+                const cur = typeof args['newContent'] === 'string' ? String(args['newContent']) : '';
+                if (!cur) {
+                  this._context.post({ type: 'info', message: 'XML fallback: edit tool has empty newContent but no <edit-content> tag found in response content. Ensure tags are in visible text output.' });
+                }
+              } else if (name === 'run_shell_command') {
+                const cur = typeof args['command'] === 'string' ? String(args['command']) : '';
+                if (!cur.trim()) {
+                  this._context.post({ type: 'info', message: 'XML fallback: shell tool has empty command but no <shell-content> tag found in response content. Ensure tags are in visible text output.' });
                 }
               }
             }
+
 
             // task_complete：do not emit extra assistant text; still MUST respond with a tool message.
             if (name === 'task_complete') {
