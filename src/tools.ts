@@ -193,11 +193,49 @@ export function findInFileTool(params: FindParams): string {
     return JSON.stringify({ error: e.message });
   }
 
+
   if (!fs.existsSync(absPath)) {
     return JSON.stringify({ error: `File not found: ${params.filePath}` });
   }
 
+  // ─── 如果是目录，按文件名搜索 ──────────────────────────────────────────────
+  if (fs.statSync(absPath).isDirectory()) {
+    try {
+      const entries = fs.readdirSync(absPath, { withFileTypes: true });
+      const root = getWorkspaceRoot();
+      const relPath = path.relative(root, absPath).replace(/\\/g, '/') || '.';
+      const searchLower = params.searchString.toLowerCase();
+
+      const matching = entries
+        .filter((entry) => entry.name.toLowerCase().includes(searchLower))
+        .map((entry) => ({
+          name: entry.name,
+          type: entry.isDirectory() ? 'directory' : 'file',
+          size: entry.isFile() ? fs.statSync(path.join(absPath, entry.name)).size : 0,
+        }));
+
+      // 按目录在前、文件在后排序，同类型按名称排序
+      matching.sort((a, b) => {
+        if (a.type !== b.type) return a.type === 'directory' ? -1 : 1;
+        return a.name.localeCompare(b.name);
+      });
+
+      return JSON.stringify({
+        isDirectory: true,
+        path: relPath,
+        absolutePath: absPath,
+        searchString: params.searchString,
+        entries: matching,
+        totalEntries: entries.length,
+        totalMatches: matching.length,
+      });
+    } catch (e: any) {
+      return JSON.stringify({ error: `Cannot search directory: ${params.filePath} — ${e.message}` });
+    }
+  }
+
   const { lines } = readLines(absPath);
+
   const total = lines.length;
   const occurrence = params.occurrence ?? 1;
   const ctxBefore = params.contextBefore ?? 2;
