@@ -110,6 +110,7 @@ export class MessageHandler {
           this._context.addMessage({
             role: 'assistant',
             content: response.content,
+            reasoning_content: response.reasoningContent,
             tool_calls: response.toolCalls,
           });
 
@@ -191,7 +192,7 @@ export class MessageHandler {
           // Text response (no tool calls)
           let content = response.content ?? '(no response)';
 
-          this._context.addMessage({ role: 'assistant', content });
+          this._context.addMessage({ role: 'assistant', content, reasoning_content: response.reasoningContent });
           this._context.post({ type: 'addMessage', message: { role: 'assistant', content } });
           if (response.tokenUsage) {
             this._context.post({ type: 'tokenUsage', usage: response.tokenUsage });

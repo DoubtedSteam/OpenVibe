@@ -4,6 +4,8 @@ import { ChatMessage, ApiConfig, ToolDefinition, ToolCall, TokenUsage } from './
 export interface ApiResponse {
   content: string | null;
   toolCalls?: ToolCall[];
+  /** DeepSeek reasoning model's thinking/chain-of-thought content. */
+  reasoningContent?: string | null;
   tokenUsage?: TokenUsage;
 }
 
@@ -21,9 +23,28 @@ export async function sendChatMessage(
 ): Promise<ApiResponse> {
   const url = `${config.baseUrl}/chat/completions`;
 
+  // DeepSeek reasoning models require `reasoning_content` to be passed back
+  // on assistant messages. Transform the messages array to include it.
+  const transformedMessages = messages.map((msg) => {
+    const m: Record<string, unknown> = {
+      role: msg.role,
+      content: msg.content,
+    };
+    if (msg.role === 'assistant' && msg.reasoning_content !== undefined) {
+      m.reasoning_content = msg.reasoning_content;
+    }
+    if (msg.tool_calls) {
+      m.tool_calls = msg.tool_calls;
+    }
+    if (msg.tool_call_id) {
+      m.tool_call_id = msg.tool_call_id;
+    }
+    return m;
+  });
+
   const payload: Record<string, unknown> = {
     model: config.model,
-    messages,
+    messages: transformedMessages,
     temperature: 0.0,
   };
 
@@ -50,6 +71,7 @@ export async function sendChatMessage(
 
     const msg = choice.message;
     const content: string | null = msg?.content ?? null;
+    const reasoningContent: string | null | undefined = msg?.reasoning_content ?? undefined;
     const toolCalls: ToolCall[] | undefined =
       Array.isArray(msg?.tool_calls) && msg.tool_calls.length > 0
         ? msg.tool_calls
@@ -66,7 +88,7 @@ export async function sendChatMessage(
         }
       : undefined;
 
-    return { content, toolCalls, tokenUsage };
+    return { content, reasoningContent, toolCalls, tokenUsage };
   } catch (error: any) {
     // Aborted by caller (user clicked Stop)
     if (error.name === 'CanceledError' || error.code === 'ERR_CANCELED') {

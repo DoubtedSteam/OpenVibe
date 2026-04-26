@@ -12,6 +12,8 @@ export interface ChatMessage {
   content: string | null;
   tool_calls?: ToolCall[];
   tool_call_id?: string;
+  /** DeepSeek reasoning model's thinking/chain-of-thought content. */
+  reasoning_content?: string | null;
   /**
    * Persisted for chat UI / replay only. Omitted from {@link ConversationService.buildMessagesForLlm}
    * so tool-injected bubbles (e.g. todo list display) do not break the assistant/tool message sequence.
