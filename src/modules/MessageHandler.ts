@@ -4,7 +4,7 @@ import { SYSTEM_PROMPT, TOOL_DEFINITIONS } from '../toolDefinitions';
 import { sendChatMessage } from '../api';
 import { gitSnapshotTool } from '../tools';
 import { AUTO_COMPACT_TOKEN_THRESHOLD, MAX_TOOL_ITERATIONS } from '../constants';
-import { extractXmlContents, extractAndDecodeXmlFromJson } from '../mmOutput';
+import { extractXmlPlaceholders, applyXmlPlaceholders } from '../mmOutput';
 import type { OperationController } from '../operationController';
 
 export class MessageHandler {
@@ -120,11 +120,7 @@ export class MessageHandler {
           }
 
 
-          // Extract <edit-content>/<shell-content> from visible content as a primary
-          // source for large string parameters (raw unescaped text).
           let stopAfterTools = false;
-          const xmlItems = extractXmlContents(response.content);
-          let xmlIndex = 0;
           for (const toolCall of response.toolCalls) {
             // Check for stop request before each tool call
             if (this._context.operation.isStopped()) {
@@ -133,52 +129,20 @@ export class MessageHandler {
             }
 
             const name = toolCall.function.name;
-            const rawArgs = toolCall.function.arguments; // keep original for JSON-path extraction
-            let args: Record<string, unknown> = {};
-            try { args = JSON.parse(rawArgs); } catch { /* keep empty */ }
+            const rawArgs = toolCall.function.arguments;
 
-            // ── XML content fallback (edit + run_shell_command) ──────────────
-            // Two paths, tried in order:
-            //  1. Content path — tag in visible content text (raw, no escaping).
-            //  2. JSON path — tag inside the newContent/command JSON string value
-            //     (JSON-encoded; we decode it back).
-            if (name === 'edit') {
-              const cur = typeof args['newContent'] === 'string' ? String(args['newContent']) : '';
-              if (!cur) {
-                // 1. Content path
-                if (xmlIndex < xmlItems.length && xmlItems[xmlIndex].type === 'edit') {
-                  args['newContent'] = xmlItems[xmlIndex].payload;
-                  xmlIndex++;
-                } else {
-                  // 2. JSON path: tag embedded in the tool-call arguments JSON
-                  const jsonItems = extractAndDecodeXmlFromJson(rawArgs);
-                  const found = jsonItems.find(item => item.type === 'edit');
-                  if (found) {
-                    args['newContent'] = found.payload;
-                  } else {
-                    this._context.post({ type: 'info', message: 'XML fallback: edit tool has empty newContent but no <edit-content> tag found in content text or JSON arguments. Place the tag in your visible response text or inside the newContent JSON string.' });
-                  }
-                }
-              }
-            } else if (name === 'run_shell_command') {
-              const cur = typeof args['command'] === 'string' ? String(args['command']) : '';
-              if (!cur.trim()) {
-                // 1. Content path
-                if (xmlIndex < xmlItems.length && xmlItems[xmlIndex].type === 'shell') {
-                  args['command'] = xmlItems[xmlIndex].payload;
-                  xmlIndex++;
-                } else {
-                  // 2. JSON path
-                  const jsonItems = extractAndDecodeXmlFromJson(rawArgs);
-                  const found = jsonItems.find(item => item.type === 'shell');
-                  if (found) {
-                    args['command'] = found.payload;
-                  } else {
-                    this._context.post({ type: 'info', message: 'XML fallback: shell tool has empty command but no <shell-content> tag found in content text or JSON arguments. Place the tag in your visible response text or inside the command JSON string.' });
-                  }
-                }
-              }
-            }
+            // ── XML content fallback ───────────────────────────────────────────
+            // Before JSON.parse, scan for <edit-content>/<shell-content> tags
+            // embedded in newContent / command JSON string values.  The tagged
+            // payload is extracted, decoded (JSON-unescaped), and replaced with a
+            // safe placeholder.  After parse, placeholders are swapped back to
+            // the decoded raw text — the tagged content never goes through JSON
+            // escaping.
+            const { sanitizedArgs, placeholderMap } = extractXmlPlaceholders(rawArgs);
+            let args: Record<string, unknown> = {};
+            try { args = JSON.parse(sanitizedArgs); } catch { /* keep empty */ }
+            applyXmlPlaceholders(args, placeholderMap);
+
 
 
 

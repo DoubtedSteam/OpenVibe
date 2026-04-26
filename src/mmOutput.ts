@@ -6,70 +6,66 @@ export interface XmlContentItem {
   payload: string;
 }
 
-/**
- * Extracts ALL <edit-content>...</edit-content> and <shell-content>...</shell-content>
- * tags from the visible content text, in document order.
- * Used to supply raw payloads for tool calls that carry large text data
- * (edit.newContent, run_shell_command.command), avoiding JSON escaping issues.
- */
-export function extractXmlContents(text: string | null | undefined): XmlContentItem[] {
-  const src = String(text ?? '');
-  if (!src.trim()) {
-    return [];
-  }
-
-  const results: XmlContentItem[] = [];
-  const tagRe = /<\s*(edit-content|shell-content)\s*>([\s\S]*?)<\s*\/\s*(edit-content|shell-content)\s*>/gi;
-
-  let match: RegExpExecArray | null;
-  while ((match = tagRe.exec(src)) !== null) {
-    const openTag = match[1].toLowerCase();
-    const closeTag = (match[3] ?? '').toLowerCase();
-    // Sanity: opening and closing tags should match
-    if (openTag !== closeTag) {
-      continue;
-    }
-    const type = openTag === 'edit-content' ? 'edit' as XmlContentType : 'shell' as XmlContentType;
-    results.push({ type, payload: match[2] });
-  }
-
-
-  return results;
+export interface XmlPlaceholderResult {
+  /** JSON-parseable arguments string with XML-tagged regions replaced by safe placeholders. */
+  sanitizedArgs: string;
+  /** Map of placeholder → raw payload (JSON-unescaped, ready to write to disk). */
+  placeholderMap: Map<string, string>;
 }
 
 /**
- * Extract <edit-content>/<shell-content> tags from a raw JSON tool-call arguments string.
- * The tags sit inside JSON string values (e.g. "newContent":"<edit-content>...payload...</edit-content>").
- * Because the payload has been JSON-encoded, we decode it back via JSON.parse so the caller
- * receives the original unescaped text — the same as if it came from plain content text.
+ * Process a raw JSON tool-call arguments string BEFORE JSON.parse.
+ *
+ * Scans for {@code "newContent":"<edit-content>...payload...</edit-content>"} and
+ * {@code "command":"<shell-content>...payload...</shell-content>"} patterns,
+ * extracts the raw payload between tags (still JSON-encoded at this point),
+ * replaces the whole tagged region with a safe placeholder, and decodes the
+ * payload back to its original text.
+ *
+ * The caller JSON.parses the sanitized args, then swaps placeholders back to
+ * the decoded payloads before writing to disk.
  */
-export function extractAndDecodeXmlFromJson(rawJson: string): XmlContentItem[] {
-  const results: XmlContentItem[] = [];
+export function extractXmlPlaceholders(rawArgs: string): XmlPlaceholderResult {
+  const placeholderMap = new Map<string, string>();
 
-  // Match "newContent": "<edit-content>...payload...</edit-content>"
-  // or "command": "<shell-content>...payload...</shell-content>"
-  // The capture group grabs everything between the tags (still JSON-encoded).
-  const re = /"(?:newContent|command)"\s*:\s*"<(edit-content|shell-content)>([\s\S]*?)<\/(edit-content|shell-content)>"/gi;
+  // Match "newContent" or "command" field whose value starts with <edit-content> / <shell-content>
+  const re = /"(newContent|command)"\s*:\s*"<(edit-content|shell-content)>([\s\S]*?)<\/(edit-content|shell-content)>"/gi;
 
-  let match: RegExpExecArray | null;
-  while ((match = re.exec(rawJson)) !== null) {
-    const openTag = match[1].toLowerCase();
-    const jsonPayload = match[2]; // still JSON-encoded
-    const closeTag = (match[3] ?? '').toLowerCase();
-    if (openTag !== closeTag) continue;
+  let idx = 0;
+  const sanitizedArgs = rawArgs.replace(re, (full, fieldName, openTag, rawPayload, closeTag) => {
+    if (openTag.toLowerCase() !== closeTag.toLowerCase()) return full;
 
-    // Decode JSON escaping back to raw text.
+    // Decode JSON string escaping (\\n → newline, \\\\ → \\, etc.)
     let decoded = '';
     try {
-      decoded = JSON.parse('"' + jsonPayload + '"');
+      decoded = JSON.parse('"' + rawPayload + '"');
     } catch {
-      // If decoding fails, fall back to the JSON-encoded literal.
-      decoded = jsonPayload;
+      decoded = rawPayload;
     }
 
-    const type = openTag === 'edit-content' ? 'edit' as XmlContentType : 'shell' as XmlContentType;
-    results.push({ type, payload: decoded });
-  }
+    const placeholder = `__XML_PH_${idx}__`;
+    placeholderMap.set(placeholder, decoded);
+    idx++;
+    return '"' + fieldName + '":"' + placeholder + '"';
+  });
 
-  return results;
+  return { sanitizedArgs, placeholderMap };
+}
+
+/**
+ * Apply placeholder replacements inside a JSON-parsed args object.
+ * Walks the object shallowly and replaces known placeholders in string values.
+ * Returns the same object (mutated in place).
+ */
+export function applyXmlPlaceholders(
+  args: Record<string, unknown>,
+  placeholderMap: Map<string, string>
+): Record<string, unknown> {
+  for (const key of Object.keys(args)) {
+    const val = args[key];
+    if (typeof val === 'string' && placeholderMap.has(val)) {
+      args[key] = placeholderMap.get(val);
+    }
+  }
+  return args;
 }

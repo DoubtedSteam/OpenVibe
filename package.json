@@ -2,7 +2,7 @@
   "name": "vibe-coding-assistant",
   "displayName": "Vibe Coding Assistant",
   "description": "AI coding assistant with file editing tools",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "publisher": "DoubtedSteam",
   "repository": {
     "type": "git",
