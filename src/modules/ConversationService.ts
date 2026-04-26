@@ -50,7 +50,7 @@ export class ConversationService {
   }
 
   /**
-   * Calls a lightweight LLM to generate a short title (≤6 words) from the first user message,
+   * Calls a lightweight LLM to generate a concise title (one sentence) from the first user message,
    * then updates the current session title. Designed to be called fire-and-forget.
    * Non-critical: on any error (network, API, invalid response) it fails silently.
    */
@@ -61,13 +61,13 @@ export class ConversationService {
       (m) => m.role === 'user' && typeof m.content === 'string' && m.content.trim()
     );
     if (!firstUserMsg || typeof firstUserMsg.content !== 'string') return;
-    const text = firstUserMsg.content.trim().slice(0, 400);
+    const text = firstUserMsg.content.trim();
 
     try {
       const apiConfig = this._getApiConfig();
       const titlePrompt =
-        `You are a conversation-naming assistant. Read the user's first message and generate a VERY SHORT title (at most 6 words, preferably 2–4 words) that captures the topic.` +
-        `\n\nRules:\n- Respond with ONLY the title — no quotes, no punctuation, no extra text.\n- Keep it under 6 words.\n- Use the same language as the user message.\n- Be specific but concise.\n\nUser message:\n"""\n${text}\n"""\n\nTitle:`;
+        `You are a conversation-naming assistant. Read the user's first message and generate a concise title (one sentence) that captures the topic.` +
+        `\n\nRules:\n- Respond with ONLY the title — no quotes, no extra text.\n- Use the same language as the user message.\n- Be specific but concise.\n\nUser message:\n"""\n${text}\n"""\n\nTitle:`;
 
       const response = await sendChatMessage(
         [
@@ -77,11 +77,11 @@ export class ConversationService {
         { ...apiConfig },
         undefined,
         undefined,
-        { timeoutMs: 30000 }
+        undefined
       );
 
       const title = response.content?.trim() ?? '';
-      if (title && title.length > 0 && title.length <= 60) {
+      if (title && title.length > 0) {
         const sessionId = this._session.getCurrentSessionId();
         this._session.updateSessionTitle(sessionId, title);
       }
