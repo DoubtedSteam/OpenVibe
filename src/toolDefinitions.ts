@@ -445,7 +445,8 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
         'Use this to read documentation, API references, or any URL the user provides. ' +
         'Supports optional cookie and custom headers for accessing authenticated pages. ' +
         'Only supports http:// and https:// URLs. ' +
-        'Results are truncated per maxLength (default 16000 characters).',
+        'Results are truncated per maxLength (default 16000 characters). ' +
+        'If you do not know the exact URL for a page you need, use ask_human first to request the user to browse to it and provide the URL — do not guess URLs.',
       parameters: {
         type: 'object',
         properties: {
@@ -516,7 +517,7 @@ At runtime, a **Host environment** section is appended to this system message (O
 - **deactivate_skill** — Remove a skill from the current conversation's active set.
 - **list_activated_skills** — Show which skills are currently active in this conversation.
 - **ask_human** — Request human assistance for tasks only a human can do (manual testing, design decisions, gathering info not in the workspace, running the app to verify behavior). Execution **pauses** until the user clicks "Done" (they performed the task) or "Cancel". After they click Done, the conversation continues normally.
- - **web_fetch** — Fetch and extract plain-text content from a URL. Use to read web documentation, API references, or any page the user provides. Supports http/https. Optional cookie/headers allow accessing authenticated pages (user can paste cookies from browser DevTools). Results truncated per maxLength (default 16000 chars, max 50000).
+ - **web_fetch** — Fetch and extract plain-text content from a URL. Use to read web documentation, API references, or any page the user provides. Supports http/https. Optional cookie/headers allow accessing authenticated pages (user can paste cookies from browser DevTools). Results truncated per maxLength (default 16000 chars, max 50000). **When you need a specific page but don't know its URL** (e.g. "the documentation for X", "the download page for Y"), use ask_human to request the user to browse to that page and provide the URL. Do NOT guess URLs — ask the user instead.
  - **run_shell_command** — Run one shell command in the workspace root (build/test/git, etc.). **DO NOT use shell commands to write or modify workspace files** — use the dedicated read_file, edit, and create_directory tools for file operations. Prefer read_file for reading code; reading a single non-code artifact (e.g. .log/.txt/.md) via shell may be acceptable when explicitly requested. A shell editor agent refines your proposed command, then an independent reviewer checks safety and flags risky file operations; after that, the user may confirm. Use carefully.
  - **run_shell_command** — Run one shell command in the workspace root (build/test/git, etc.). **DO NOT use shell commands to write or modify workspace files** — use the dedicated read_file, edit, and create_directory tools for file operations. Prefer read_file for reading code; reading a single non-code artifact (e.g. .log/.txt/.md) via shell may be acceptable when explicitly requested. A shell editor agent refines your proposed command, then an independent reviewer checks safety and flags risky file operations; after that, the user may confirm. Use carefully.
 
