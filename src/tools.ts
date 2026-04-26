@@ -1002,21 +1002,21 @@ export interface AskHumanParams {
  */
 export async function askHumanTool(
   params: AskHumanParams,
-  userConfirmFn: (question: string) => Promise<boolean>
+  userConfirmFn: (question: string) => Promise<{ approved: boolean; userMessage?: string }>
 ): Promise<string> {
   try {
     const question = (params.question ?? '').trim();
     if (!question) {
       return JSON.stringify({ error: 'ask_human requires a non-empty question.' });
     }
-    const approved = await userConfirmFn(question);
-    if (approved) {
+    const result = await userConfirmFn(question);
+    if (result.approved) {
       return JSON.stringify({
         success: true,
         requestId: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
         question,
         completedAt: Date.now(),
-        message: 'User confirmed completion of the requested task.',
+        message: result.userMessage || 'User confirmed completion of the requested task.',
       });
     } else {
       return JSON.stringify({

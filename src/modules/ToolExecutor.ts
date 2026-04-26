@@ -175,7 +175,7 @@ export class ToolExecutor {
        userConfirmReplace: (ctx: ReplaceCheckContext) => Promise<boolean>;
        userConfirmShellCommand: (command: string) => Promise<boolean>;
        /** Ask human: show a dialog and wait for user to click Done/Cancel. */
-       userConfirmHumanAssistance: (question: string) => Promise<boolean>;
+       userConfirmHumanAssistance: (question: string) => Promise<{ approved: boolean; userMessage?: string }>;
        getApiConfig: () => ApiConfig;
        getLastUserTextForTools: () => string;
        getRelatedContextForTodolistReview: () => string;

@@ -58,7 +58,7 @@ export class UIManager {
   private _abortController: AbortController = new AbortController();
    private _pendingReplaceConfirms: Map<string, (approved: boolean) => void> = new Map();
    private _pendingShellConfirms: Map<string, (approved: boolean) => void> = new Map();
-   private _pendingHumanAssistanceConfirms: Map<string, (approved: boolean) => void> = new Map();
+   private _pendingHumanAssistanceConfirms: Map<string, (approved: boolean, userMessage?: string) => void> = new Map();
    private _editPermissionEnabled: boolean = true;
    constructor(private readonly _context: vscode.ExtensionContext) {}
 
@@ -263,10 +263,10 @@ ${ctx.afterContext}
     }
   }
 
-  public async userConfirmHumanAssistance(question: string): Promise<boolean> {
+  public async userConfirmHumanAssistance(question: string): Promise<{ approved: boolean; userMessage?: string }> {
     if (!this._view) {
       // No UI surface to ask the user; treat as cancelled.
-      return false;
+      return { approved: false };
     }
 
     const requestId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -279,24 +279,24 @@ ${ctx.afterContext}
       },
     });
 
-    return await new Promise<boolean>((resolve) => {
+    return await new Promise<{ approved: boolean; userMessage?: string }>((resolve) => {
       const timer = setTimeout(() => {
         this._pendingHumanAssistanceConfirms.delete(requestId);
-        resolve(false);
+        resolve({ approved: false });
       }, 30 * 60 * 1000); // 30 min timeout
 
-      this._pendingHumanAssistanceConfirms.set(requestId, (approved) => {
+      this._pendingHumanAssistanceConfirms.set(requestId, (approved, userMessage) => {
         clearTimeout(timer);
         this._pendingHumanAssistanceConfirms.delete(requestId);
-        resolve(approved);
+        resolve({ approved, userMessage });
       });
     });
   }
 
-  public resolveHumanAssistanceConfirm(requestId: string, approved: boolean): void {
+  public resolveHumanAssistanceConfirm(requestId: string, approved: boolean, userMessage?: string): void {
     const resolver = this._pendingHumanAssistanceConfirms.get(requestId);
     if (resolver) {
-      resolver(approved);
+      resolver(approved, userMessage);
     }
   }
 

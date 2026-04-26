@@ -241,7 +241,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       if (msg.type === 'humanAssistanceConfirmResponse') {
         this._uiManager.resolveHumanAssistanceConfirm(
           typeof msg.requestId === 'string' ? msg.requestId : '',
-          !!msg.approved
+          !!msg.approved,
+          typeof msg.userMessage === 'string' ? msg.userMessage : undefined
         );
       }
        if (msg.type === 'setEditPermission') {
@@ -562,7 +563,7 @@ Uncommitted changes will be lost.`,
   .confirm-btn.apply:hover { background: var(--vscode-testing-runAction, #4aa844); }
   .confirm-btn.cancel { background: transparent; color: var(--vscode-foreground); }
   .confirm-btn.cancel:hover { background: var(--vscode-toolbar-hoverBackground); }
-  .confirm-meta { margin-top: 6px; font-size: 10px; color: var(--vscode-descriptionForeground); }
+  .confirm-meta { margin-top: 6px; font-size: 13px; color: var(--vscode-descriptionForeground); white-space: pre-wrap; }
 
   /* Input area: textarea left; right column = Edit (full width) + send/stop (same width block) */
   .input-area {
@@ -824,16 +825,22 @@ Uncommitted changes will be lost.`,
       </div>
       <div id="confirm-meta" class="confirm-meta"></div>
     </div>
+
     <div id="human-assistance-confirm">
       <div class="confirm-row">
-        <div class="confirm-title">🧑 Human Assistance Requested</div>
+        <div class="confirm-title">Human Assistance Requested</div>
         <div class="confirm-actions">
-          <button id="human-assistance-done" class="confirm-btn apply" type="button">✅ Done</button>
+          <button id="human-assistance-done" class="confirm-btn apply" type="button">Done</button>
           <button id="human-assistance-cancel" class="confirm-btn cancel" type="button">Cancel</button>
         </div>
       </div>
       <div id="human-assistance-question" class="confirm-meta"></div>
+      <div class="confirm-row" style="margin-top: 8px;">
+        <input id="human-assistance-input" type="text" placeholder="Type a response (optional)..." style="flex: 1; padding: 6px 8px; border: 1px solid var(--vscode-input-border); border-radius: 4px; background: var(--vscode-input-background); color: var(--vscode-input-foreground); font-family: inherit; font-size: 13px;">
+        <button id="human-assistance-send" class="confirm-btn apply" type="button">Send</button>
+      </div>
     </div>
+
       <div class="input-area">
         <textarea id="input" rows="3" placeholder="Describe what you want to change…"></textarea>
         <div class="input-actions-column">

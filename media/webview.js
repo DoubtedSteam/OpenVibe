@@ -41,9 +41,11 @@
    var confirmTitleEl = qs('#replace-confirm .confirm-title');
    var humanAssistBar = byId('human-assistance-confirm');
    var humanAssistQuestion = byId('human-assistance-question');
-   var humanAssistDoneBtn = byId('human-assistance-done');
-   var humanAssistCancelBtn = byId('human-assistance-cancel');
-  var TOOL_ICONS = {
+    var humanAssistDoneBtn = byId('human-assistance-done');
+    var humanAssistCancelBtn = byId('human-assistance-cancel');
+    var humanAssistInput = byId('human-assistance-input');
+    var humanAssistSendBtn = byId('human-assistance-send');
+   var TOOL_ICONS = {
     read_file: '📄',
     find_in_file: '🔍',
     edit: '✏️',
@@ -552,7 +554,7 @@
     scrollBottom();
   }
 
-  function respondConfirm(approved) {
+  function respondConfirm(approved, userMessage) {
     if (!pendingConfirm || !pendingConfirm.requestId) {
       if (confirmBar) confirmBar.classList.remove('show');
       if (humanAssistBar) humanAssistBar.classList.remove('show');
@@ -562,13 +564,14 @@
     if (kind === 'shell') {
       safePost({ type: 'shellConfirmResponse', requestId: pendingConfirm.requestId, approved: approved });
     } else if (kind === 'humanAssistance') {
-      safePost({ type: 'humanAssistanceConfirmResponse', requestId: pendingConfirm.requestId, approved: approved });
+      safePost({ type: 'humanAssistanceConfirmResponse', requestId: pendingConfirm.requestId, approved: approved, userMessage: userMessage || '' });
     } else {
       safePost({ type: 'replaceConfirmResponse', requestId: pendingConfirm.requestId, approved: approved });
     }
     pendingConfirm = null;
     if (confirmBar) confirmBar.classList.remove('show');
     if (humanAssistBar) humanAssistBar.classList.remove('show');
+    if (humanAssistInput) humanAssistInput.value = '';
   }
 
   // Sidebar bindings
@@ -594,6 +597,10 @@
   if (confirmCancelBtn) confirmCancelBtn.addEventListener('click', function () { respondConfirm(false); });
   if (humanAssistDoneBtn) humanAssistDoneBtn.addEventListener('click', function () { respondConfirm(true); });
   if (humanAssistCancelBtn) humanAssistCancelBtn.addEventListener('click', function () { respondConfirm(false); });
+  if (humanAssistSendBtn) humanAssistSendBtn.addEventListener('click', function () {
+    var msg = humanAssistInput ? humanAssistInput.value.trim() : '';
+    respondConfirm(true, msg);
+  });
   if (sendBtn) sendBtn.addEventListener('click', function () {
     if (!input) return;
     var text = input.value.trim();
