@@ -1,7 +1,7 @@
 import { ChatMessage, ApiConfig } from '../types';
 import { getAgentRuntimeContextBlock } from '../agentRuntimeContext';
 import { SYSTEM_PROMPT, TOOL_DEFINITIONS } from '../toolDefinitions';
-import { sendChatMessage } from '../api';
+import { sendChatMessage, streamChatMessage } from '../api';
 import { gitSnapshotTool } from '../tools';
 import { AUTO_COMPACT_TOKEN_THRESHOLD, MAX_TOOL_ITERATIONS } from '../constants';
 import { extractXmlPlaceholders, applyXmlPlaceholders } from '../mmOutput';
@@ -9,6 +9,8 @@ import type { OperationController } from '../operationController';
 
 export class MessageHandler {
   private _isRunning = false;
+  /** Cumulative token usage across all LLM calls in this session. */
+  private _accumulatedUsage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
 
   constructor(
     private readonly _context: {
@@ -102,7 +104,29 @@ export class MessageHandler {
 
 ` + getAgentRuntimeContextBlock() + langInstr + injectedSystemPrompt);
 
-        const response = await sendChatMessage(allMessages, apiConfig, TOOL_DEFINITIONS, this._context.operation.signal());
+        let response;
+        if (iterations === 1) {
+          // First call: stream content to webview in real-time
+          this._context.post({ type: 'streamStart' });
+          response = await streamChatMessage(
+            allMessages,
+            apiConfig,
+            TOOL_DEFINITIONS,
+            this._context.operation.signal(),
+            {
+              onReasoning: (delta) => this._context.post({ type: 'streamReasoning', content: delta }),
+              onContent: (delta) => this._context.post({ type: 'streamChunk', content: delta }),
+            }
+          );
+          this._context.post({ type: 'streamEnd' });
+        } else {
+          // Subsequent calls (tool-call result rounds): no streaming needed
+          response = await sendChatMessage(allMessages, apiConfig, TOOL_DEFINITIONS, this._context.operation.signal());
+        }
+        // Accumulate and report token usage after every LLM call
+        this._accumulateAndSendUsage(response.tokenUsage);
+
+
 
         // Check for stop request before processing response
         if (this._context.operation.isStopped()) {
@@ -192,13 +216,6 @@ export class MessageHandler {
 
           this._context.addMessage({ role: 'assistant', content, reasoning_content: response.reasoningContent });
           this._context.post({ type: 'addMessage', message: { role: 'assistant', content } });
-          if (response.tokenUsage) {
-            this._context.post({ type: 'tokenUsage', usage: response.tokenUsage });
-            // 自动 compact：prompt_tokens 超过阈值时在本轮结束后压缩历史
-            if (response.tokenUsage.prompt_tokens >= AUTO_COMPACT_TOKEN_THRESHOLD) {
-              await this._context.compactHistory(true);
-            }
-          }
 
           const todo = this._context.getTodoControlInfo();
           if (!todo) {
@@ -267,4 +284,26 @@ export class MessageHandler {
         return '';
     }
   }
+  /**
+   * Accumulate token usage and send to webview.
+   * Also triggers auto-compact when prompt tokens exceed threshold.
+   */
+  private _accumulateAndSendUsage(usage: { prompt_tokens: number; completion_tokens: number; total_tokens: number } | undefined): void {
+    if (!usage) return;
+    this._accumulatedUsage.prompt_tokens += usage.prompt_tokens;
+    this._accumulatedUsage.completion_tokens += usage.completion_tokens;
+    this._accumulatedUsage.total_tokens += usage.total_tokens;
+    this._context.post({
+      type: 'tokenUsage',
+      usage,
+      accumulated: { ...this._accumulatedUsage },
+    });
+    // Auto-compact when prompt_tokens exceed threshold
+    if (usage.prompt_tokens >= AUTO_COMPACT_TOKEN_THRESHOLD) {
+      // Fire-and-forget compact
+      this._context.compactHistory(true).catch(() => {});
+    }
+  }
+
+
 }

@@ -679,6 +679,47 @@ Uncommitted changes will be lost.`,
     text-align: right; padding: 0 4px 2px; opacity: 0.7;
   }
 
+  /* Streamed reasoning content (DeepSeek thinking) */
+  .reasoning-content {
+    display: block;
+    font-size: 11px;
+    color: var(--vscode-textBlockQuote-border, #888);
+    font-style: italic;
+    opacity: 0.75;
+    padding: 4px 0;
+    border-left: 2px solid var(--vscode-textBlockQuote-border, #555);
+    padding-left: 8px;
+    margin: 4px 0;
+  }
+
+
+  /* Token usage footer bar */
+  #usage-footer {
+    flex-shrink: 0;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 12px;
+    padding: 3px 8px;
+    font-size: 10px;
+    color: var(--vscode-descriptionForeground);
+    opacity: 0.6;
+    border-top: 1px solid var(--vscode-input-border, transparent);
+    min-height: 20px;
+  }
+  #usage-footer .usage-item {
+    white-space: nowrap;
+  }
+  #usage-footer .usage-label {
+    opacity: 0.7;
+  }
+  #usage-footer .usage-value {
+    font-weight: 600;
+  }
+  #usage-footer:empty {
+    display: none;
+  }
+
   /* Session sidebar */
   #session-sidebar {
     position: fixed; left: -250px; top: 0; width: 250px; height: 100vh;
@@ -840,6 +881,10 @@ Uncommitted changes will be lost.`,
         <button id="human-assistance-send" class="confirm-btn apply" type="button">Send</button>
       </div>
     </div>
+    </div>
+
+    <div id="usage-footer"></div>
+
 
       <div class="input-area">
         <textarea id="input" rows="3" placeholder="Describe what you want to change…"></textarea>

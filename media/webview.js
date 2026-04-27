@@ -55,6 +55,12 @@
 
    var pendingToolCard = null;
    var pendingConfirm = null; // { requestId, ... }
+   // Streaming
+   var _streamingMsgEl = null;
+   var _streamingReasoningEl = null;
+   
+
+   var pendingConfirm = null; // { requestId, ... }
    
    // Edit permission state
    var editPermissionEnabled = true;
@@ -244,7 +250,60 @@
     row.appendChild(bubble);
     messagesDiv.appendChild(row);
     scrollBottom();
+    messagesDiv.appendChild(row);
+    scrollBottom();
   }
+
+  // ── Streaming support ─────────────────────────────────────────────────────
+  function handleStreamStart() {
+    if (!messagesDiv) return;
+    // Remove any existing streaming message
+    _streamingMsgEl = null;
+    _streamingReasoningEl = null;
+    var row = document.createElement('div');
+    row.className = 'message-row assistant';
+    var label = document.createElement('div');
+    label.className = 'message-role';
+    label.textContent = 'Assistant';
+    row.appendChild(label);
+    var bubble = document.createElement('div');
+    bubble.className = 'bubble';
+    bubble.textContent = '';
+    row.appendChild(bubble);
+    messagesDiv.appendChild(row);
+    _streamingMsgEl = bubble;
+    scrollBottom();
+  }
+
+  function handleStreamChunk(content) {
+    if (!_streamingMsgEl) return;
+    _streamingMsgEl.textContent += content;
+    scrollBottom();
+  }
+
+  function handleStreamReasoning(content) {
+    // Append reasoning to the same bubble with a distinct style
+    if (!_streamingMsgEl) return;
+    var span = document.createElement('span');
+    span.className = 'reasoning-content';
+    span.textContent = content;
+    _streamingMsgEl.appendChild(span);
+    scrollBottom();
+  }
+
+  function handleStreamEnd() {
+    // Parse the accumulated text as markdown for proper display
+    if (!_streamingMsgEl) return;
+    var raw = _streamingMsgEl.textContent || '';
+    if (raw) {
+      _streamingMsgEl.innerHTML = parseMarkdown(raw);
+    }
+    _streamingMsgEl = null;
+    _streamingReasoningEl = null;
+    scrollBottom();
+  }
+
+
   function addCheckCard(data) {
     if (!messagesDiv) return;
     var verdict = data.verdict || '';
@@ -453,13 +512,25 @@
     setTimeout(function () { try { el.remove(); } catch (_) {} }, 8000);
   }
 
-  function showTokenUsage(usage) {
+  function showTokenUsage(msg) {
     if (!messagesDiv) return;
+    var usage = msg.usage;
+    var accumulated = msg.accumulated;
+    // Per-call inline indicator
     var el = document.createElement('div');
     el.className = 'token-usage';
     el.textContent = '↑ ' + usage.prompt_tokens + '  ↓ ' + usage.completion_tokens + '  Σ ' + usage.total_tokens + ' tokens';
     messagesDiv.appendChild(el);
     scrollBottom();
+    // Sticky footer with accumulated usage
+    var footer = byId('usage-footer');
+    if (!footer) return;
+    if (accumulated) {
+      footer.innerHTML =
+        '<span class="usage-item"><span class="usage-label">prompt </span><span class="usage-value">' + accumulated.prompt_tokens + '</span></span>' +
+        '<span class="usage-item"><span class="usage-label">completion </span><span class="usage-value">' + accumulated.completion_tokens + '</span></span>' +
+        '<span class="usage-item"><span class="usage-label">total </span><span class="usage-value">' + accumulated.total_tokens + '</span></span>';
+    }
   }
 
   function formatTime(timestamp) {
@@ -632,9 +703,14 @@
       case 'toolResult':     resolveToolCard(msg.result, msg.fromReplay === true); break;
       case 'loading':        showLoading(msg.loading); break;
       case 'error':          showError(msg.message); break;
-      case 'tokenUsage':     showTokenUsage(msg.usage); break;
+      case 'tokenUsage':     showTokenUsage(msg); break;
       case 'setRunning':     setRunningState(msg.running); break;
       case 'info':           showInfo(msg.message); break;
+      case 'streamStart':    handleStreamStart(); break;
+      case 'streamChunk':    handleStreamChunk(msg.content); break;
+      case 'streamReasoning': handleStreamReasoning(msg.content); break;
+      case 'streamEnd':      handleStreamEnd(); break;
+
       case 'requestReplaceConfirm': {
         pendingConfirm = msg.data || null;
         pendingConfirm.kind = 'replace';
@@ -669,6 +745,8 @@
       case 'clearMessages':
         if (messagesDiv) messagesDiv.innerHTML = '';
         pendingToolCard = null;
+        _streamingMsgEl = null;
+        _streamingReasoningEl = null;
         pendingConfirm = null;
         if (confirmBar) confirmBar.classList.remove('show');
         if (humanAssistBar) humanAssistBar.classList.remove('show');

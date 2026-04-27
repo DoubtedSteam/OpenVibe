@@ -480,6 +480,47 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'grep_search',
+      description:
+        'Search across all workspace files for a given pattern (case-sensitive by default). Returns matching file paths and line contents. ' +
+        'The include/exclude patterns follow VS Code glob syntax (e.g. "**/*.ts", "**/*.{ts,js}"). ' +
+        'Use this when you need to find where something is referenced across multiple files.',
+      parameters: {
+        type: 'object',
+        properties: {
+          pattern: {
+            type: 'string',
+            description: 'Text pattern to search for (case-sensitive).',
+          },
+          includePattern: {
+            type: 'string',
+            description:
+              'Glob pattern to include files (e.g. "**/*.ts"). Defaults to "**/*" if not set.',
+          },
+          excludePattern: {
+            type: 'string',
+            description:
+              'Glob pattern to exclude files (e.g. "**/node_modules/**"). Default excludes node_modules and .git.',
+          },
+          maxResults: {
+            type: 'number',
+            description:
+              'Maximum number of matches to return (default 50, max 200).',
+          },
+          caseSensitive: {
+            type: 'boolean',
+            description: 'Whether search is case-sensitive (default true).',
+          },
+        },
+        required: ['pattern'],
+      },
+    },
+  },
+
+
 
 ];
 export const SYSTEM_PROMPT = `You are Vibe Coding Assistant — an AI that can directly read and edit files inside the user's VS Code workspace.

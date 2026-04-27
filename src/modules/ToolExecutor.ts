@@ -21,6 +21,7 @@ import {
   listActivatedSkillsTool,
   setActivatedSkillsCallbacks,
   webFetchTool,
+  grepSearchTool,
 } from '../tools';
 import type { ReplaceCheckContext, ReplaceCheckResult } from '../tools';
 import type { ApiConfig, AgentLogEntry, AssistantTodoPersistedState } from '../types';
@@ -484,6 +485,18 @@ ${list}
           timeoutMs: args.timeoutMs as number | undefined,
         });
       }
+
+      case 'grep_search': {
+        return grepSearchTool({
+          pattern: args.pattern as string,
+          includePattern: args.includePattern as string | undefined,
+          excludePattern: args.excludePattern as string | undefined,
+          maxResults: args.maxResults as number | undefined,
+          caseSensitive: args.caseSensitive as boolean | undefined,
+        });
+      }
+
+
 
       default:
         return JSON.stringify({ error: `Unknown tool: ${name}` });
