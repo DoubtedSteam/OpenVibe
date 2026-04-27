@@ -287,6 +287,7 @@ export class SessionManager {
     session.title = title;
     session.updated = Date.now();
     this._saveSessions();
+    this.postSessionsList();
   }
 
   public async deleteSession(sessionId: string): Promise<boolean> {
