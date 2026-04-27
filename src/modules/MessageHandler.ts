@@ -1,3 +1,6 @@
+import * as vscode from 'vscode';
+import * as path from 'path';
+import * as fs from 'fs';
 import { ChatMessage, ApiConfig } from '../types';
 import { getAgentRuntimeContextBlock } from '../agentRuntimeContext';
 import { SYSTEM_PROMPT, TOOL_DEFINITIONS } from '../toolDefinitions';
@@ -48,6 +51,9 @@ export class MessageHandler {
 
     // Empty message = "continue" signal; add placeholder to conversation history for LLM context.
     if (text) {
+      // Resolve @ references before storing the message
+      text = await this._resolveReferences(text);
+
       this._context.onUserInstructionStart?.();
       // 尝试创建Git快照（静默失败，不影响主流程）
       try {
@@ -284,6 +290,80 @@ export class MessageHandler {
         return '';
     }
   }
+
+  /**
+   * Resolve @ references in user input.
+   * Supports:
+   *   @file:path    — Read file content and embed as context
+   *   @problem      — Embed current VS Code diagnostics
+   *   @selection    — Embed active editor selection
+   */
+  private async _resolveReferences(text: string): Promise<string> {
+    let result = text;
+
+    // 1. Resolve @file:path — read file content
+    const fileRefRe = /@file:(\S+)/g;
+    let fm: RegExpExecArray | null;
+    while ((fm = fileRefRe.exec(result)) !== null) {
+      const raw = fm[0];
+      const relPath = fm[1];
+      try {
+        const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+        if (!root) continue;
+        const absPath = path.resolve(root, relPath);
+        if (!fs.existsSync(absPath)) {
+          result = result.replace(raw, `\n> ⚠️ 文件未找到: \`${relPath}\`\n`);
+          continue;
+        }
+        const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(absPath));
+        const content = doc.getText();
+        const ext = path.extname(relPath).slice(1) || 'plaintext';
+        const block = `\n\n> 📄 **引用文件: \`${relPath}\`**\n\`\`\`${ext}\n${content}\n\`\`\`\n`;
+        result = result.replace(raw, block);
+      } catch (e: any) {
+        result = result.replace(raw, `\n> ⚠️ 读取文件失败: \`${relPath}\` — ${e.message}\n`);
+      }
+    }
+
+    // 2. Resolve @problem — current diagnostics
+    if (result.includes('@problem')) {
+      const allDiags = vscode.languages.getDiagnostics();
+      const lines: string[] = [];
+      for (const [uri, diags] of allDiags) {
+        for (const d of diags) {
+          const filePath = vscode.workspace.asRelativePath(uri);
+          const line = d.range.start.line + 1;
+          const sev = d.severity === vscode.DiagnosticSeverity.Error ? '❌' :
+                      d.severity === vscode.DiagnosticSeverity.Warning ? '⚠️' : 'ℹ️';
+          lines.push(`- ${sev} \`${filePath}:${line}\` ${d.message}`);
+        }
+      }
+      const block = lines.length > 0
+        ? `\n\n> 🔴 **当前诊断错误 (${lines.length} 条)**\n${lines.slice(0, 30).join('\n')}${lines.length > 30 ? `\n> … 还有 ${lines.length - 30} 条` : ''}\n`
+        : '\n\n> ✅ 当前无诊断错误\n';
+      result = result.replace(/@problem/g, block);
+    }
+
+    // 3. Resolve @selection — active editor selection
+    if (result.includes('@selection')) {
+      const editor = vscode.window.activeTextEditor;
+      if (editor && !editor.selection.isEmpty) {
+        const selection = editor.selection;
+        const text = editor.document.getText(selection);
+        const filePath = vscode.workspace.asRelativePath(editor.document.uri);
+        const ext = path.extname(filePath).slice(1) || 'plaintext';
+        const startLine = selection.start.line + 1;
+        const block = `\n\n> ✂️ **选中代码: \`${filePath}:${startLine}\`**\n\`\`\`${ext}\n${text}\n\`\`\`\n`;
+        result = result.replace(/@selection/g, block);
+      } else {
+        result = result.replace(/@selection/g, '\n\n> ⚠️ 当前没有选中任何代码\n');
+      }
+    }
+
+    return result;
+  }
+
+
   /**
    * Accumulate token usage and send to webview.
    * Also triggers auto-compact when prompt tokens exceed threshold.

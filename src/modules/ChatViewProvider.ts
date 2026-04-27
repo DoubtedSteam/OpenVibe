@@ -691,6 +691,62 @@ Uncommitted changes will be lost.`,
   }
 
 
+  /* @引用自动补全下拉菜单 */
+  #ref-autocomplete {
+    position: absolute;
+    bottom: 100%;
+    left: 0;
+    right: 0;
+    background: var(--vscode-dropdown-background, var(--vscode-editor-background));
+    border: 1px solid var(--vscode-focusBorder, #007acc);
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    display: none;
+    z-index: 100;
+    max-height: 180px;
+    overflow-y: auto;
+    font-size: 12px;
+  }
+  #ref-autocomplete.show { display: block; }
+  .ref-autocomplete-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    cursor: pointer;
+    color: var(--vscode-foreground);
+    border-bottom: 1px solid var(--vscode-dropdown-border, transparent);
+  }
+  .ref-autocomplete-item:last-child { border-bottom: none; }
+  .ref-autocomplete-item:hover,
+  .ref-autocomplete-item.selected {
+    background: var(--vscode-list-hoverBackground, rgba(128,128,128,0.15));
+  }
+  .ref-autocomplete-item .ref-icon { font-size: 14px; flex-shrink: 0; }
+  .ref-autocomplete-item .ref-label { font-weight: 600; flex-shrink: 0; }
+  .ref-autocomplete-item .ref-desc {
+    font-size: 11px;
+    color: var(--vscode-descriptionForeground);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .ref-autocomplete-item .ref-hint {
+    font-size: 10px;
+    color: var(--vscode-textLink-foreground, #3794ff);
+    margin-left: auto;
+    flex-shrink: 0;
+  }
+
+  /* Input wrapper for absolute positioning of dropdown */
+  .input-wrapper {
+    position: relative;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+
+
   /* Token usage footer bar */
   #usage-footer {
     flex-shrink: 0;
@@ -884,7 +940,10 @@ Uncommitted changes will be lost.`,
 
 
       <div class="input-area">
-        <textarea id="input" rows="3" placeholder="Describe what you want to change…"></textarea>
+        <div class="input-wrapper">
+          <div id="ref-autocomplete"></div>
+          <textarea id="input" rows="3" placeholder="Describe what you want to change… (Tip: type @ to reference files/problems/selection)"></textarea>
+        </div>
         <div class="input-actions-column">
           <div class="input-actions-top">
             <button id="edit-toggle" class="edit-toggle on" title="Toggle edit permission - ON: LLM can use edit tools, OFF: read-only mode">

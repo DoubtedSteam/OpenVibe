@@ -304,6 +304,130 @@
   }
 
 
+  // ── @ 引用自动补全 ─────────────────────────────────────────────────────────
+  var REF_ITEMS = [
+    { label: 'file', icon: '📄', desc: '引用文件内容', hint: 'file:path' },
+    { label: 'problem', icon: '🔴', desc: '当前诊断错误', hint: '' },
+    { label: 'selection', icon: '✂️', desc: '当前选中代码', hint: '' },
+  ];
+  var _refOpen = false;
+  var _refSelectedIdx = 0;
+  var _refFilter = '';
+
+  function getAutocompleteEl() {
+    return byId('ref-autocomplete');
+  }
+
+  function closeRefAutocomplete() {
+    _refOpen = false;
+    var el = getAutocompleteEl();
+    if (el) el.classList.remove('show');
+  }
+
+  function openRefAutocomplete(filter) {
+    _refFilter = filter || '';
+    _refSelectedIdx = 0;
+    renderAutocomplete();
+    var el = getAutocompleteEl();
+    if (el) el.classList.add('show');
+    _refOpen = true;
+  }
+
+  function renderAutocomplete() {
+    var el = getAutocompleteEl();
+    if (!el) return;
+    var filtered = REF_ITEMS;
+    if (_refFilter) {
+      var f = _refFilter.toLowerCase();
+      filtered = REF_ITEMS.filter(function (item) {
+        return item.label.indexOf(f) !== -1 || item.desc.indexOf(f) !== -1;
+      });
+    }
+    if (filtered.length === 0) { el.innerHTML = ''; el.classList.remove('show'); _refOpen = false; return; }
+    var html = '';
+    for (var i = 0; i < filtered.length; i++) {
+      var item = filtered[i];
+      var selClass = i === _refSelectedIdx ? ' selected' : '';
+      var hintHtml = item.hint ? '<span class="ref-hint">@' + item.hint + '</span>' : '';
+      html += '<div class="ref-autocomplete-item' + selClass + '" data-index="' + i + '">' +
+        '<span class="ref-icon">' + item.icon + '</span>' +
+        '<span class="ref-label">@' + item.label + '</span>' +
+        '<span class="ref-desc">' + item.desc + '</span>' + hintHtml +
+        '</div>';
+    }
+    el.innerHTML = html;
+    // Scroll selected into view
+    var sel = el.querySelector('.selected');
+    if (sel) sel.scrollIntoView({ block: 'nearest' });
+  }
+
+  function applyRefSelection() {
+    var el = getAutocompleteEl();
+    if (!el || !_refOpen) return;
+    var items = el.querySelectorAll('.ref-autocomplete-item');
+    if (_refSelectedIdx < 0 || _refSelectedIdx >= items.length) return;
+    var label = REF_ITEMS[_refSelectedIdx].label;
+    insertRefTag(label);
+    closeRefAutocomplete();
+  }
+
+  function insertRefTag(label) {
+    if (!input) return;
+    var val = input.value;
+    var pos = input.selectionStart;
+    // Find the start of the @word by searching backwards
+    var start = pos;
+    while (start > 0 && val[start - 1] !== '@') {
+      start--;
+    }
+    // If there's no @ before, insert @ at cursor
+    if (start === pos || val[start] !== '@') {
+      // Check if there's an @ nearby (user might be typing at cursor)
+      start = pos;
+      var before = val.slice(0, pos);
+      var atIdx = before.lastIndexOf('@');
+      if (atIdx >= 0) {
+        start = atIdx;
+      } else {
+        // No @ found, just insert @label at cursor
+        var newVal = val.slice(0, pos) + '@' + label + (label === 'file' ? ':' : '') + ' ' + val.slice(pos);
+        input.value = newVal;
+        var newPos = pos + 1 + label.length + (label === 'file' ? 1 : 0) + 1;
+        input.setSelectionRange(newPos, newPos);
+        input.style.height = 'auto';
+        input.style.height = Math.min(input.scrollHeight, 120) + 'px';
+        return;
+      }
+    }
+    // Replace @word with @label
+    var end = start + 1;
+    while (end < val.length && val[end] !== ' ' && val[end] !== '\n') { end++; }
+    var replacement = '@' + label + (label === 'file' ? ':' : '') + ' ';
+    var newVal = val.slice(0, start) + replacement + val.slice(end);
+    input.value = newVal;
+    var newPos = start + replacement.length;
+    input.setSelectionRange(newPos, newPos);
+    input.style.height = 'auto';
+    input.style.height = Math.min(input.scrollHeight, 120) + 'px';
+  }
+
+  function getRefFilter() {
+    if (!input) return '';
+    var val = input.value;
+    var pos = input.selectionStart;
+    var before = val.slice(0, pos);
+    var atIdx = before.lastIndexOf('@');
+    if (atIdx === -1) return '';
+    var after = before.slice(atIdx + 1);
+    // If there's a space or newline after @, it's just an @ symbol
+    if (after.length === 0) return '';
+    if (after.indexOf(' ') !== -1 || after.indexOf('\n') !== -1) return '';
+    // If it's @file:path, don't show autocomplete
+    if (after.indexOf(':') !== -1) return '';
+    return after;
+  }
+
+
   function addCheckCard(data) {
     if (!messagesDiv) return;
     var verdict = data.verdict || '';
@@ -674,6 +798,7 @@
   });
   if (sendBtn) sendBtn.addEventListener('click', function () {
     if (!input) return;
+    closeRefAutocomplete();
     var text = input.value.trim();
     input.value = '';
     input.style.height = 'auto';
@@ -685,13 +810,59 @@
    if (editToggleBtn) editToggleBtn.addEventListener('click', toggleEditPermission);
   if (input) {
     input.addEventListener('keydown', function (e) {
+      if (_refOpen) {
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          _refSelectedIdx = Math.min(_refSelectedIdx + 1, REF_ITEMS.length - 1);
+          renderAutocomplete();
+          return;
+        }
+        if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          _refSelectedIdx = Math.max(_refSelectedIdx - 1, 0);
+          renderAutocomplete();
+          return;
+        }
+        if (e.key === 'Enter' || e.key === 'Tab') {
+          e.preventDefault();
+          applyRefSelection();
+          return;
+        }
+        if (e.key === 'Escape') {
+          closeRefAutocomplete();
+          return;
+        }
+      }
       if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (sendBtn) sendBtn.click(); }
     });
     input.addEventListener('input', function () {
       input.style.height = 'auto';
       input.style.height = Math.min(input.scrollHeight, 120) + 'px';
+      // @ autocomplete
+      var filter = getRefFilter();
+      if (filter !== null && filter !== undefined && filter !== '') {
+        openRefAutocomplete(filter);
+      } else {
+        closeRefAutocomplete();
+      }
+    });
+    // Click outside to close
+    input.addEventListener('blur', function () {
+      setTimeout(closeRefAutocomplete, 200);
     });
   }
+  // Click on dropdown items
+  document.addEventListener('click', function (e) {
+    var item = e.target && e.target.closest && e.target.closest('.ref-autocomplete-item');
+    if (item) {
+      var idx = parseInt(item.getAttribute('data-index'), 10);
+      if (!isNaN(idx)) {
+        _refSelectedIdx = idx;
+        applyRefSelection();
+      }
+      return;
+    }
+  });
 
   window.addEventListener('message', function (event) {
     var msg = event.data;
