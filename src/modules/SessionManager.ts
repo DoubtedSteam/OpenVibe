@@ -291,17 +291,13 @@ export class SessionManager {
   }
 
   public async deleteSession(sessionId: string): Promise<boolean> {
-    if (this._sessions.length <= 1) {
-      console.warn('Cannot delete the only session');
-      return false;
-    }
-
     const sessionIndex = this._sessions.findIndex(s => s.id === sessionId);
     if (sessionIndex === -1) {
       console.warn(`Session ${sessionId} not found`);
       return false;
     }
 
+    // 如果要删除的是当前会话，先尝试切换到另一个会话
     if (sessionId === this._currentSessionId) {
       const otherSession = this._sessions.find(s => s.id !== sessionId);
       if (otherSession) {
@@ -309,7 +305,14 @@ export class SessionManager {
       }
     }
 
+    // 从数组中移除
     this._sessions.splice(sessionIndex, 1);
+
+    // 删除后如果列表为空，自动创建一个新的默认会话
+    if (this._sessions.length === 0) {
+      this._createDefaultSession();
+    }
+
     this._saveSessions();
     this.postSessionsList();
     return true;
