@@ -879,7 +879,6 @@ Uncommitted changes will be lost.`,
         <button id="human-assistance-send" class="confirm-btn apply" type="button">Send</button>
       </div>
     </div>
-    </div>
 
     <div id="usage-footer"></div>
 
@@ -899,6 +898,7 @@ Uncommitted changes will be lost.`,
           </div>
         </div>
       </div>
+    </div>
 <script src="${scriptUri}"></script>
 </body>
 </html>`;
