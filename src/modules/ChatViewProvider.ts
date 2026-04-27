@@ -677,19 +677,6 @@ Uncommitted changes will be lost.`,
     text-align: right; padding: 0 4px 2px; opacity: 0.7;
   }
 
-  /* Streamed reasoning content (DeepSeek thinking) */
-  .reasoning-content {
-    display: block;
-    font-size: 11px;
-    color: var(--vscode-textBlockQuote-border, #888);
-    font-style: italic;
-    opacity: 0.75;
-    padding: 4px 0;
-    border-left: 2px solid var(--vscode-textBlockQuote-border, #555);
-    padding-left: 8px;
-    margin: 4px 0;
-  }
-
 
   /* @引用自动补全下拉菜单 */
   #ref-autocomplete {

@@ -4,7 +4,7 @@ import * as fs from 'fs';
 import { ChatMessage, ApiConfig } from '../types';
 import { getAgentRuntimeContextBlock } from '../agentRuntimeContext';
 import { SYSTEM_PROMPT, TOOL_DEFINITIONS } from '../toolDefinitions';
-import { sendChatMessage, streamChatMessage } from '../api';
+import { sendChatMessage } from '../api';
 import { gitSnapshotTool } from '../tools';
 import { AUTO_COMPACT_TOKEN_THRESHOLD, MAX_TOOL_ITERATIONS } from '../constants';
 import { extractXmlPlaceholders, applyXmlPlaceholders } from '../mmOutput';
@@ -110,25 +110,7 @@ export class MessageHandler {
 
 ` + getAgentRuntimeContextBlock() + langInstr + injectedSystemPrompt);
 
-        let response;
-        if (iterations === 1) {
-          // First call: stream content to webview in real-time
-          this._context.post({ type: 'streamStart' });
-          response = await streamChatMessage(
-            allMessages,
-            apiConfig,
-            TOOL_DEFINITIONS,
-            this._context.operation.signal(),
-            {
-              onReasoning: (delta) => this._context.post({ type: 'streamReasoning', content: delta }),
-              onContent: (delta) => this._context.post({ type: 'streamChunk', content: delta }),
-            }
-          );
-          this._context.post({ type: 'streamEnd' });
-        } else {
-          // Subsequent calls (tool-call result rounds): no streaming needed
-          response = await sendChatMessage(allMessages, apiConfig, TOOL_DEFINITIONS, this._context.operation.signal());
-        }
+        const response = await sendChatMessage(allMessages, apiConfig, TOOL_DEFINITIONS, this._context.operation.signal());
         // Accumulate and report token usage after every LLM call
         this._accumulateAndSendUsage(response.tokenUsage);
 
