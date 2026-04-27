@@ -36,7 +36,7 @@ import {
   reviewTodolistGenerate,
 } from './todolistReview';
 import type { ShellCommandReviewSettings } from './shellCommandReview';
-import { reviewShellCommand, shellEditorCandidate } from './shellCommandReview';
+import { reviewShellCommand } from './shellCommandReview';
 import type { ShellReviewAgentResult } from './shellCommandReview';
 
 function detectShellFileOpBypass(command: string): string | null {
@@ -571,6 +571,7 @@ ${list}
     const apiConfig = this._context.getApiConfig();
     const confirmShell = apiConfig.confirmShellCommand !== false;
 
+    // If review disabled: direct user confirm → execute
     if (!cfg.enabled) {
       if (confirmShell) {
         const approved = await this._context.userConfirmShellCommand(proposedFromTool);
@@ -581,8 +582,7 @@ ${list}
       return await runShellCommandTool({ command: proposedFromTool });
     }
 
-    // Fast preflight: avoid expensive multi-round LLM review for commands that are policy-rejected anyway.
-    // This fixes cases like "dir src/webview /B" where shell review is guaranteed to FAIL (no-shell-for-context).
+    // Fast preflight: reject commands that are policy-violating before calling LLM review
     const bypass = detectShellFileOpBypass(proposedFromTool);
     if (bypass) {
       return JSON.stringify({
@@ -623,153 +623,87 @@ ${list}
 
     const relatedContext = `${relatedContextBase || '(none)'}\n\n${todoBlock}\n${recentShell}`;
 
-    let reviewNotes: string[] = [];
-    let commandCandidate = proposedFromTool;
+    // Single review pass (code-edit-review style, no editor agent / no retry loop)
+    if (this._stopped()) {
+      return JSON.stringify({ success: false, operation: 'run_shell_command', error: 'Operation stopped by user.' });
+    }
 
-    for (let attempt = 1; attempt <= cfg.maxAttempts; attempt++) {
-      if (this._stopped()) {
+    this._log('shellReview', 'request', { command: proposedFromTool });
+    let review: ShellReviewAgentResult;
+    try {
+      review = await reviewShellCommand({
+        apiConfig,
+        userRequest,
+        relatedContext,
+        projectConstraints: memoryExcerpt,
+        command: proposedFromTool,
+        proposedFromTool,
+        reviewTimeoutMs: cfg.reviewTimeoutMs,
+        signal: this._signal(),
+        log: (e) => this._context.log?.(e),
+      });
+    } catch (e: any) {
+      if (e?.name === 'AbortError' || this._stopped()) {
         return JSON.stringify({ success: false, operation: 'run_shell_command', error: 'Operation stopped by user.' });
       }
-      try {
-        this._log('shellEditor', 'request', { attempt, proposedFromTool, priorCandidate: commandCandidate, reviewNotes });
-        const edited = await shellEditorCandidate({
-          apiConfig,
-          userRequest,
-          relatedContext,
-          projectConstraints: memoryExcerpt,
-          proposedFromTool,
-          priorCandidate: commandCandidate,
-          reviewNotes,
-          editorTimeoutMs: cfg.editorTimeoutMs,
-          signal: this._signal(),
-          log: (e) => this._context.log?.(e),
-        });
-        commandCandidate = edited.command;
-        this._log('shellEditor', 'response', { attempt, command: commandCandidate });
-      } catch (e: any) {
-        if (e?.name === 'AbortError' || this._stopped()) {
-          return JSON.stringify({ success: false, operation: 'run_shell_command', error: 'Operation stopped by user.' });
-        }
-        this._log('shellEditor', 'error', { attempt, error: e?.message ?? String(e) });
-        return JSON.stringify({
-          success: false,
-          operation: 'run_shell_command',
-          error: `Shell editor agent failed: ${e.message}`,
-          reviewNotesAccumulated: reviewNotes,
-        });
-      }
+      return JSON.stringify({
+        success: false,
+        operation: 'run_shell_command',
+        error: `Shell review agent failed: ${e?.message ?? String(e)}`,
+      });
+    }
+    this._log('shellReview', 'response', { decision: review.decision, summary: review.summary, notes: review.notes });
 
-      if (this._stopped()) {
-        return JSON.stringify({ success: false, operation: 'run_shell_command', error: 'Operation stopped by user.' });
-      }
-      this._log('shellReview', 'request', { attempt, command: commandCandidate, proposedFromTool });
-      let review;
-      try {
-        review = await reviewShellCommand({
-          apiConfig,
-          userRequest,
-          relatedContext,
-          projectConstraints: memoryExcerpt,
-          command: commandCandidate,
-          proposedFromTool,
-          reviewTimeoutMs: cfg.reviewTimeoutMs,
-          signal: this._signal(),
-          log: (e) => this._context.log?.(e),
-        });
-      } catch (e: any) {
-        if (e?.name === 'AbortError' || this._stopped()) {
-          return JSON.stringify({ success: false, operation: 'run_shell_command', error: 'Operation stopped by user.' });
-        }
-        return JSON.stringify({
-          success: false,
-          operation: 'run_shell_command',
-          error: `Shell review agent failed: ${e?.message ?? String(e)}`,
-          reviewNotesAccumulated: reviewNotes,
-        });
-      }
-      this._log('shellReview', 'response', { attempt, decision: review.decision, summary: review.summary, notes: review.notes });
-
-      if (review.decision === 'PASS') {
-        if (attempt > 1) {
-          this._postUiEcho(
-            `✅ **Shell review** · passed on round **${attempt}/${cfg.maxAttempts}** (command was refined until review passed).`
-          );
-        }
-        if (confirmShell) {
-          if (this._stopped()) {
-            return JSON.stringify({ success: false, operation: 'run_shell_command', error: 'Operation stopped by user.' });
-          }
-          const approved = await this._context.userConfirmShellCommand(commandCandidate);
-          if (!approved) {
-            return JSON.stringify({
-              success: false,
-              error: 'User cancelled shell command',
-              reviewedCommand: commandCandidate,
-            });
-          }
-        }
+    if (review.decision === 'PASS') {
+      if (confirmShell) {
         if (this._stopped()) {
           return JSON.stringify({ success: false, operation: 'run_shell_command', error: 'Operation stopped by user.' });
         }
-        const execResult = await runShellCommandTool({ command: commandCandidate });
-        // Record recent executions to help the reviewer avoid redundant reruns.
-        this._lastShellExecutions.unshift({ command: commandCandidate, at: Date.now() });
-        if (this._lastShellExecutions.length > 20) {
-          this._lastShellExecutions.length = 20;
-        }
-        try {
-          const parsed = JSON.parse(execResult) as Record<string, unknown>;
-          return JSON.stringify({
-            ...parsed,
-            shellReviewAttempts: attempt,
-            reviewedCommand: commandCandidate,
-            originalToolCommand: proposedFromTool,
-          });
-        } catch {
-          return execResult;
+        const approved = await this._context.userConfirmShellCommand(proposedFromTool);
+        if (!approved) {
+          return JSON.stringify({ success: false, error: 'User cancelled shell command' });
         }
       }
-
-      // If the reviewer indicates the shell approach is fundamentally wrong for this step,
-      // stop immediately rather than burning more LLM rounds.
-      if (shouldEarlyStopOnShellReviewFail(review)) {
-        reviewNotes = mergeReviewNotes(reviewNotes, review.notes);
+      if (this._stopped()) {
+        return JSON.stringify({ success: false, operation: 'run_shell_command', error: 'Operation stopped by user.' });
+      }
+      const execResult = await runShellCommandTool({ command: proposedFromTool });
+      this._lastShellExecutions.unshift({ command: proposedFromTool, at: Date.now() });
+      if (this._lastShellExecutions.length > 20) {
+        this._lastShellExecutions.length = 20;
+      }
+      try {
+        const parsed = JSON.parse(execResult) as Record<string, unknown>;
         return JSON.stringify({
-          success: false,
-          operation: 'run_shell_command',
-          error: 'run_shell_command: reviewer indicates this should not be done via shell; stopping retries.',
-          reviewNotesAccumulated: reviewNotes,
-          lastCandidateCommand: commandCandidate,
-          shellReviewAttempts: attempt,
-          reviewedCommand: commandCandidate,
+          ...parsed,
           originalToolCommand: proposedFromTool,
-          message: 'No command was executed. Follow reviewer guidance (use workspace tools instead) and retry only if the goal truly requires shell.',
         });
+      } catch {
+        return execResult;
       }
+    }
 
-      reviewNotes = mergeReviewNotes(reviewNotes, review.notes);
-      if (attempt >= cfg.maxAttempts) {
-        return JSON.stringify({
-          success: false,
-          operation: 'run_shell_command',
-          error: `run_shell_command: review did not pass after ${cfg.maxAttempts} attempt(s).`,
-          reviewNotesAccumulated: reviewNotes,
-          lastCandidateCommand: commandCandidate,
-          message: 'No command was executed. Adjust the request or tool arguments from reviewer feedback and retry.',
-        });
-      }
-
-      this._postUiEcho(
-        `🔁 **Shell review** · round **${attempt}/${cfg.maxAttempts}** — not passed\n\n` +
-          `${review.summary || 'See tool result for reviewer notes.'}\n\n` +
-          `_Regenerating command…_`
-      );
+    // Review FAILED
+    if (shouldEarlyStopOnShellReviewFail(review)) {
+      return JSON.stringify({
+        success: false,
+        operation: 'run_shell_command',
+        error: 'run_shell_command: command rejected by review (not appropriate for shell).',
+        reviewNotesAccumulated: review.notes,
+        lastCandidateCommand: proposedFromTool,
+        originalToolCommand: proposedFromTool,
+        message: 'No command was executed. Follow reviewer guidance (use workspace tools instead).',
+      });
     }
 
     return JSON.stringify({
       success: false,
       operation: 'run_shell_command',
-      error: 'Unexpected shell command review loop exit.',
+      error: 'run_shell_command: review did not pass.',
+      reviewNotesAccumulated: review.notes,
+      lastCandidateCommand: proposedFromTool,
+      originalToolCommand: proposedFromTool,
+      message: 'No command was executed. Adjust the tool arguments from reviewer feedback and retry.',
     });
   }
 

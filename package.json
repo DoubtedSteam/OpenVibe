@@ -133,25 +133,13 @@
         "vibe-coding.shellCommandReview.enabled": {
           "type": "boolean",
           "default": true,
-          "description": "When true, run_shell_command runs a shell editor agent plus an independent safety review before optional human confirmation."
-        },
-        "vibe-coding.shellCommandReview.maxAttempts": {
-          "type": "number",
-          "default": 5,
-          "minimum": 1,
-          "description": "Max editor/review rounds per run_shell_command call."
+          "description": "When true, run_shell_command runs an independent safety review before optional human confirmation (single-pass, same mode as code edit review)."
         },
         "vibe-coding.shellCommandReview.reviewTimeoutMs": {
           "type": "number",
           "default": 120000,
           "minimum": 5000,
-          "description": "HTTP timeout (ms) for each shell safety review API call."
-        },
-        "vibe-coding.shellCommandReview.editorTimeoutMs": {
-          "type": "number",
-          "default": 120000,
-          "minimum": 5000,
-          "description": "HTTP timeout (ms) for each shell editor agent API call."
+          "description": "HTTP timeout (ms) for the shell safety review API call."
         }
       }
     }

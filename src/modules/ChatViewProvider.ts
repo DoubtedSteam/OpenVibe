@@ -135,9 +135,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     const c = vscode.workspace.getConfiguration('vibe-coding');
     return {
       enabled: c.get<boolean>('shellCommandReview.enabled', true) !== false,
-      maxAttempts: Math.max(1, c.get<number>('shellCommandReview.maxAttempts', 5)),
       reviewTimeoutMs: Math.max(5000, c.get<number>('shellCommandReview.reviewTimeoutMs', 120000)),
-      editorTimeoutMs: Math.max(5000, c.get<number>('shellCommandReview.editorTimeoutMs', 120000)),
     };
   }
 
