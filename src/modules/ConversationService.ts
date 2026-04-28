@@ -390,6 +390,27 @@ export class ConversationService {
           if (tm?.role === 'tool' && tm.tool_call_id === tc.id) {
             post({ type: 'toolResult', name: tc.function.name, result: tm.content ?? '{}', fromReplay: true });
             i++;
+            // ── task_complete: 从 tool 结果中重建修改文件列表显示 ─────────
+            if (tc.function.name === 'task_complete') {
+              try {
+                const parsed = JSON.parse(tm.content ?? '{}') as {
+                  modifiedFiles?: string[];
+                  summary?: string;
+                };
+                if (parsed.modifiedFiles && Array.isArray(parsed.modifiedFiles)) {
+                  const fileListStr = parsed.modifiedFiles.length > 0
+                    ? parsed.modifiedFiles.map((f: string) => `  - \`${f}\``).join('\n')
+                    : '  (无文件修改)';
+                  const fileSummary = parsed.modifiedFiles.length > 0
+                    ? `\n\n**📄 本次修改了 ${parsed.modifiedFiles.length} 个文件**:\n${fileListStr}`
+                    : '';
+                  const displayContent = `✅ **任务完成**${parsed.summary ? ': ' + parsed.summary : ''}${fileSummary}`;
+                  post({ type: 'addMessage', message: { role: 'assistant', content: displayContent } });
+                }
+              } catch {
+                /* ignore parse errors */
+              }
+            }
           } else {
             // Tool call with no matching result (e.g. interrupted by reload).
             // For ask_human, show a clear system message instead of a cryptic error.

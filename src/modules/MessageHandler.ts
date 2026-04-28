@@ -189,10 +189,10 @@ export class MessageHandler {
               this._context.post({ type: 'toolResult', name, result });
               this._context.addMessage({ role: 'tool', content: result, tool_call_id: toolCall.id });
 
-              // ── 在聊天中显示修改文件列表 ──────────────────────────────
+              // ── 在聊天中显示修改文件列表（hiddenFromLlm 不占用 LLM 上下文）────
               const displayContent = `✅ **任务完成**${summary ? ': ' + summary : ''}${fileSummary}`;
               this._context.post({ type: 'addMessage', message: { role: 'assistant', content: displayContent } });
-              this._context.addMessage({ role: 'assistant', content: displayContent });
+              this._context.addMessage({ role: 'assistant', content: displayContent, hiddenFromLlm: true });
 
               stopAfterTools = true;
               break;
