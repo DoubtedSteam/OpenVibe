@@ -86,7 +86,15 @@ export class UIManager {
      const workspace = vscode.workspace.workspaceFolders?.[0];
      const name = workspace?.name || 'No workspace open';
      const path = workspace?.uri.fsPath || '';
-     const text = `Workspace: ${name} (${path})`;
+     let text = `Workspace: ${name} (${path})`;
+
+     // Append active editor file info
+     const editor = vscode.window.activeTextEditor;
+     if (editor && editor.document.uri.scheme === 'file') {
+       const filePath = vscode.workspace.asRelativePath(editor.document.uri);
+       text += ` — Active file: ${filePath}`;
+     }
+
      this.post({ type: 'addMessage', message: { role: 'system', content: text } });
    }
 

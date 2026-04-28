@@ -285,6 +285,7 @@ export class MessageHandler {
    *   @file:path    — Read file content and embed as context
    *   @problem      — Embed current VS Code diagnostics
    *   @selection    — Embed active editor selection
+   *   @active       — Embed the content of the currently active file
    */
   private async _resolveReferences(text: string): Promise<string> {
     let result = text;
@@ -345,6 +346,22 @@ export class MessageHandler {
         result = result.replace(/@selection/g, block);
       } else {
         result = result.replace(/@selection/g, '\n\n> ⚠️ 当前没有选中任何代码\n');
+      }
+    }
+
+    // 4. Resolve @active — currently active file content
+    if (result.includes('@active')) {
+      const editor = vscode.window.activeTextEditor;
+      if (editor && editor.document.uri.scheme === 'file') {
+        const doc = editor.document;
+        const filePath = vscode.workspace.asRelativePath(doc.uri);
+        const ext = path.extname(filePath).slice(1) || 'plaintext';
+        const content = doc.getText();
+        const lineCount = doc.lineCount;
+        const block = `\n\n> 📄 **当前活动文件: \`${filePath}\`** (${lineCount} 行)\n\`\`\`${ext}\n${content}\n\`\`\`\n`;
+        result = result.replace(/@active/g, block);
+      } else {
+        result = result.replace(/@active/g, '\n\n> ⚠️ 当前没有打开的文件\n');
       }
     }
 
