@@ -140,6 +140,9 @@ export class MessageHandler {
             }
             if (editContentBlocks.length > 0) {
               displayContent = response.content.replace(tagRe, '').trim();
+              // Clean up empty code fences that may result from tag stripping
+              // (prevents rendering as empty black-background <pre> boxes in the webview)
+              displayContent = displayContent.replace(/```\s*```/g, '');
             }
           }
 
@@ -189,8 +192,8 @@ export class MessageHandler {
               // ── 获取本次任务修改的文件列表 ──────────────────────────────
               const modifiedFiles = this._context.getSessionEditedFiles();
               const fileListStr = modifiedFiles.length > 0
-                ? modifiedFiles.map(f => `  - \`${f}\``).join('\n')
-                : '  (无文件修改)';
+                ? modifiedFiles.map(f => `- \`${f}\``).join('\n')
+                : '(无文件修改)';
               const fileSummary = modifiedFiles.length > 0
                 ? `\n\n**📄 本次修改了 ${modifiedFiles.length} 个文件**:\n${fileListStr}`
                 : '';

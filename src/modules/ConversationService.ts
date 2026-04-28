@@ -382,7 +382,12 @@ export class ConversationService {
   replaySessionToWebview(post: (msg: any) => void): void {
     const messages = this._session.getCurrentMessages();
     // Strip <edit-content> tags from content for display safety
-    const stripTags = (text: string): string => text.replace(/<edit-content>[\s\S]*?<\/edit-content>/gi, '').trim();
+    const stripTags = (text: string): string => {
+      let cleaned = text.replace(/<edit-content>[\s\S]*?<\/edit-content>/gi, '').trim();
+      // Clean up empty code fences that may result from tag stripping
+      cleaned = cleaned.replace(/```\s*```/g, '');
+      return cleaned;
+    };
     let i = 0;
     while (i < messages.length) {
       const m = messages[i];
@@ -422,8 +427,8 @@ export class ConversationService {
                 };
                 if (parsed.modifiedFiles && Array.isArray(parsed.modifiedFiles)) {
                   const fileListStr = parsed.modifiedFiles.length > 0
-                    ? parsed.modifiedFiles.map((f: string) => `  - \`${f}\``).join('\n')
-                    : '  (无文件修改)';
+                    ? parsed.modifiedFiles.map((f: string) => `- \`${f}\``).join('\n')
+                    : '(无文件修改)';
                   const fileSummary = parsed.modifiedFiles.length > 0
                     ? `\n\n**📄 本次修改了 ${parsed.modifiedFiles.length} 个文件**:\n${fileListStr}`
                     : '';
