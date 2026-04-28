@@ -423,7 +423,12 @@ export class ConversationService {
                   const fileSummary = parsed.modifiedFiles.length > 0
                     ? `\n\n**📄 本次修改了 ${parsed.modifiedFiles.length} 个文件**:\n${fileListStr}`
                     : '';
-                  const displayContent = `✅ **任务完成**${parsed.summary ? ': ' + parsed.summary : ''}${fileSummary}`;
+                  // 将 summary 中 "xxx；1) yyy；2) zzz" 格式自动变为换行列表
+                  const fmtSummary = parsed.summary
+                    ? parsed.summary.replace(/[；;]\s*(?=\d+[)\.])/g, '\n')
+                    : '';
+                  const summaryBlock = fmtSummary ? `\n\n${fmtSummary}` : '';
+                  const displayContent = `✅ **任务完成**${summaryBlock}${fileSummary}`;
                   post({ type: 'addMessage', message: { role: 'assistant', content: displayContent } });
                 }
               } catch {
