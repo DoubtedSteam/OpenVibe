@@ -173,9 +173,12 @@ export class MessageHandler {
             let args: Record<string, unknown> = {};
             try { args = JSON.parse(rawArgs); } catch { /* keep empty */ }
             if (editContentBlocks.length > 0 &&
-                (name === 'edit' || name === 'run_shell_command') &&
-                (!args['newContent'] || args['newContent'] === '')) {
-              args['newContent'] = editContentBlocks.shift()!;
+                (name === 'edit' || name === 'run_shell_command')) {
+              if (name === 'edit' && (!args['newContent'] || args['newContent'] === '')) {
+                args['newContent'] = editContentBlocks.shift()!;
+              } else if (name === 'run_shell_command' && (!args['command'] || args['command'] === '')) {
+                args['command'] = editContentBlocks.shift()!;
+              }
             }
 
 

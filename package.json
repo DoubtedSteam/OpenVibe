@@ -2,7 +2,7 @@
   "name": "vibe-coding-assistant",
   "displayName": "OpenVibe",
   "description": "AI coding assistant with file editing tools",
-  "version": "0.5.4",
+  "version": "0.5.5",
   "publisher": "DoubtedSteam",
   "repository": {
     "type": "git",

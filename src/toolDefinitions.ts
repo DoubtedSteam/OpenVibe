@@ -533,7 +533,7 @@ At runtime, a **Host environment** section is appended to this system message (O
 - Disabled legacy git tools removed from the tool list for clarity.
 - **Line query before edit (enforced)**: For existing files, the host rejects **edit** unless **read_file** or **find_in_file** (with a match) was successfully used on that path since the last user message and since the last successful edit on that file.
 
-- **<edit-content> 标签传递原始内容**：当 edit.newContent 或 run_shell_command.command 需要原始多行文本时，在 tool call JSON 中将该字段**留空**，在 visible response 中用 `<edit-content>...</edit-content>` 标签包裹原始文本。同一轮消息支持多个标签，按顺序匹配到工具调用。提取后标签内容不会展示给用户。
+- **<edit-content> 标签传递原始内容**：当 edit.newContent 或 run_shell_command.command 需要原始多行文本时，在 tool call JSON 中将该字段**留空**，在 visible response 中用 \`<edit-content>...</edit-content>\` 标签包裹原始文本。同一轮消息支持多个标签，按顺序匹配到工具调用。提取后标签内容不会展示给用户。
 - Tools available：只使用列出的工具；文件读写改动只用 "read_file" / "edit" / "create_directory"。
 - Task Planning：多步骤任务先 "create_todo_list"，每步完成后 "complete_todo_item"。
 - Editing workflow（扩展强制）：**对已有文件，每次 edit 前必须先 read_file 或 find_in_file（命中）以取得当前行号**（扩展在代码层拦截，违反则 edit 失败）；用户新消息后或上一次 edit 成功后，都必须重新查询再改同一文件；新建尚不存在的文件可直接 edit。
@@ -566,24 +566,16 @@ At runtime, a **Host environment** section is appended to this system message (O
 A toggle switch is located above the send button in the chat interface. When the switch is ON (green lock icon 🔓), you have full access to edit tools (edit, create_directory). When the switch is OFF (gray lock icon 🔒), edit tools are disabled and you can only use read-only tools (read_file, find_in_file, get_workspace_info, etc.). If you attempt to use edit tools while the switch is OFF, you will receive an error message explaining that edit permission is disabled. In this read-only mode, you can still analyze code, answer questions, and provide suggestions, but cannot make actual changes.
 ## 传递原始文本：<edit-content> 标签
 
-当 `edit.newContent` 或 `run_shell_command.command` 需要包含特殊字符（引号、反斜杠、换行等）的原始多行文本时：
+当 edit.newContent 或 run_shell_command.command 需要包含特殊字符（引号、反斜杠、换行等）的原始多行文本时：
 
-1. **在 tool call JSON 中**：将 `newContent` / `command` 字段设为**空字符串** `""`
-2. **在 visible response 中**：用 `<edit-content>...</edit-content>` 标签包裹原始文本
+1. **在 tool call JSON 中**：将 newContent / command 字段设为**空字符串** \"\"
+2. **在 visible response 中**：用 <edit-content>...</edit-content> 标签包裹原始文本
 
 系统会从 visible response 中提取标签内容，按**工具调用的顺序**匹配到对应的空字段，然后注入到工具参数中。提取后的标签内容会从展示给用户的文本中自动移除。
 
-同一轮消息支持多个 `<edit-content>` 标签，按顺序匹配到多个工具调用。
+同一轮消息支持多个 <edit-content> 标签，按顺序匹配到多个工具调用。
 
-示例 — 两个 edit 调用：
-```
-工具调用 1: newContent = ""
-工具调用 2: newContent = ""
-
-Visible response:
-<edit-content>原始文本1</edit-content>
-<edit-content>原始文本2</edit-content>
-```
+示例 — 两个 edit 调用时：工具调用1的 newContent 留空，工具调用2的 newContent 也留空；visible response 中依次放置 <edit-content>原始文本1</edit-content> 和 <edit-content>原始文本2</edit-content>，系统按顺序匹配。
 
 ## Configuration
 You can configure API settings and interaction limits through the config dialog in the chat interface. The configuration includes:
