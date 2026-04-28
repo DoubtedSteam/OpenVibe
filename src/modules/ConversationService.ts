@@ -1,4 +1,3 @@
-import * as vscode from 'vscode';
 import { ChatMessage, ToolCall, ApiConfig, AgentLogEntry, CompressedArchive } from '../types';
 import { getAgentRuntimeContextBlock } from '../agentRuntimeContext';
 import { sendChatMessage } from '../api';
@@ -249,32 +248,17 @@ export class ConversationService {
   async compactHistory(triggeredByTokenLimit = false): Promise<string> {
     const messages = this._session.getCurrentMessages();
     if (messages.length === 0) {
-      const emptyMessage = 'Nothing to compact: conversation is empty.';
-      if (triggeredByTokenLimit) {
-        this._post({ type: 'info', message: emptyMessage });
-      }
-      return JSON.stringify({ success: false, message: emptyMessage });
+      return JSON.stringify({ success: false, message: 'Nothing to compact: conversation is empty.' });
     }
 
     // ── Find reserve window ──────────────────────────────────────────────
     const reserveStart = this._findReserveWindowStart(messages);
     if (reserveStart === 0) {
-      const msg = 'Nothing to compact: conversation fits within the reserve window.';
-      if (triggeredByTokenLimit) {
-        this._post({ type: 'info', message: msg });
-      }
-      return JSON.stringify({ success: false, message: msg });
+      return JSON.stringify({ success: false, message: 'Nothing to compact: conversation fits within the reserve window.' });
     }
 
     const toCompress = messages.slice(0, reserveStart);
     const toKeep = messages.slice(reserveStart);
-
-    // ── UI notification ──────────────────────────────────────────────────
-    if (!triggeredByTokenLimit) {
-      this._post({ type: 'info', message: `🗜️ Compacting ${toCompress.length} older messages, keeping ${toKeep.length} recent messages intact…` });
-    } else {
-      this._post({ type: 'info', message: `⚡ Context window nearly full — compacting ${toCompress.length} older messages…` });
-    }
 
     // ── Generate summary ─────────────────────────────────────────────────
     const abortController = new AbortController();
@@ -333,9 +317,8 @@ export class ConversationService {
       });
 
       // ── New message list = [summary, ...toKeep] ────────────────────────
-      // Use role: 'user' so the summary reads as a contextual document
-      // provided by the user (the compacted history), rather than an
-      // assistant response.
+      // The summary replaces old messages as a user-role context document.
+      // Frontend is NOT updated — compact happens silently, invisible to the user.
       const summaryMessage: ChatMessage = {
         role: 'user',
         content:
@@ -343,17 +326,6 @@ export class ConversationService {
       };
 
       this._session.setCurrentMessages([summaryMessage, ...toKeep]);
-
-      this._post({ type: 'clearMessages' });
-      this._post({ type: 'addMessage', message: { role: 'user', content: summaryMessage.content! } });
-      if (!triggeredByTokenLimit) {
-        this._post({ type: 'info', message: `✅ History compacted. ${toCompress.length} older messages archived, ${toKeep.length} recent messages preserved.` });
-      }
-      
-      // 显示 VS Code 提示框通知，提醒用户执行了 compact
-      vscode.window.showInformationMessage(
-        `🗜️ 对话历史已压缩：归档 ${toCompress.length} 条消息，保留 ${toKeep.length} 条。`
-      );
 
       return JSON.stringify({
         success: true,
@@ -364,13 +336,9 @@ export class ConversationService {
       });
     } catch (error: any) {
       if (error.name === 'AbortError') {
-        const abortMessage = 'Compact cancelled.';
-        this._post({ type: 'info', message: abortMessage });
-        return JSON.stringify({ success: false, message: abortMessage });
+        return JSON.stringify({ success: false, message: 'Compact cancelled.' });
       }
-      const errorMessage = `Failed to compact history: ${error.message}`;
-      this._post({ type: 'error', message: errorMessage });
-      return JSON.stringify({ success: false, message: errorMessage });
+      return JSON.stringify({ success: false, message: `Failed to compact history: ${error.message}` });
     }
   }
 

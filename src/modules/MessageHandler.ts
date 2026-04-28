@@ -49,6 +49,27 @@ export class MessageHandler {
     this._context.operation.reset();
     this._context.post({ type: 'setRunning', running: true });
 
+    // /compact 命令直接触发压缩，不进入 LLM 循环
+    if (text.trim() === '/compact') {
+      try {
+        const result = await this._context.compactHistory(false);
+        const parsed = JSON.parse(result);
+        if (parsed.success) {
+          this._context.post({ type: 'info', message: `🗜️ 对话历史已压缩：归档 ${parsed.archived} 条消息，保留 ${parsed.preserved} 条。` });
+        } else {
+          this._context.post({ type: 'info', message: parsed.message || '压缩失败。' });
+        }
+      } catch (e: any) {
+        this._context.post({ type: 'error', message: `压缩失败: ${e.message}` });
+      } finally {
+        this._context.post({ type: 'loading', loading: false });
+        this._context.post({ type: 'setRunning', running: false });
+        this._isRunning = false;
+      }
+      return;
+    }
+
+
     // Empty message = "continue" signal; add placeholder to conversation history for LLM context.
     if (text) {
       // Resolve @ references before storing the message
