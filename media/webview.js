@@ -59,6 +59,7 @@
    
    // Edit permission state
    var editPermissionEnabled = true;
+    var _lastUserMessage = '';
   function scrollBottom() {
     if (!messagesDiv) return;
     messagesDiv.scrollTop = messagesDiv.scrollHeight;
@@ -566,25 +567,6 @@
     if (stopBtn) stopBtn.disabled = !running;
   }
 
-  function showInfo(msg) {
-    if (!messagesDiv) return;
-    var el = document.createElement('div');
-    el.className = 'info-msg';
-    el.textContent = msg;
-    messagesDiv.appendChild(el);
-    scrollBottom();
-    setTimeout(function () { try { el.remove(); } catch (_) {} }, 5000);
-  }
-
-  function showError(msg) {
-    if (!messagesDiv) return;
-    var el = document.createElement('div');
-    el.className = 'error-msg';
-    el.textContent = msg;
-    messagesDiv.appendChild(el);
-    scrollBottom();
-    setTimeout(function () { try { el.remove(); } catch (_) {} }, 8000);
-  }
 
   function showTokenUsage(msg) {
     if (!messagesDiv) return;
