@@ -289,7 +289,12 @@ export class ConversationService {
             m.role === 'user' ? 'User' :
             m.role === 'assistant' ? 'Assistant' :
             m.role === 'tool' ? 'Tool result' : 'System';
-          const body = typeof m.content === 'string' ? m.content : JSON.stringify(m.content);
+          let body = typeof m.content === 'string' ? m.content : JSON.stringify(m.content);
+          // Include reasoning_content for assistant messages so the summary
+          // captures the model's chain-of-thought reasoning as well.
+          if (m.role === 'assistant' && m.reasoning_content) {
+            body = `[Reasoning]\n${m.reasoning_content}\n[/Reasoning]\n\n${body}`;
+          }
           return `[${roleLabel}]\n${body}`;
         })
         .join('\n\n---\n\n');
@@ -328,8 +333,11 @@ export class ConversationService {
       });
 
       // ── New message list = [summary, ...toKeep] ────────────────────────
+      // Use role: 'user' so the summary reads as a contextual document
+      // provided by the user (the compacted history), rather than an
+      // assistant response.
       const summaryMessage: ChatMessage = {
-        role: 'assistant',
+        role: 'user',
         content:
           `📋 **[Conversation history compacted]**\n\n${summary}\n\n> 💡 *${toKeep.length} recent messages preserved; ${toCompress.length} older messages archived.*`,
       };
@@ -337,8 +345,7 @@ export class ConversationService {
       this._session.setCurrentMessages([summaryMessage, ...toKeep]);
 
       this._post({ type: 'clearMessages' });
-      this._post({ type: 'addMessage', message: { role: 'assistant', content: summaryMessage.content! } });
-
+      this._post({ type: 'addMessage', message: { role: 'user', content: summaryMessage.content! } });
       if (!triggeredByTokenLimit) {
         this._post({ type: 'info', message: `✅ History compacted. ${toCompress.length} older messages archived, ${toKeep.length} recent messages preserved.` });
       }
