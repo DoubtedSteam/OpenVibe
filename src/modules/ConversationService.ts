@@ -36,6 +36,18 @@ export class ConversationService {
     this._session.addMessage(msg);
   }
 
+  /**
+   * Adds an event notification message to the chat UI and persists it.
+   * Event messages are displayed as compact info banners and are always
+   * excluded from LLM context (hiddenFromLlm = true).
+   */
+  addEventMessage(content: string): void {
+    const msg: ChatMessage = { role: 'event', content, hiddenFromLlm: true };
+    this._session.addMessage(msg);
+    this._post({ type: 'addMessage', message: { role: 'event', content } });
+    this._session.saveCurrentSession();
+  }
+
   addAgentLog(entry: AgentLogEntry): void {
     this._session.addAgentLog(entry);
   }
@@ -98,7 +110,7 @@ export class ConversationService {
    * are appended to the system prompt.
    */
   buildMessagesForLlm(systemPrompt: string): ChatMessage[] {
-    const visible = this.getCurrentMessages().filter((m) => !m.hiddenFromLlm);
+    const visible = this.getCurrentMessages().filter((m) => !m.hiddenFromLlm && m.role !== 'event');
 
     // Append activated skill instructions to the system prompt
     let enrichedPrompt = systemPrompt;
@@ -204,7 +216,7 @@ export class ConversationService {
     let tokenCount = 0;
     for (let i = messages.length - 1; i >= 0; i--) {
       const msg = messages[i];
-      if (msg.hiddenFromLlm) continue;
+      if (msg.hiddenFromLlm || msg.role === 'event') continue;
       tokenCount += this._estimateMessageTokens(msg);
       if (tokenCount > COMPACT_RESERVE_TOKENS) {
         return i + 1;
@@ -270,7 +282,7 @@ export class ConversationService {
       const apiConfig = this._getApiConfig();
 
       const historyText = toCompress
-        .filter((m) => !m.hiddenFromLlm)
+        .filter((m) => !m.hiddenFromLlm && m.role !== 'event')
         .filter(m => m.role !== 'tool' || !!m.content)
         .map(m => {
           const roleLabel =
@@ -445,6 +457,11 @@ export class ConversationService {
         continue;
       }
       if (m.role === 'tool') {
+        i++;
+        continue;
+      }
+      if (m.role === 'event' && m.content) {
+        post({ type: 'addMessage', message: { role: 'event', content: m.content } });
         i++;
         continue;
       }

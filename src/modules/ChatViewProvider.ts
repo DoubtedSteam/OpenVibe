@@ -449,6 +449,18 @@ Uncommitted changes will be lost.`,
     background: #1a4a1a; color: #fff;
     border-radius: 4px; font-size: 11px; max-width: 100%;
   }
+  .message-row.event { align-items: flex-start; }
+  .event .bubble {
+    background: var(--vscode-editor-background);
+    border: 1px solid var(--vscode-input-border, #555);
+    border-left: 3px solid var(--vscode-textLink-foreground, #3794ff);
+    border-radius: 4px;
+    font-size: 11px;
+    max-width: 100%;
+    padding: 6px 10px;
+    color: var(--vscode-descriptionForeground);
+    opacity: 0.9;
+  }
 
   /* Tool call cards */
   .tool-card {

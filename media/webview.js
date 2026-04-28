@@ -227,7 +227,7 @@
     if (!messagesDiv) return;
     var row = document.createElement('div');
     row.className = 'message-row ' + role;
-    if (role !== 'system') {
+    if (role !== 'system' && role !== 'event') {
       var label = document.createElement('div');
       label.className = 'message-role';
       label.textContent = role === 'user' ? 'You' : 'Assistant';
@@ -243,8 +243,6 @@
       bubble.innerHTML = htmlContent;
     }
     row.appendChild(bubble);
-    messagesDiv.appendChild(row);
-    scrollBottom();
     messagesDiv.appendChild(row);
     scrollBottom();
   }
