@@ -1,6 +1,6 @@
 {
   "name": "vibe-coding-assistant",
-  "displayName": "Vibe Coding Assistant",
+  "displayName": "OpenVibe",
   "description": "AI coding assistant with file editing tools",
   "version": "0.5.4",
   "publisher": "DoubtedSteam",
@@ -23,7 +23,7 @@
       "activitybar": [
         {
           "id": "vibe-coding",
-          "title": "Vibe Coding",
+          "title": "OpenVibe",
           "icon": "media/icon.svg"
         }
       ]
@@ -40,7 +40,7 @@
     "commands": [
       {
         "command": "vibe-coding.openChat",
-        "title": "Open Vibe Coding Chat"
+        "title": "OpenVibe Chat"
       },
       {
         "command": "vibe-coding.clearHistory",
@@ -48,7 +48,7 @@
       }
     ],
     "configuration": {
-      "title": "Vibe Coding Assistant",
+      "title": "OpenVibe",
       "properties": {
         "vibe-coding.apiBaseUrl": {
           "type": "string",
