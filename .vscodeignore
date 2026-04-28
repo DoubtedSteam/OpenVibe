@@ -1,18 +1,38 @@
+# VS Code 配置
 .vscode
+
+# 版本控制
 .gitignore
 **/.git
 **/.svn
 **/.hg
 **/CVS
+
+# 系统文件
 **/.DS_Store
 **/Thumbs.db
+
+# 依赖（vsce 会自动包含 production dependencies）
 node_modules
 .vscode-test
+
+# TypeScript 源文件（已编译到 out/）
 src
 tsconfig.json
 **/*.ts
+
+# Sourcemap（调试用，发布时排除）
 **/*.map
+
+# 旧的构建产物
 *.vsix
+
+# 本地开发数据（不应随扩展发布）
+.OpenVibe/
+
+# 文档与图片
 imgs
 logo.png
+
+# 依赖锁定文件
 package-lock.json
