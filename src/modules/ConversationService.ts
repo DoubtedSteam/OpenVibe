@@ -1,8 +1,10 @@
-import { ChatMessage, ToolCall, ApiConfig, AgentLogEntry } from '../types';
+import { ChatMessage, ToolCall, ApiConfig, AgentLogEntry, CompressedArchive } from '../types';
 import { getAgentRuntimeContextBlock } from '../agentRuntimeContext';
 import { sendChatMessage } from '../api';
 import { SessionManager } from './SessionManager';
 import { loadActivatedSkillInstruction } from '../tools';
+import { COMPACT_RESERVE_TOKENS } from '../constants';
+
 
 /**
  * Owns conversation state and operations on top of {@link SessionManager}.
@@ -161,8 +163,75 @@ export class ConversationService {
     }
   }
 
+  // ─── Token estimation helpers ────────────────────────────────────────────
+
   /**
-   * Replace history with an LLM-generated summary (tool / auto compact).
+   * Rough token estimation for a string.
+   * 1 token ≈ 3.5 characters (blended average for mixed Chinese/English).
+   * Errs slightly high for safety.
+   */
+  private _estimateTokens(text: string): number {
+    if (!text) return 0;
+    return Math.ceil(text.length / 3.5);
+  }
+
+  /** Estimate tokens consumed by a single message (content + metadata overhead). */
+  private _estimateMessageTokens(msg: ChatMessage): number {
+    let total = 0;
+    if (typeof msg.content === 'string') {
+      total += this._estimateTokens(msg.content);
+    }
+    total += 1; // role label overhead
+    if (msg.tool_calls) {
+      total += msg.tool_calls.length * 20; // overhead per tool call
+      for (const tc of msg.tool_calls) {
+        total += this._estimateTokens(tc.function.name + tc.function.arguments);
+      }
+    }
+    if (msg.tool_call_id) {
+      total += 2;
+    }
+    return total;
+  }
+
+  /**
+   * Scan from the end of the message list to find where the reserve window begins.
+   * Messages from this index onward are kept intact; everything before is compressed.
+   * Returns 0 when no compaction is needed (all messages fit within the reserve window).
+   */
+  private _findReserveWindowStart(messages: ChatMessage[]): number {
+    let tokenCount = 0;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const msg = messages[i];
+      if (msg.hiddenFromLlm) continue;
+      tokenCount += this._estimateMessageTokens(msg);
+      if (tokenCount > COMPACT_RESERVE_TOKENS) {
+        return i + 1;
+      }
+    }
+    return 0;
+  }
+
+  /**
+   * Build language instruction for the summarizer based on user's API config.
+   */
+  private _buildCompactLanguageInstruction(): string {
+    const apiConfig = this._getApiConfig();
+    switch (apiConfig.language) {
+      case 'zh-CN':
+        return '\n- 请使用简体中文撰写摘要。\n- 使用第三人称现在时。';
+      case 'en':
+        return '\n- Write the summary in English.\n- Use third-person present tense.';
+      default:
+        return '\n- Use the same language as the conversation history.\n- Use third-person present tense.';
+    }
+  }
+
+  // ─── Compact implementation ──────────────────────────────────────────────
+
+  /**
+   * Compact conversation history: older messages (outside the 20k-token reserve window)
+   * are summarized by an LLM and archived. Recent messages are preserved intact.
    */
   async compactHistory(triggeredByTokenLimit = false): Promise<string> {
     const messages = this._session.getCurrentMessages();
@@ -174,17 +243,32 @@ export class ConversationService {
       return JSON.stringify({ success: false, message: emptyMessage });
     }
 
-    if (!triggeredByTokenLimit) {
-      this._post({ type: 'info', message: '🗜️ Compacting conversation history…' });
-    } else {
-      this._post({ type: 'info', message: '⚡ Context window nearly full — compacting conversation history…' });
+    // ── Find reserve window ──────────────────────────────────────────────
+    const reserveStart = this._findReserveWindowStart(messages);
+    if (reserveStart === 0) {
+      const msg = 'Nothing to compact: conversation fits within the reserve window.';
+      if (triggeredByTokenLimit) {
+        this._post({ type: 'info', message: msg });
+      }
+      return JSON.stringify({ success: false, message: msg });
     }
 
+    const toCompress = messages.slice(0, reserveStart);
+    const toKeep = messages.slice(reserveStart);
+
+    // ── UI notification ──────────────────────────────────────────────────
+    if (!triggeredByTokenLimit) {
+      this._post({ type: 'info', message: `🗜️ Compacting ${toCompress.length} older messages, keeping ${toKeep.length} recent messages intact…` });
+    } else {
+      this._post({ type: 'info', message: `⚡ Context window nearly full — compacting ${toCompress.length} older messages…` });
+    }
+
+    // ── Generate summary ─────────────────────────────────────────────────
     const abortController = new AbortController();
     try {
       const apiConfig = this._getApiConfig();
 
-      const historyText = messages
+      const historyText = toCompress
         .filter((m) => !m.hiddenFromLlm)
         .filter(m => m.role !== 'tool' || !!m.content)
         .map(m => {
@@ -197,14 +281,17 @@ export class ConversationService {
         })
         .join('\n\n---\n\n');
 
+      const langInstr = this._buildCompactLanguageInstruction();
+
       const summarizePrompt =
-        `You are a conversation summarizer. Below is the full history of a coding-assistant session.\n` +
-        `Your job is to write a CONCISE but COMPLETE summary that will replace the history.\n\n` +
+        `You are a conversation summarizer. Below is part of a coding-assistant session history.\n` +
+        `Your job is to write a CONCISE but COMPLETE summary that will replace this portion.\n\n` +
         `Rules:\n` +
         `- Keep: all files created/modified (with key changes), decisions made, goals, current task state, and any open questions.\n` +
         `- Omit: verbose tool output, repetitive reasoning, step-by-step narration already reflected in outcomes.\n` +
         `- Write in third-person present tense ("The user is building…", "The assistant has modified…").\n` +
-        `- End with a short "## Current State" section describing what was happening right before this summary.\n\n` +
+        `- End with a short "## Current State" section describing the overall status.` +
+        langInstr + '\n\n' +
         `=== CONVERSATION HISTORY ===\n${historyText}\n=== END ===\n\n` +
         `Write the summary now:`;
 
@@ -220,25 +307,35 @@ export class ConversationService {
 
       const summary = summaryResponse.content?.trim() ?? '(summary unavailable)';
 
+      // ── Archive original messages ──────────────────────────────────────
+      this._session.addCompressedArchive({
+        timestamp: Date.now(),
+        summary,
+        messages: toCompress,
+      });
+
+      // ── New message list = [summary, ...toKeep] ────────────────────────
       const summaryMessage: ChatMessage = {
         role: 'assistant',
         content:
-          `📋 **[Conversation history compacted]**\n\n${summary}`,
+          `📋 **[Conversation history compacted]**\n\n${summary}\n\n> 💡 *${toKeep.length} recent messages preserved; ${toCompress.length} older messages archived.*`,
       };
 
-      this._session.setCurrentMessages([summaryMessage]);
+      this._session.setCurrentMessages([summaryMessage, ...toKeep]);
 
       this._post({ type: 'clearMessages' });
       this._post({ type: 'addMessage', message: { role: 'assistant', content: summaryMessage.content! } });
 
       if (!triggeredByTokenLimit) {
-        this._post({ type: 'info', message: '✅ History compacted. Continuing with summary as context.' });
+        this._post({ type: 'info', message: `✅ History compacted. ${toCompress.length} older messages archived, ${toKeep.length} recent messages preserved.` });
       }
 
       return JSON.stringify({
         success: true,
-        message: 'Conversation history compacted successfully.',
+        message: `Conversation history compacted. Archived ${toCompress.length} messages, preserved ${toKeep.length}.`,
         summary: summaryMessage.content,
+        archived: toCompress.length,
+        preserved: toKeep.length,
       });
     } catch (error: any) {
       if (error.name === 'AbortError') {

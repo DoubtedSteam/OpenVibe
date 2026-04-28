@@ -38,11 +38,24 @@ export interface GitSnapshot {
   gitCommitHash?: string;
   gitTag?: string;
 }
-
 /** Mirrors in-memory todo state in {@link ToolExecutor}; persisted per session for reload. */
 export interface AssistantTodoPersistedState {
   goal: string;
   items: { text: string; done: boolean }[];
+}
+
+/**
+ * A frozen snapshot of conversation turns that were compacted.
+ * Stored in {@link ChatSession.compressedArchives} for data preservation.
+ * Most recent archive first.
+ */
+export interface CompressedArchive {
+  /** When this archive was created. */
+  timestamp: number;
+  /** The LLM-generated summary that replaced these messages. */
+  summary: string;
+  /** The original messages (pre-compact). */
+  messages: ChatMessage[];
 }
 
 export interface ChatSession {
@@ -57,7 +70,12 @@ export interface ChatSession {
   /** Last assistant todo list (create_todo_list / complete_todo_item); restored after window reload. */
   assistantTodoState?: AssistantTodoPersistedState | null;
   /** Skill names activated in this conversation, loaded from global skills pool. */
+  /** Skill names activated in this conversation, loaded from global skills pool. */
   activatedSkills?: string[];
+  /** Archived pre-compact conversation turns, most recent first. Never deleted automatically. */
+  compressedArchives?: CompressedArchive[];
+  /** Timestamp when this session was last opened/selected. Used to restore the most recent session on reload. */
+  lastOpenedAt?: number;
 }
 
 export interface ApiConfig {

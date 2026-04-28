@@ -181,6 +181,10 @@ export class MessageHandler {
             try {
               if (name === 'compact') {
                 result = await this._context.compactHistory(false);
+                // After user-initiated compact, stop the tool loop and wait for user input.
+                // compactHistory already updated the UI (clearMessages + addMessage summary).
+                stopAfterTools = true;
+                break;
               } else {
                 result = await this._context.executeTool(name, args);
               }
@@ -188,8 +192,9 @@ export class MessageHandler {
               result = JSON.stringify({ error: e.message });
             }
 
-            this._context.post({ type: 'toolResult', name, result });
+            // compact's tool result should NOT be posted (compactHistory already replaced the UI)
             if (name !== 'compact') {
+              this._context.post({ type: 'toolResult', name, result });
               this._context.addMessage({ role: 'tool', content: result, tool_call_id: toolCall.id });
             }
           } // End of for (const toolCall of response.toolCalls)

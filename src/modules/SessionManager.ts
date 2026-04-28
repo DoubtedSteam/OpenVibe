@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { ChatMessage, ChatSession, AgentLogEntry, AssistantTodoPersistedState } from '../types';
+import { ChatMessage, ChatSession, AgentLogEntry, AssistantTodoPersistedState, CompressedArchive } from '../types';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -92,12 +92,14 @@ export class SessionManager {
   }
 
   private _createDefaultSession(): void {
+    const now = Date.now();
     const defaultSession: ChatSession = {
       id: 'default',
       title: 'New Conversation',
-      created: Date.now(),
-      updated: Date.now(),
-      messages: []
+      created: now,
+      updated: now,
+      messages: [],
+      lastOpenedAt: now
     };
     this._sessions = [defaultSession];
     this._currentSessionId = 'default';
@@ -130,6 +132,7 @@ export class SessionManager {
         updated: Date.now(),
         messages: [],
         agentLogs: [],
+        lastOpenedAt: Date.now()
       };
       this._sessions.push(session);
     }
@@ -157,7 +160,8 @@ export class SessionManager {
         title: 'Chat Session',
         created: Date.now(),
         updated: Date.now(),
-        messages: []
+        messages: [],
+        lastOpenedAt: Date.now()
       };
       this._sessions.push(session);
     }
@@ -198,7 +202,12 @@ export class SessionManager {
       this._currentSessionId = saved;
       return;
     }
-    if (!this._sessions.some((s) => s.id === this._currentSessionId)) {
+    // Fallback: find session with the latest lastOpenedAt timestamp
+    const sortedByLastOpened = [...this._sessions].sort((a, b) => (b.lastOpenedAt ?? 0) - (a.lastOpenedAt ?? 0));
+    const lastOpened = sortedByLastOpened[0];
+    if (lastOpened) {
+      this._currentSessionId = lastOpened.id;
+    } else if (!this._sessions.some((s) => s.id === this._currentSessionId)) {
       this._currentSessionId = this._sessions[0]!.id;
     }
     void this._persistActiveSessionId();
@@ -275,6 +284,7 @@ export class SessionManager {
 
     this.saveCurrentSession();
     this._currentSessionId = sessionId;
+    newSession.lastOpenedAt = Date.now();
     void this._persistActiveSessionId();
     this.postSessionsList();
   }
@@ -319,14 +329,16 @@ export class SessionManager {
   }
 
   public async createSession(): Promise<ChatSession> {
-    const sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const now = Date.now();
+    const sessionId = `session_${now}_${Math.random().toString(36).substr(2, 9)}`;
     const newSession: ChatSession = {
       id: sessionId,
       title: `Conversation ${this._sessions.length + 1}`,
-      created: Date.now(),
-      updated: Date.now(),
+      created: now,
+      updated: now,
       messages: [],
-      isActive: true
+      isActive: true,
+      lastOpenedAt: now
     };
     
     // Add to sessions list
@@ -374,6 +386,30 @@ export class SessionManager {
         items: state.items.map((i) => ({ text: String(i.text), done: !!i.done })),
       };
     }
+    currentSession.updated = Date.now();
+    this._saveSessions();
+  }
+
+  /**
+   * Archive a batch of pre-compact messages to the current session.
+   * Keeps at most 10 archives to prevent unbounded growth.
+   * Newest archive is inserted at index 0.
+   */
+  public addCompressedArchive(archive: CompressedArchive): void {
+    const currentSession = this._sessions.find((s) => s.id === this._currentSessionId);
+    if (!currentSession) return;
+
+    if (!Array.isArray(currentSession.compressedArchives)) {
+      currentSession.compressedArchives = [];
+    }
+
+    currentSession.compressedArchives.unshift(archive);
+
+    // Keep at most 10 archives to bound storage growth
+    if (currentSession.compressedArchives.length > 10) {
+      currentSession.compressedArchives = currentSession.compressedArchives.slice(0, 10);
+    }
+
     currentSession.updated = Date.now();
     this._saveSessions();
   }
