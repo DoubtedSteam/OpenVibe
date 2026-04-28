@@ -279,29 +279,12 @@ export class MessageHandler {
           this._context.addMessage({ role: 'assistant', content, reasoning_content: response.reasoningContent });
           this._context.post({ type: 'addMessage', message: { role: 'assistant', content } });
 
-          const todo = this._context.getTodoControlInfo();
-          if (!todo) {
-            // No todo list: plain text response means we're done.
-            injectedSystemPrompt = '';
-            break;
-          }
-
-          if (todo.remaining <= 0) {
-            // Todo list exists but nothing remains: allow plain text to end.
-            injectedSystemPrompt = '';
-            break;
-          }
-
-          // Todo list exists and has remaining work: remind LLM to continue and use tools.
-          // Nudge the LLM internally (do NOT show in chatbot, do NOT store in session history).
-          injectedSystemPrompt =
-            `\n\n[INTERNAL NUDGE]\n` +
-            `你当前有一个todo list，仍有未完成的步骤（Remaining: ${todo.remaining}）。\n` +
-            `**Goal**: ${todo.goal}\n` +
-            `**Items**:\n${todo.list}\n\n` +
-            `请继续完成剩余步骤：必要时发起tool calls，并在完成某一步后调用complete_todo_item。\n` +
-            `当所有步骤完成且任务整体完成后，再调用task_complete（可选带summary）结束。\n` +
-            `[END INTERNAL NUDGE]\n`;
+          // Plan A: 模型输出纯文本（无 tool_calls）时始终结束循环，
+          // 把控制权交还给用户。模型主动选择输出文本而不是调用工具，
+          // 说明它在等待用户的下一步指示——无论 todo list 是否还有未完成项。
+          // 用户可以通过发送新消息来继续未完成的工作。
+          injectedSystemPrompt = '';
+          break;
         }
         
         if (iterations >= maxIterations) {
