@@ -165,6 +165,9 @@ export class ToolExecutor {
    */
   private _lineQueryFresh = new Map<string, boolean>();
 
+  /** Tracks file paths modified via the `edit` tool in the current user-turn session. */
+  private _sessionEditedFiles = new Set<string>();
+
   constructor(
      private readonly _context: {
        post: (message: any) => void;
@@ -239,6 +242,7 @@ export class ToolExecutor {
   public resetReviewUiCounters(): void {
     this._editReviewRound = 0;
     this._lineQueryFresh.clear();
+    this._sessionEditedFiles.clear();
   }
 
   private _normalizeFileKey(filePath: string): string {
@@ -262,6 +266,17 @@ export class ToolExecutor {
     this._editReviewRound += 1;
     return this._editReviewRound;
   }
+
+  /** Returns the list of file paths modified via `edit` in the current user-turn session. */
+  public getSessionEditedFiles(): string[] {
+    return Array.from(this._sessionEditedFiles).sort();
+  }
+
+  /** Clears the tracked edited files list. */
+  public clearSessionEditedFiles(): void {
+    this._sessionEditedFiles.clear();
+  }
+
 
    public async executeTool(name: string, args: Record<string, unknown>): Promise<string> {
      // Check if the tool requires edit permission
@@ -340,6 +355,8 @@ export class ToolExecutor {
           if (o.success === true) {
             // Next edit on this file must read_file / find_in_file again (strict gate).
             this._invalidateLineQuery(fp);
+            // Track the modified file for the task-complete summary
+            this._sessionEditedFiles.add(this._normalizeFileKey(fp));
           }
         } catch {
           /* ignore */

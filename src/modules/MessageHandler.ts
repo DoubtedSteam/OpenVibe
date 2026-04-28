@@ -27,6 +27,7 @@ export class MessageHandler {
       sanitizeIncompleteToolCalls: () => void;
       executeTool: (name: string, args: Record<string, unknown>) => Promise<string>;
       getTodoControlInfo: () => { goal: string; list: string; remaining: number } | null;
+      getSessionEditedFiles: () => string[];
       compactHistory: (triggeredByTokenLimit?: boolean) => Promise<string>;
       /** Reset per-turn UI counters (e.g. edit review #) when the user sends a new instruction. */
       onUserInstructionStart?: () => void;
@@ -167,10 +168,32 @@ export class MessageHandler {
 
             // task_complete：提示 AI 更新 .OpenVibe/memory.md 后结束
             if (name === 'task_complete') {
+              // ── 获取本次任务修改的文件列表 ──────────────────────────────
+              const modifiedFiles = this._context.getSessionEditedFiles();
+              const fileListStr = modifiedFiles.length > 0
+                ? modifiedFiles.map(f => `  - \`${f}\``).join('\n')
+                : '  (无文件修改)';
+              const fileSummary = modifiedFiles.length > 0
+                ? `\n\n**📄 本次修改了 ${modifiedFiles.length} 个文件**:\n${fileListStr}`
+                : '';
+
               const memoryHint = 'Task complete. Remember to update .OpenVibe/memory.md if you modified any files during this task — update Level 3/4 per-file immediately, then Level 1 after all files are done.';
-              const result = JSON.stringify({ success: true, operation: 'task_complete', message: 'Task marked complete. ' + memoryHint });
+              const summary = (args['summary'] as string) || '';
+              const result = JSON.stringify({
+                success: true,
+                operation: 'task_complete',
+                message: 'Task marked complete. ' + memoryHint,
+                summary,
+                modifiedFiles,
+              });
               this._context.post({ type: 'toolResult', name, result });
               this._context.addMessage({ role: 'tool', content: result, tool_call_id: toolCall.id });
+
+              // ── 在聊天中显示修改文件列表 ──────────────────────────────
+              const displayContent = `✅ **任务完成**${summary ? ': ' + summary : ''}${fileSummary}`;
+              this._context.post({ type: 'addMessage', message: { role: 'assistant', content: displayContent } });
+              this._context.addMessage({ role: 'assistant', content: displayContent });
+
               stopAfterTools = true;
               break;
             }
