@@ -615,17 +615,16 @@ The file must be organized into exactly these four levels, in order:
 - For every public/exported function and every private method that contains non-trivial logic:
   - Signature (name, parameters with types, return type)
   - What it does in 1–3 sentences
-  - Side effects (files written, state mutated, messages sent, API calls made)
-  - Error conditions and how they surface
+  - **注意**：不再维护副作用和错误处理细节（避免冗余和频繁过时），仅维护签名和作用描述
 
 ### How to use memory at session start
 1. **Read \`.OpenVibe/memory.md\` first** — before touching any source file.
 2. **Use Level 2 to decide which files are relevant** — do NOT call \`get_file_info\` to probe for file existence; Level 2 already lists every source file with its exact path. Use \`read_file\` directly.
-3. Use Level 3–4 to understand call sites and side effects before editing.
+3. Use Level 3–4 to understand class structure and function responsibilities before editing.
 4. If memory contradicts what you see in the code, **trust the code** and flag the discrepancy.
 
 ### When to update memory
-- **Per-file, not per-task**: After modifying each file, immediately update the corresponding Level 3 (class fields) and Level 4 (function signatures/side effects) descriptions.
+- **Per-file, not per-task**: After modifying each file, immediately update the corresponding Level 3 (class fields) and Level 4 (function signatures and descriptions) — Level 4 只需更新签名和作用描述，**无需维护副作用和错误处理**。
 - **After all files done**: Update Level 1 (project overview, design principles, etc.) only after all files are modified.
 - **Do NOT batch all memory updates at the end** — this leads to outdated intermediate state if the session is interrupted.
 
