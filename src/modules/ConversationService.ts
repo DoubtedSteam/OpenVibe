@@ -375,21 +375,25 @@ export class ConversationService {
   }
 
   /**
-   * Replays persisted messages to the webview (bubbles + tool cards).
-   */
+   /**
+    * Replays persisted messages to the webview (bubbles + tool cards).
+    * Strips any remaining <edit-content> tags from stored content as a safety net.
+    */
   replaySessionToWebview(post: (msg: any) => void): void {
     const messages = this._session.getCurrentMessages();
+    // Strip <edit-content> tags from content for display safety
+    const stripTags = (text: string): string => text.replace(/<edit-content>[\s\S]*?<\/edit-content>/gi, '').trim();
     let i = 0;
     while (i < messages.length) {
       const m = messages[i];
       if (m.role === 'user' && m.content) {
-        post({ type: 'addMessage', message: { role: 'user', content: m.content } });
+        post({ type: 'addMessage', message: { role: 'user', content: stripTags(m.content) } });
         i++;
         continue;
       }
       if (m.role === 'assistant' && m.tool_calls && m.tool_calls.length > 0) {
         if (m.content) {
-          post({ type: 'addMessage', message: { role: 'assistant', content: m.content } });
+          post({ type: 'addMessage', message: { role: 'assistant', content: stripTags(m.content) } });
         }
         i++;
         for (const tc of m.tool_calls) {
@@ -402,7 +406,7 @@ export class ConversationService {
           post({ type: 'toolCall', name: tc.function.name, args });
           // Tool execution may append UI-only assistant bubbles (hiddenFromLlm) before the tool row.
           while (i < messages.length && messages[i].role === 'assistant' && messages[i].hiddenFromLlm && messages[i].content) {
-            post({ type: 'addMessage', message: { role: 'assistant', content: messages[i].content! } });
+            post({ type: 'addMessage', message: { role: 'assistant', content: stripTags(messages[i].content!) } });
             i++;
           }
           const tm = messages[i];
@@ -460,7 +464,7 @@ export class ConversationService {
         continue;
       }
       if (m.role === 'assistant' && m.content && !m.hiddenFromLlm) {
-        post({ type: 'addMessage', message: { role: 'assistant', content: m.content } });
+        post({ type: 'addMessage', message: { role: 'assistant', content: stripTags(m.content) } });
         i++;
         continue;
       }

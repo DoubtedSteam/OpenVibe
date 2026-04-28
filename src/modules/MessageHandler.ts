@@ -7,7 +7,6 @@ import { SYSTEM_PROMPT, TOOL_DEFINITIONS } from '../toolDefinitions';
 import { sendChatMessage } from '../api';
 import { gitSnapshotTool } from '../tools';
 import { AUTO_COMPACT_TOKEN_THRESHOLD, MAX_TOOL_ITERATIONS } from '../constants';
-import { extractXmlPlaceholders, applyXmlPlaceholders } from '../mmOutput';
 import type { OperationController } from '../operationController';
 
 export class MessageHandler {
@@ -126,17 +125,36 @@ export class MessageHandler {
         if (response.toolCalls && response.toolCalls.length > 0) {
           // Reset any internal nudge once the model starts using tools again.
           injectedSystemPrompt = '';
-          // Push assistant turn (may have reasoning text + tool_calls)
+          // ── Extract <edit-content> blocks from visible response ──────────
+          // The AI can place raw multi-line content inside <edit-content> tags
+          // in the visible response instead of JSON-escaping it in newContent.
+          // These blocks are extracted here, filtered from UI display,
+          // and injected into corresponding tool calls with empty newContent.
+          const editContentBlocks: string[] = [];
+          let displayContent = response.content || '';
+          if (response.content) {
+            const tagRe = /<edit-content>([\s\S]*?)<\/edit-content>/gi;
+            let match: RegExpExecArray | null;
+            while ((match = tagRe.exec(response.content)) !== null) {
+              editContentBlocks.push(match[1]);
+            }
+            if (editContentBlocks.length > 0) {
+              displayContent = response.content.replace(tagRe, '').trim();
+            }
+          }
+
+          // Push assistant turn with filtered content (no <edit-content> blocks)
+          // Push assistant turn with filtered content (tags stripped)
           this._context.addMessage({
             role: 'assistant',
-            content: response.content,
+            content: displayContent,
             reasoning_content: response.reasoningContent,
             tool_calls: response.toolCalls,
           });
 
-          // Show any reasoning text the model produced alongside the tool calls
-          if (response.content) {
-            this._context.post({ type: 'addMessage', message: { role: 'assistant', content: response.content } });
+          // Show assistant text with <edit-content> blocks filtered out
+          if (displayContent) {
+            this._context.post({ type: 'addMessage', message: { role: 'assistant', content: displayContent } });
           }
 
 
@@ -151,17 +169,14 @@ export class MessageHandler {
             const name = toolCall.function.name;
             const rawArgs = toolCall.function.arguments;
 
-            // ── XML content fallback ───────────────────────────────────────────
-            // Before JSON.parse, scan for <edit-content>/<shell-content> tags
-            // embedded in newContent / command JSON string values.  The tagged
-            // payload is extracted, decoded (JSON-unescaped), and replaced with a
-            // safe placeholder.  After parse, placeholders are swapped back to
-            // the decoded raw text — the tagged content never goes through JSON
-            // escaping.
-            const { sanitizedArgs, placeholderMap } = extractXmlPlaceholders(rawArgs);
+            // Parse arguments and inject <edit-content> blocks into empty newContent
             let args: Record<string, unknown> = {};
-            try { args = JSON.parse(sanitizedArgs); } catch { /* keep empty */ }
-            applyXmlPlaceholders(args, placeholderMap);
+            try { args = JSON.parse(rawArgs); } catch { /* keep empty */ }
+            if (editContentBlocks.length > 0 &&
+                (name === 'edit' || name === 'run_shell_command') &&
+                (!args['newContent'] || args['newContent'] === '')) {
+              args['newContent'] = editContentBlocks.shift()!;
+            }
 
 
 
