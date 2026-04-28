@@ -385,12 +385,25 @@ export class ConversationService {
             post({ type: 'toolResult', name: tc.function.name, result: tm.content ?? '{}', fromReplay: true });
             i++;
           } else {
-            post({
-              type: 'toolResult',
-              name: tc.function.name,
-              result: JSON.stringify({ error: 'Missing tool result in saved session' }),
-              fromReplay: true,
-            });
+            // Tool call with no matching result (e.g. interrupted by reload).
+            // For ask_human, show a clear system message instead of a cryptic error.
+            if (tc.function.name === 'ask_human') {
+              const question = (args && typeof args.question === 'string') ? args.question : '';
+              post({
+                type: 'addMessage',
+                message: {
+                  role: 'system',
+                  content: `⏸️ **之前的对话已中断**\n\nAI 正在等待你的回复：\n> ${question || '(问题内容不可用)'}\n\n💡 _请发送新消息继续对话。_\n\n> _提示：之前未完成的请求已自动取消。_`,
+                },
+              });
+            } else {
+              post({
+                type: 'toolResult',
+                name: tc.function.name,
+                result: JSON.stringify({ error: 'Missing tool result in saved session' }),
+                fromReplay: true,
+              });
+            }
           }
         }
         continue;
