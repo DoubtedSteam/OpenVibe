@@ -123,7 +123,11 @@
     
     // Inline code and code blocks
     result = result
-      .replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>')
+      .replace(/```([\s\S]*?)```/g, function(match, code) {
+        // Skip empty/whitespace-only blocks to prevent black-background empty <pre> boxes
+        if (!code.trim()) return '';
+        return '<pre><code>' + code + '</code></pre>';
+      })
       .replace(/`([^`]+)`/g, '<code>$1</code>');
     
     // Lists
