@@ -1,3 +1,4 @@
+import * as vscode from 'vscode';
 import { ChatMessage, ToolCall, ApiConfig, AgentLogEntry, CompressedArchive } from '../types';
 import { getAgentRuntimeContextBlock } from '../agentRuntimeContext';
 import { sendChatMessage } from '../api';
@@ -329,6 +330,11 @@ export class ConversationService {
       if (!triggeredByTokenLimit) {
         this._post({ type: 'info', message: `✅ History compacted. ${toCompress.length} older messages archived, ${toKeep.length} recent messages preserved.` });
       }
+      
+      // 显示 VS Code 提示框通知，提醒用户执行了 compact
+      vscode.window.showInformationMessage(
+        `🗜️ 对话历史已压缩：归档 ${toCompress.length} 条消息，保留 ${toKeep.length} 条。`
+      );
 
       return JSON.stringify({
         success: true,
