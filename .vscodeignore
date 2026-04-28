@@ -12,9 +12,15 @@
 **/.DS_Store
 **/Thumbs.db
 
-# 依赖（vsce 会自动包含 production dependencies）
-node_modules
+# 测试
 .vscode-test
+
+# 明确排除 devDependencies（不整体排除 node_modules/，
+# 以确保 axios 及其所有传递依赖被正确打包）
+node_modules/.bin/
+node_modules/typescript/
+node_modules/@types/
+node_modules/undici-types/
 
 # TypeScript 源文件（已编译到 out/）
 src
