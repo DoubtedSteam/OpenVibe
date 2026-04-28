@@ -104,7 +104,7 @@ export function mergeReviewNotes(acc: string[], newNotes: string[]): string[] {
   return out;
 }
 
-export function loadMemoryExcerpt(maxChars = 12000): string {
+export function loadMemoryExcerpt(): string {
   try {
     const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     if (!root) {
@@ -114,11 +114,7 @@ export function loadMemoryExcerpt(maxChars = 12000): string {
     if (!fs.existsSync(p)) {
       return '(memory.md not found; no project_constraints extracted)';
     }
-    const text = fs.readFileSync(p, 'utf-8');
-    if (text.length <= maxChars) {
-      return text;
-    }
-    return text.slice(0, maxChars) + '\n\n[… truncated for review context …]';
+    return fs.readFileSync(p, 'utf-8');
   } catch {
     return '(could not read memory.md — workspace may be closed)';
   }
