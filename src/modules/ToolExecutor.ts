@@ -358,7 +358,7 @@ export class ToolExecutor {
         if (summary.trim()) {
           this._postUiEcho(summary.trim());
         }
-        // task_complete 被调用后直接结束，不返回任何信息给LLM
+        // task_complete 在 MessageHandler 中被提前拦截处理，此处不会被执行
         return JSON.stringify({ success: true, message: 'Task marked complete.', _immediate_end: true });
       }
 

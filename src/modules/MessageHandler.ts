@@ -165,9 +165,10 @@ export class MessageHandler {
 
 
 
-            // task_complete：do not emit extra assistant text; still MUST respond with a tool message.
+            // task_complete：提示 AI 更新 .OpenVibe/memory.md 后结束
             if (name === 'task_complete') {
-              const result = JSON.stringify({ success: true, operation: 'task_complete' });
+              const memoryHint = 'Task complete. Remember to update .OpenVibe/memory.md if you modified any files during this task — update Level 3/4 per-file immediately, then Level 1 after all files are done.';
+              const result = JSON.stringify({ success: true, operation: 'task_complete', message: 'Task marked complete. ' + memoryHint });
               this._context.post({ type: 'toolResult', name, result });
               this._context.addMessage({ role: 'tool', content: result, tool_call_id: toolCall.id });
               stopAfterTools = true;

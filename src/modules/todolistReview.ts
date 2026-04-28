@@ -1,8 +1,9 @@
 import * as fs from 'fs';
+import * as path from 'path';
+import * as vscode from 'vscode';
 import { getAgentRuntimeContextBlock } from '../agentRuntimeContext';
 import { sendChatMessage } from '../api';
 import type { ApiConfig, ChatMessage, AgentLogEntry } from '../types';
-import { getMemoryFilePath } from '../tools';
 
 export interface TodolistReviewSettings {
   enabled: boolean;
@@ -105,7 +106,11 @@ export function mergeReviewNotes(acc: string[], newNotes: string[]): string[] {
 
 export function loadMemoryExcerpt(maxChars = 12000): string {
   try {
-    const p = getMemoryFilePath();
+    const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    if (!root) {
+      return '(no workspace open; no project_constraints extracted)';
+    }
+    const p = path.join(root, '.OpenVibe', 'memory.md');
     if (!fs.existsSync(p)) {
       return '(memory.md not found; no project_constraints extracted)';
     }
