@@ -8,6 +8,7 @@ import { sendChatMessage } from '../api';
 import { gitSnapshotTool } from '../tools';
 import { AUTO_COMPACT_TOKEN_THRESHOLD, MAX_TOOL_ITERATIONS } from '../constants';
 import type { OperationController } from '../operationController';
+import { extractXmlPlaceholders, applyXmlPlaceholders } from '../mmOutput';
 
 export class MessageHandler {
   private _isRunning = false;
@@ -194,8 +195,10 @@ export class MessageHandler {
             const rawArgs = toolCall.function.arguments;
 
             // Parse arguments and inject <edit-content> blocks into empty newContent
+            const { sanitizedArgs, placeholderMap } = extractXmlPlaceholders(rawArgs);
             let args: Record<string, unknown> = {};
-            try { args = JSON.parse(rawArgs); } catch { /* keep empty */ }
+            try { args = JSON.parse(sanitizedArgs); } catch { try { args = JSON.parse(rawArgs); } catch { /* keep empty */ } }
+            if (placeholderMap.size > 0) { applyXmlPlaceholders(args, placeholderMap); }
             if (editContentBlocks.length > 0 &&
                 (name === 'edit' || name === 'run_shell_command')) {
               if (name === 'edit' && (!args['newContent'] || args['newContent'] === '')) {

@@ -330,6 +330,9 @@ export class ToolExecutor {
       }
 
       case 'edit': {
+        let newContent = args.newContent as string;
+        const xmlMatch = /^<edit-content>([\s\S]*?)<\/edit-content>$/i.exec(newContent);
+        if (xmlMatch) { newContent = xmlMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"').replace(/\\\\/g, '\\'); }
         const fp = args.filePath as string;
         const existedBefore = workspaceFileExistsRelative(fp);
         if (existedBefore && !this._isLineQueryFresh(fp)) {
@@ -345,7 +348,7 @@ export class ToolExecutor {
             filePath: fp,
             startLine: args.startLine as number,
             endLine: args.endLine as number,
-            newContent: args.newContent as string,
+            newContent: newContent,
           },
           (ctx) => this._context.llmCheckReplace(ctx),
           this._context.getApiConfig().confirmChanges !== false ? (ctx) => this._context.userConfirmReplace(ctx) : undefined

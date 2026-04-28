@@ -689,6 +689,7 @@ Uncommitted changes will be lost.`,
     font-size: 10px; color: var(--vscode-descriptionForeground);
     text-align: right; padding: 0 4px 2px; opacity: 0.7;
   }
+  .retry-btn { font-size: 12px; color: #fff; background: #d32f2f; border: none; border-radius: 4px; padding: 2px 10px; margin-left: 8px; cursor: pointer; } .retry-btn:hover { background: #b71c1c; }
 
 
   /* @引用自动补全下拉菜单 */

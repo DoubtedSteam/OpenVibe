@@ -567,6 +567,8 @@
     if (stopBtn) stopBtn.disabled = !running;
   }
 
+  function showInfo(msg) { if (!messagesDiv) return; var el = document.createElement('div'); el.className = 'info-msg'; el.textContent = msg; messagesDiv.appendChild(el); scrollBottom(); }
+  function showError(msg) { if (!messagesDiv) return; var el = document.createElement('div'); el.className = 'error-msg'; var isTimeout = /timed out|超时/i.test(msg); if (isTimeout && typeof _lastUserMessage !== 'undefined' && _lastUserMessage) { el.innerHTML = escHtml(msg) + ' <button class="retry-btn" title="重试">重试</button>'; var btn = el.querySelector('.retry-btn'); if (btn) btn.addEventListener('click', function(e) { e.stopPropagation(); safePost({ type: 'sendMessage', text: _lastUserMessage }); }); } else { el.textContent = msg; } messagesDiv.appendChild(el); scrollBottom(); }
 
   function showTokenUsage(msg) {
     if (!messagesDiv) return;
@@ -732,6 +734,7 @@
     if (!input) return;
     closeRefAutocomplete();
     var text = input.value.trim();
+    _lastUserMessage = text;
     input.value = '';
     input.style.height = 'auto';
     safePost({ type: 'sendMessage', text: text });
