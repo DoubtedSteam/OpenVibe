@@ -240,7 +240,7 @@ interface TodoState {
 
 ## 五、Compact 前后的对比
 
-Compact 由 `ConversationService.compactHistory()` 实现。
+Compact 由 `ConversationService.compactHistory()`（第 248 行）实现。
 
 ### 5.1 Compact 前的消息结构
 
@@ -267,23 +267,32 @@ Compact 由 `ConversationService.compactHistory()` 实现。
 ```typescript
 const COMPACT_RESERVE_TOKENS = 20_000;  // constants.ts:13
 
-// 从后往前扫描，累计 token 数，保留最近约 20K token
+// 从后往前扫描，累计 token 数（跳过 hiddenFromLlm 和 event），
+// 超出阈值时返回起始索引
 const reserveStart = this._findReserveWindowStart(messages);
+if (reserveStart === 0) {
+  // 全部消息都在窗口内 → 无需压缩
+  return;
+}
 // 约 5-10 轮对话
 ```
 
-**步骤 2** — 将旧消息压缩为摘要
+`_findReserveWindowStart()` 使用 `_estimateMessageTokens()` 估算每条消息的 token 数，**只计入可见消息**（`hiddenFromLlm` 和 `event` 角色跳过）。
+
+**步骤 2** — 将旧消息格式化为纯文本
 
 ```typescript
-const toCompress = messages.slice(0, reserveStart);   // 要压缩的旧消息
-const toKeep = messages.slice(reserveStart);            // 保留的最近消息
+const toCompress = messages.slice(0, reserveStart);
+const toKeep = messages.slice(reserveStart);
 ```
 
-旧消息被格式化为纯文本：
+旧消息经过过滤（排除 `hiddenFromLlm`、`event`、和 content 为空的 `tool` 消息）后，格式化为：
 
 ```
 [User]
 帮我添加用户登录功能
+
+---
 
 [Assistant]
 [Reasoning]
@@ -291,22 +300,39 @@ const toKeep = messages.slice(reserveStart);            // 保留的最近消息
 [/Reasoning]
 AI 的文本回复
 
+---
+
 [Tool result]
 read_file 的结果内容
 ```
 
-由另一个轻量 LLM 调用生成摘要，prompt 包含语言指令：
+**步骤 3** — 轻量 LLM 生成摘要
 
-```
-You are a conversation summarizer...
-Rules:
-- Keep: all files created/modified, decisions made, goals, current task state
-- Omit: verbose tool output, repetitive reasoning
-- Write in third-person present tense
-- End with a "## Current State" section
+格式化后的历史作为 `user` 消息发送给 LLM，**系统提示仅使用运行时上下文**（`getAgentRuntimeContextBlock()`），不包含完整 SYSTEM_PROMPT：
+
+```typescript
+const summarizePrompt =
+  `You are a conversation summarizer. Below is part of a coding-assistant session history.` +
+  `Your job is to write a CONCISE but COMPLETE summary that will replace this portion.\n\n` +
+  `Rules:\n` +
+  `- Keep: all files created/modified (with key changes), decisions made, goals, current task state, and any open questions.\n` +
+  `- Omit: verbose tool output, repetitive reasoning, step-by-step narration already reflected in outcomes.\n` +
+  `- Write in third-person present tense ("The user is building…", "The assistant has modified…").\n` +
+  `- End with a short "## Current State" section describing the overall status.` +
+  langInstr + '\n\n' +
+  `=== CONVERSATION HISTORY ===\n${historyText}\n=== END ===\n\n` +
+  `Write the summary now:`;
 ```
 
-**步骤 3** — 替换消息列表
+**语言指令**（`_buildCompactLanguageInstruction()`）根据用户配置生成：
+
+| 配置 | 指令 |
+|------|------|
+| `zh-CN` | `- 请使用简体中文撰写摘要。` + `- 使用第三人称现在时。` |
+| `en` | `- Write the summary in English.` + `- Use third-person present tense.` |
+| `auto` | `- Use the same language as the conversation history.` + `- Use third-person present tense.` |
+
+**步骤 4** — 替换消息列表
 
 ```typescript
 const summaryMessage: ChatMessage = {
@@ -317,7 +343,7 @@ const summaryMessage: ChatMessage = {
 this._session.setCurrentMessages([summaryMessage, ...toKeep]);
 ```
 
-原始消息被归档到 `ChatSession.compressedArchives`。
+**原始消息归档**到 `ChatSession.compressedArchives`，通过 `SessionManager.addCompressedArchive()` 保存（最多保留 10 份档案，新档案插入头部）。
 
 ### 5.3 Compact 后的消息结构
 
@@ -333,18 +359,25 @@ this._session.setCurrentMessages([summaryMessage, ...toKeep]);
 [user4]       ← 当前最新用户消息
 ```
 
-### 5.4 对比总结
+### 5.4 触发方式
+
+| 方式 | 触发点 | 代码位置 |
+|------|--------|---------|
+| **手动** | 用户输入 `/compact` 命令 | `MessageHandler.ts:56` |
+| **手动** | AI 调用 `compact` 工具 | `MessageHandler.ts:249-252` |
+| **自动** | 单次 API 响应的 `prompt_tokens` ≥ 1,000,000 | `MessageHandler.ts:431` |
+
+> 注意自动 compact 的判断依据是**单次 API 调用的 prompt_tokens**（`usage.prompt_tokens`），而非累计总 token 数。每次调用后由 `_accumulateAndSendUsage()` 检查，超过阈值则 fire-and-forget 触发压缩。
+
+### 5.5 对比总结
 
 | 方面 | Compact 前 | Compact 后 |
 |------|-----------|-----------|
 | Token 数 | 可能上百万 | 约 20K + 摘要 token |
-| 旧消息细节 | 完整保留 | 丢失（归档到 `compressedArchives`） |
-| 最近对话 | 完整保留 | 完整保留 |
+| 旧消息细节 | 完整保留 | 丢失（归档到 `compressedArchives`，最多 10 份） |
+| 最近对话 | 完整保留（约 20K token） | 完整保留 |
 | 对 AI 的影响 | 完整上下文 → 更精确 | 摘要丢失细节 → 可能不够准确 |
 | UI 展示 | 不变 | 不变（compact 对用户透明） |
-| 触发方式 | 手动 `/compact` 或自动（token > 100 万） | 同左 |
-
----
 
 ## 六、完整请求流程图
 
