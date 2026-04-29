@@ -106,16 +106,17 @@ export class MessageHandler {
       const apiConfig = this._context.getApiConfig();
       let iterations = 0;
       const maxIterations = apiConfig.maxInteractions === -1 ? Number.MAX_SAFE_INTEGER : (apiConfig.maxInteractions || MAX_TOOL_ITERATIONS);
-      // Internal-only prompt injection for the next LLM call.
-      // Used to nudge the model when it returns plain text without tool calls (it should either call tools or task_complete).
+      // Internal-only nudge for the next LLM call.
+      // Used to remind the model to update the todo list.
+      // Placed as a separate system message (not in system prompt) to preserve prompt-cache prefix.
       // IMPORTANT: Do not append this as a visible chat message.
-      let injectedSystemPrompt = '';
+      let pendingNudge = '';
 
       // If a todo list is active, remind the LLM that it may need to update it
       // when the user's new message changes requirements. Not visible to the user.
       const todoInfo = this._context.getTodoControlInfo();
       if (todoInfo && todoInfo.remaining > 0) {
-        injectedSystemPrompt = '\n\n[INTERNAL NUDGE]\n如有需要，请变更todo list。\n[END INTERNAL NUDGE]\n';
+        pendingNudge = '\n\n[INTERNAL NUDGE]\n如有需要，请变更todo list。\n[END INTERNAL NUDGE]\n';
       }
       
       while (iterations < maxIterations && !this._context.operation.isStopped()) {
@@ -129,9 +130,11 @@ export class MessageHandler {
         // Build language instruction based on user's setting
         const langInstr = this._buildLanguageInstruction(apiConfig.language);
 
-        const allMessages = this._context.buildMessagesForLlm(SYSTEM_PROMPT + `
-
-` + getAgentRuntimeContextBlock() + langInstr + injectedSystemPrompt);
+        const allMessages = this._context.buildMessagesForLlm(SYSTEM_PROMPT + '\n\n\n' + getAgentRuntimeContextBlock() + langInstr);
+        // Nudge as a separate system message (not in system prompt) so prompt-cache prefix stays stable.
+        if (pendingNudge) {
+          allMessages.splice(1, 0, { role: 'system', content: pendingNudge });
+        }
 
         const response = await sendChatMessage(allMessages, apiConfig, TOOL_DEFINITIONS, this._context.operation.signal());
         // Accumulate and report token usage after every LLM call
@@ -146,8 +149,8 @@ export class MessageHandler {
         }
 
         if (response.toolCalls && response.toolCalls.length > 0) {
-          // Reset any internal nudge once the model starts using tools again.
-          injectedSystemPrompt = '';
+          // Nudge is consumed once the model starts using tools; system prompt stays stable for cache.
+          pendingNudge = '';
           // ── Extract <edit-content> blocks from visible response ──────────
           // The AI can place raw multi-line content inside <edit-content> tags
           // in the visible response instead of JSON-escaping it in newContent.
@@ -269,7 +272,7 @@ export class MessageHandler {
             }
           } // End of for (const toolCall of response.toolCalls)
           if (stopAfterTools) {
-            injectedSystemPrompt = '';
+            pendingNudge = '';
             break;
           }
           // Go back to the top of the loop to continue the conversation
@@ -284,7 +287,7 @@ export class MessageHandler {
           // 把控制权交还给用户。模型主动选择输出文本而不是调用工具，
           // 说明它在等待用户的下一步指示——无论 todo list 是否还有未完成项。
           // 用户可以通过发送新消息来继续未完成的工作。
-          injectedSystemPrompt = '';
+          pendingNudge = '';
           break;
         }
         
