@@ -181,7 +181,33 @@ export class SessionManager {
       
       if (indexFile && fs.existsSync(indexFile)) {
         const indexContent = fs.readFileSync(indexFile, 'utf-8');
-        this._sessions = JSON.parse(indexContent);
+        const parsed: any[] = JSON.parse(indexContent);
+        
+        if (parsed.length > 0 && 'messages' in parsed[0]) {
+          // ── 迁移：旧格式 index.json 包含完整消息数据 ─────────────────
+          // 将旧格式的完整会话切分：每条会话写出独立数据文件
+          this._sessions = parsed.map((s: any) => {
+            const fullSession = s as ChatSession;
+            if (sessionsDir) {
+              const sessionFile = path.join(sessionsDir, `${fullSession.id}.json`);
+              if (!fs.existsSync(sessionFile)) {
+                try {
+                  const data = {
+                    messages: fullSession.messages ?? [],
+                    agentLogs: fullSession.agentLogs ?? [],
+                    compressedArchives: fullSession.compressedArchives ?? [],
+                    snapshots: fullSession.snapshots ?? [],
+                  };
+                  fs.writeFileSync(sessionFile, JSON.stringify(data, null, 2), 'utf-8');
+                } catch { /* non-fatal */ }
+              }
+            }
+            return fullSession;
+          });
+        } else {
+          // ── 新格式：index.json 只有元数据 ──────────────────────────
+          this._sessions = parsed.map((entry: any) => this._fromIndexEntry(entry));
+        }
       }
       
       // 确保至少有一个默认会话
@@ -189,6 +215,13 @@ export class SessionManager {
         this._createDefaultSession();
       } else {
         this._applyPersistedActiveSession();
+        // 加载当前会话的消息数据（仅新格式需要显式加载）
+        if (sessionsDir) {
+          const currentSession = this._sessions.find(s => s.id === this._currentSessionId);
+          if (currentSession && currentSession.messages.length === 0) {
+            void this._loadSessionDataFile(currentSession, sessionsDir);
+          }
+        }
       }
     } catch (err) {
       this._post({ type: 'error', message: `Failed to load sessions: ${err}` });
@@ -272,6 +305,10 @@ export class SessionManager {
 
   /** Build the lightweight index entry (no messages/logs/archives) for a session. */
   private _toIndexEntry(s: ChatSession): object {
+    // Use cached messageCount if messages array is not in memory (non-current sessions)
+    const messageCount = s.messages?.length
+      ? s.messages.filter(m => m.role === 'user').length
+      : (s.messageCount ?? 0);
     return {
       id: s.id,
       title: s.title,
@@ -281,9 +318,10 @@ export class SessionManager {
       lastOpenedAt: s.lastOpenedAt,
       activatedSkills: s.activatedSkills,
       assistantTodoState: s.assistantTodoState,
-      messageCount: s.messages ? s.messages.filter(m => m.role === 'user').length : 0,
+      messageCount,
     };
   }
+// (empty line)
 
   /** Rebuild a full ChatSession from an index entry (without messages — call _loadSessionDataFile separately). */
   private _fromIndexEntry(entry: any): ChatSession {
@@ -297,6 +335,7 @@ export class SessionManager {
       lastOpenedAt: entry.lastOpenedAt,
       activatedSkills: entry.activatedSkills,
       assistantTodoState: entry.assistantTodoState,
+      messageCount: entry.messageCount ?? 0,
     };
   }
 
@@ -346,7 +385,10 @@ export class SessionManager {
         title: s.title,
         created: s.created,
         updated: s.updated,
-        messageCount: s.messages ? s.messages.filter(m => m.role === 'user').length : 0,
+        // Use cached messageCount for non-current sessions (messages array may be empty)
+        messageCount: s.messages?.length
+          ? s.messages.filter(m => m.role === 'user').length
+          : (s.messageCount ?? 0),
         isActive: s.id === this._currentSessionId
       }))
     });
@@ -359,8 +401,18 @@ export class SessionManager {
       return;
     }
 
-    this.saveCurrentSession();
+    // Save current session's data to file before switching
+    await this.saveCurrentSession();
     this._currentSessionId = sessionId;
+
+    // Load new session's data if not already in memory
+    if (newSession.messages.length === 0) {
+      const sessionsDir = this._ensureSessionsDir();
+      if (sessionsDir) {
+        await this._loadSessionDataFile(newSession, sessionsDir);
+      }
+    }
+
     newSession.lastOpenedAt = Date.now();
     void this._persistActiveSessionId();
     this.postSessionsList();
@@ -391,6 +443,17 @@ export class SessionManager {
         await this.switchSession(otherSession.id);
       }
     }
+
+    // 删除对应的数据文件（如有）
+    try {
+      const sessionsDir = this._ensureSessionsDir();
+      if (sessionsDir) {
+        const sessionFile = path.join(sessionsDir, `${sessionId}.json`);
+        if (fs.existsSync(sessionFile)) {
+          await fs.promises.unlink(sessionFile);
+        }
+      }
+    } catch { /* non-fatal */ }
 
     // 从数组中移除
     this._sessions.splice(sessionIndex, 1);

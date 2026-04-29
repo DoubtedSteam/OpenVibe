@@ -76,6 +76,8 @@ export interface ChatSession {
   compressedArchives?: CompressedArchive[];
   /** Timestamp when this session was last opened/selected. Used to restore the most recent session on reload. */
   lastOpenedAt?: number;
+  /** Cached user-message count for the session list. Stored in index.json, kept in memory for all sessions. */
+  messageCount?: number;
 }
 
 export interface ApiConfig {
