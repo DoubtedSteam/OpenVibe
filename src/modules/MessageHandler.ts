@@ -129,7 +129,10 @@ export class MessageHandler {
 
         const response = await sendChatMessage(allMessages, apiConfig, TOOL_DEFINITIONS, this._context.operation.signal());
         // Accumulate and report token usage after every LLM call
-        this._accumulateAndSendUsage(response.tokenUsage);
+        // Skip auto-compact when there are pending tool_calls not yet responded to,
+        // preventing a race between compact (async) and tool result insertion.
+        const hasPendingToolCalls = !!(response.toolCalls && response.toolCalls.length > 0);
+        this._accumulateAndSendUsage(response.tokenUsage, hasPendingToolCalls);
 
 
 
@@ -403,7 +406,10 @@ export class MessageHandler {
    * Accumulate token usage and send to webview.
    * Also triggers auto-compact when accumulated total_tokens exceed threshold.
    */
-  private _accumulateAndSendUsage(usage: { prompt_tokens: number; completion_tokens: number; total_tokens: number } | undefined): void {
+  private _accumulateAndSendUsage(
+    usage: { prompt_tokens: number; completion_tokens: number; total_tokens: number } | undefined,
+    hasPendingToolCalls = false
+  ): void {
     if (!usage) return;
     this._accumulatedUsage.prompt_tokens += usage.prompt_tokens;
     this._accumulatedUsage.completion_tokens += usage.completion_tokens;
@@ -414,7 +420,11 @@ export class MessageHandler {
       accumulated: { ...this._accumulatedUsage },
     });
     // Auto-compact when accumulated total_tokens exceed threshold
-    if (this._accumulatedUsage.total_tokens >= AUTO_COMPACT_TOKEN_THRESHOLD) {
+    // BUT skip if there are pending tool_calls not yet responded to:
+    // otherwise the fire-and-forget compact may run between the assistant(tool_calls)
+    // message being added and its tool results being added, creating orphaned
+    // tool messages that cause API 400 "role 'tool' must follow tool_calls".
+    if (!hasPendingToolCalls && this._accumulatedUsage.total_tokens >= AUTO_COMPACT_TOKEN_THRESHOLD) {
       // Fire-and-forget compact
       this._context.compactHistory(true).catch(() => {});
     }
