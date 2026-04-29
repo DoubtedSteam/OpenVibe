@@ -70,7 +70,6 @@ export interface ChatSession {
   /** Last assistant todo list (create_todo_list / complete_todo_item); restored after window reload. */
   assistantTodoState?: AssistantTodoPersistedState | null;
   /** Skill names activated in this conversation, loaded from global skills pool. */
-  /** Skill names activated in this conversation, loaded from global skills pool. */
   activatedSkills?: string[];
   /** Archived pre-compact conversation turns, most recent first. Never deleted automatically. */
   compressedArchives?: CompressedArchive[];

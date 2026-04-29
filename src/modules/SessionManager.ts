@@ -30,21 +30,6 @@ export class SessionManager {
     }
 
     const sessionsDir = path.join(workspaceRoot, '.OpenVibe', 'sessions');
-    // Migration: some versions stored sessions under `.openvibe/sessions`.
-    // If the target location doesn't exist but legacy index does, copy it once.
-    try {
-      const legacyDir = path.join(workspaceRoot, '.openvibe', 'sessions');
-      const legacyIndex = path.join(legacyDir, 'index.json');
-      const newIndex = path.join(sessionsDir, 'index.json');
-      if (!fs.existsSync(sessionsDir) && fs.existsSync(legacyIndex)) {
-        fs.mkdirSync(sessionsDir, { recursive: true });
-        if (!fs.existsSync(newIndex)) {
-          fs.copyFileSync(legacyIndex, newIndex);
-        }
-      }
-    } catch {
-      // non-fatal
-    }
     if (!fs.existsSync(sessionsDir)) {
       fs.mkdirSync(sessionsDir, { recursive: true });
     }
@@ -183,29 +168,7 @@ export class SessionManager {
         const indexContent = fs.readFileSync(indexFile, 'utf-8');
         const parsed: any[] = JSON.parse(indexContent);
         
-        if (parsed.length > 0 && 'messages' in parsed[0]) {
-          // ── 迁移：旧格式 index.json 包含完整消息数据 ─────────────────
-          // 将旧格式的完整会话切分：每条会话写出独立数据文件
-          this._sessions = parsed.map((s: any) => {
-            const fullSession = s as ChatSession;
-            if (sessionsDir) {
-              const sessionFile = path.join(sessionsDir, `${fullSession.id}.json`);
-              if (!fs.existsSync(sessionFile)) {
-                try {
-                  const data = {
-                    messages: fullSession.messages ?? [],
-                    agentLogs: fullSession.agentLogs ?? [],
-                    compressedArchives: fullSession.compressedArchives ?? [],
-                    snapshots: fullSession.snapshots ?? [],
-                  };
-                  fs.writeFileSync(sessionFile, JSON.stringify(data, null, 2), 'utf-8');
-                } catch { /* non-fatal */ }
-              }
-            }
-            return fullSession;
-          });
-        } else {
-          // ── 新格式：index.json 只有元数据 ──────────────────────────
+        if (parsed.length > 0) {
           this._sessions = parsed.map((entry: any) => this._fromIndexEntry(entry));
         }
       }
@@ -305,10 +268,9 @@ export class SessionManager {
 
   /** Build the lightweight index entry (no messages/logs/archives) for a session. */
   private _toIndexEntry(s: ChatSession): object {
-    // Use cached messageCount if messages array is not in memory (non-current sessions)
     const messageCount = s.messages?.length
       ? s.messages.filter(m => m.role === 'user').length
-      : (s.messageCount ?? 0);
+      : s.messageCount;
     return {
       id: s.id,
       title: s.title,
@@ -335,7 +297,7 @@ export class SessionManager {
       lastOpenedAt: entry.lastOpenedAt,
       activatedSkills: entry.activatedSkills,
       assistantTodoState: entry.assistantTodoState,
-      messageCount: entry.messageCount ?? 0,
+      messageCount: entry.messageCount,
     };
   }
 
@@ -385,10 +347,9 @@ export class SessionManager {
         title: s.title,
         created: s.created,
         updated: s.updated,
-        // Use cached messageCount for non-current sessions (messages array may be empty)
         messageCount: s.messages?.length
           ? s.messages.filter(m => m.role === 'user').length
-          : (s.messageCount ?? 0),
+          : s.messageCount,
         isActive: s.id === this._currentSessionId
       }))
     });
