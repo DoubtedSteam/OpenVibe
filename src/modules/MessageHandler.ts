@@ -132,11 +132,10 @@ export class MessageHandler {
         const langInstr = this._buildLanguageInstruction(apiConfig.language);
 
         const allMessages = this._context.buildMessagesForLlm(SYSTEM_PROMPT + '\n\n\n' + getAgentRuntimeContextBlock() + langInstr);
-        // Edit Permission as a separate system message (not in system prompt) so prefix cache stays stable.
-        allMessages.splice(1, 0, { role: 'system', content: this._buildEditPermissionBlock() });
-        // Nudge as a separate system message (not in system prompt) so prompt-cache prefix stays stable.
+        // Append runtime state AFTER conversation history so the prefix ([0] system + history) stays cacheable.
+        allMessages.push({ role: 'system', content: this._buildEditPermissionBlock() });
         if (pendingNudge) {
-          allMessages.splice(2, 0, { role: 'system', content: pendingNudge });
+          allMessages.push({ role: 'system', content: pendingNudge });
         }
 
         const response = await sendChatMessage(allMessages, apiConfig, TOOL_DEFINITIONS, this._context.operation.signal());
