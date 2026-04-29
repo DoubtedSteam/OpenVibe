@@ -29,6 +29,7 @@ export class MessageHandler {
       executeTool: (name: string, args: Record<string, unknown>) => Promise<string>;
       getTodoControlInfo: () => { goal: string; list: string; remaining: number } | null;
       getSessionEditedFiles: () => string[];
+      getEditPermissionEnabled: () => boolean;
       compactHistory: (triggeredByTokenLimit?: boolean) => Promise<string>;
       /** Reset per-turn UI counters (e.g. edit review #) when the user sends a new instruction. */
       onUserInstructionStart?: () => void;
@@ -130,7 +131,7 @@ export class MessageHandler {
         // Build language instruction based on user's setting
         const langInstr = this._buildLanguageInstruction(apiConfig.language);
 
-        const allMessages = this._context.buildMessagesForLlm(SYSTEM_PROMPT + '\n\n\n' + getAgentRuntimeContextBlock() + langInstr);
+        const allMessages = this._context.buildMessagesForLlm(SYSTEM_PROMPT + '\n\n\n' + getAgentRuntimeContextBlock(this._context.getEditPermissionEnabled()) + langInstr);
         // Nudge as a separate system message (not in system prompt) so prompt-cache prefix stays stable.
         if (pendingNudge) {
           allMessages.splice(1, 0, { role: 'system', content: pendingNudge });

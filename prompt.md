@@ -67,7 +67,7 @@ SYSTEM_PROMPT + '\n\n\n' + getAgentRuntimeContextBlock() + langInstr
 🔓 **ON (write tools available)**
 ```
 
-当 `editPermissionEnabled` 为 `undefined` 时（如 review agent、compact 等），不输出 `## Edit Permission` 块，保持 cache 稳定。当 UI 开关状态接入后，`MessageHandler.ts` 可传入真实状态使 AI 感知当前读写权限。
+当 `editPermissionEnabled` 为 `undefined` 时（如 review agent、compact 等），不输出 `## Edit Permission` 块，保持 cache 稳定。**完整数据流：** Webview 锁按钮 → `postMessage({ type: 'setEditPermission', enabled })` → `ChatViewProvider.onDidReceiveMessage` → `UIManager.setEditPermissionEnabled()` → `MessageHandler.ts:134` 传入 `getAgentRuntimeContextBlock(editPermissionEnabled)` → AI 感知当前权限状态。
 
 ### ❸ 语言指令（`langInstr`）
 

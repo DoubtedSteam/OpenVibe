@@ -111,6 +111,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       executeTool: (name, args) => this._toolExecutor.executeTool(name, args),
       getTodoControlInfo: () => this._toolExecutor.getTodoControlInfo(),
       getSessionEditedFiles: () => this._toolExecutor.getSessionEditedFiles(),
+      getEditPermissionEnabled: () => this._uiManager.getEditPermissionEnabled(),
       compactHistory: (triggeredByTokenLimit) => this._conversation.compactHistory(triggeredByTokenLimit),
       onUserInstructionStart: () => this._toolExecutor.resetReviewUiCounters(),
       operation: this._operation,
