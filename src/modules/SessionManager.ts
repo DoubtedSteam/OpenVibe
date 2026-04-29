@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { ChatMessage, ChatSession, AgentLogEntry, AssistantTodoPersistedState, CompressedArchive } from '../types';
+import { ChatMessage, ChatSession, AgentLogEntry, AssistantTodoPersistedState } from '../types';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -97,14 +97,38 @@ export class SessionManager {
     return currentSession?.messages || [];
   }
 
+  /** Get the LLM-friendly message list (may be compacted). Falls back to full messages. */
+  public getLlmMessages(): ChatMessage[] {
+    const currentSession = this._sessions.find(s => s.id === this._currentSessionId);
+    return currentSession?.llmMessages ?? currentSession?.messages ?? [];
+  }
+
+  /** Replace the LLM-friendly message list (used by compact). */
+  public setLlmMessages(messages: ChatMessage[]): void {
+    const currentSession = this._sessions.find(s => s.id === this._currentSessionId);
+    if (!currentSession) return;
+    currentSession.llmMessages = messages;
+    currentSession.updated = Date.now();
+    this._saveSessions();
+  }
+
   public getCurrentSessionId(): string {
     return this._currentSessionId;
   }
 
   public addMessage(msg: ChatMessage): void {
-    const messages = this.getCurrentMessages();
-    messages.push(msg);
-    this.setCurrentMessages(messages);
+    const currentSession = this._sessions.find(s => s.id === this._currentSessionId);
+    if (!currentSession) return;
+    // Always append to the full frontend history
+    currentSession.messages.push(msg);
+    // Also append to the LLM list (initialise from messages if not yet set)
+    if (!currentSession.llmMessages) {
+      currentSession.llmMessages = [...currentSession.messages];
+    } else {
+      currentSession.llmMessages.push(msg);
+    }
+    currentSession.updated = Date.now();
+    this._saveSessions();
   }
 
   public addAgentLog(entry: AgentLogEntry): void {
@@ -226,43 +250,41 @@ export class SessionManager {
     }, 250);
   }
 
-  /** Write current session's messages/agentLogs/archives to its own file. */
+  /** Write current session's messages/agentLogs/llmMessages to its own file. */
   private async _saveSessionDataFile(session: ChatSession, sessionsDir: string): Promise<void> {
     const sessionFile = path.join(sessionsDir, `${session.id}.json`);
     const data = {
       messages: session.messages ?? [],
+      llmMessages: session.llmMessages ?? [],
       agentLogs: session.agentLogs ?? [],
-      compressedArchives: session.compressedArchives ?? [],
       snapshots: session.snapshots ?? [],
     };
     await fs.promises.writeFile(sessionFile, JSON.stringify(data, null, 2), 'utf-8');
   }
 
-  /** Load messages/agentLogs/archives from a per-session file and merge into the session object. */
+  /** Load messages/agentLogs/llmMessages from a per-session file and merge into the session object. */
   private async _loadSessionDataFile(session: ChatSession, sessionsDir: string): Promise<void> {
     const sessionFile = path.join(sessionsDir, `${session.id}.json`);
     if (!fs.existsSync(sessionFile)) {
       session.messages = [];
       session.agentLogs = [];
-      session.compressedArchives = [];
       return;
     }
     try {
       const raw = await fs.promises.readFile(sessionFile, 'utf-8');
       const data = JSON.parse(raw) as {
         messages?: ChatMessage[];
+        llmMessages?: ChatMessage[];
         agentLogs?: AgentLogEntry[];
-        compressedArchives?: CompressedArchive[];
         snapshots?: any[];
       };
       session.messages = data.messages ?? [];
+      session.llmMessages = data.llmMessages;
       session.agentLogs = data.agentLogs ?? [];
-      session.compressedArchives = data.compressedArchives ?? [];
       session.snapshots = data.snapshots ?? [];
     } catch {
       session.messages = [];
       session.agentLogs = [];
-      session.compressedArchives = [];
     }
   }
 
@@ -459,6 +481,7 @@ export class SessionManager {
     const currentSession = this._sessions.find(s => s.id === this._currentSessionId);
     if (currentSession) {
       currentSession.messages = [];
+      currentSession.llmMessages = [];
       delete currentSession.assistantTodoState;
       currentSession.updated = Date.now();
       this._saveSessions();
@@ -490,30 +513,7 @@ export class SessionManager {
     currentSession.updated = Date.now();
     this._saveSessions();
   }
-
-  /**
-   * Archive a batch of pre-compact messages to the current session.
-   * Keeps at most 10 archives to prevent unbounded growth.
-   * Newest archive is inserted at index 0.
-   */
-  public addCompressedArchive(archive: CompressedArchive): void {
-    const currentSession = this._sessions.find((s) => s.id === this._currentSessionId);
-    if (!currentSession) return;
-
-    if (!Array.isArray(currentSession.compressedArchives)) {
-      currentSession.compressedArchives = [];
-    }
-
-    currentSession.compressedArchives.unshift(archive);
-
-    // Keep at most 10 archives to bound storage growth
-    if (currentSession.compressedArchives.length > 10) {
-      currentSession.compressedArchives = currentSession.compressedArchives.slice(0, 10);
-    }
-
-    currentSession.updated = Date.now();
-    this._saveSessions();
-  }
+  // ─── Activated skills (conversation-scoped) ───────────────────────────────
 
   // ─── Activated skills (conversation-scoped) ───────────────────────────────
 

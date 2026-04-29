@@ -129,15 +129,25 @@ Webview 锁按钮
 
 ---
 
-## 三、历史消息的过滤规则
+## 三、双轨消息记录：前端 vs LLM
 
-在 `ConversationService.ts:112`：
+每个会话维护**两份消息列表**：
+
+| 列表 | 字段 | 用途 | compact 影响 |
+|------|------|------|-------------|
+| **`messages`** | `ChatSession.messages` | 前端展示：**完整对话历史** | ❌ 不受影响 |
+| **`llmMessages`** | `ChatSession.llmMessages` | LLM 上下文：可能被 compact 精简 | ✅ 被替换为摘要 |
+
+消息添加时自动同步到两份列表（`SessionManager.addMessage()`）。
+
+### 3.1 LLM 消息过滤规则
+
+在 `ConversationService.ts:119` 的 `buildMessagesForLlm()` 中，使用 `llmMessages` 并过滤：
 
 ```typescript
-const visible = this.getCurrentMessages().filter(
+const visible = this.getLlmMessages().filter(
   (m) => !m.hiddenFromLlm && m.role !== 'event'
 );
-```
 
 | `role` | `hiddenFromLlm` | 是否发给 LLM | 用途 |
 |--------|----------------|-------------|------|
@@ -240,7 +250,7 @@ interface TodoState {
 
 ## 五、Compact：最大化缓存命中的设计
 
-> **核心思想：** 不启动独立的摘要 LLM，而是**复用主对话 LLM**（同一个 system prompt + 原始消息格式），让旧消息的 KV cache 尽可能命中。
+> **核心思想：** Compact 只修改 `llmMessages`（LLM 上下文），前端 `messages`（完整历史）不受影响。不启动独立的摘要 LLM，而是**复用主对话 LLM**（同一个 system prompt + 原始消息格式），让旧消息的 KV cache 尽可能命中。
 
 ### 5.1 问题：为什么传统方式缓存不命中？
 
@@ -335,7 +345,7 @@ const summary = summaryResponse.content?.trim() ?? '(summary unavailable)';
 
 > `TOOL_DEFINITIONS` 和主对话使用同一个，确保 API 请求结构一致，最大程度复用 KV cache。如果 provider 支持上下文缓存（如 DeepSeek 的硬盘缓存），`system + toCompress` 的前缀可以直接命中，LLM 只需增量计算压缩指令和回复。
 
-**步骤 4** — 后端拼接（前端无感知）
+**步骤 4** — 替换 LLM 消息列表（前端无感知）
 
 ```typescript
 const summaryMessage: ChatMessage = {
@@ -345,20 +355,13 @@ const summaryMessage: ChatMessage = {
     toCompress.length + ' older messages archived.*'
 };
 
-// 替换消息列表，只更新后端存储
-this._session.setCurrentMessages([summaryMessage, ...toKeep]);
-
-// 原始消息归档
-this._session.addCompressedArchive({
-  timestamp: Date.now(),
-  summary,
-  messages: toCompress,
-});  // 最多保留 10 份
+// 只替换 llmMessages，前端 messages（完整历史）不受影响
+this._session.setLlmMessages([summaryMessage, ...toKeep]);
 ```
 
-**前端不变** — compact 完全发生在后端，用户看到的对话历史没有任何变化。
+**前端不变** — compact 完全发生在后端 `llmMessages` 上，用户看到的前端对话历史（`messages`）始终完整。
 
-### 5.3 Compact 后的消息结构
+### 5.3 Compact 后的消息结构（仅 llmMessages）
 
 ```
 [system]      ← 完整系统提示（不变）
@@ -370,6 +373,8 @@ this._session.addCompressedArchive({
 [t9]          ← 保留窗口内的工具结果
 [u10]         ← 当前最新用户消息
 ```
+
+前端 `messages` 保持完整不变，用户 reload 后仍能看到全部历史。
 
 ### 5.4 触发方式
 
@@ -392,8 +397,8 @@ this._session.addCompressedArchive({
 | **旧消息格式** | 格式化为 `[User]` / `[Assistant]` 纯文本 | ✅ **保持原始消息格式** |
 | **KV 缓存命中** | ❌ 零命中 | ✅ system + 旧消息前缀可能命中 |
 | **增量计算** | ❌ 全部重算 | ✅ 只需计算压缩指令 + 回复 |
-| **前端感知** | 无感知 | ✅ 无感知 |
-| **归档机制** | 最多 10 份 | ✅ 最多 10 份 |
+| **前端感知** | 清空 UI 并重播 | ✅ **完全无感知**（只改 `llmMessages`） |
+| **消息归档** | `compressedArchives` 最多 10 份 | ✅ 不需要（`messages` 本身就是归档） |
 
 ---
 ## 六、完整请求流程图

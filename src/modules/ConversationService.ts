@@ -1,4 +1,4 @@
-import { ChatMessage, ToolCall, ApiConfig, AgentLogEntry, CompressedArchive } from '../types';
+import { ChatMessage, ToolCall, ApiConfig, AgentLogEntry } from '../types';
 import { getAgentRuntimeContextBlock } from '../agentRuntimeContext';
 import { SYSTEM_PROMPT } from '../systemPrompt';
 import { TOOL_DEFINITIONS } from '../toolDefinitions';
@@ -31,6 +31,11 @@ export class ConversationService {
 
   getCurrentMessages(): ChatMessage[] {
     return this._session.getCurrentMessages();
+  }
+
+  /** Get the LLM-friendly message list (may be compacted). */
+  getLlmMessages(): ChatMessage[] {
+    return this._session.getLlmMessages();
   }
 
   addMessage(msg: ChatMessage): void {
@@ -111,7 +116,7 @@ export class ConversationService {
    * are appended to the system prompt.
    */
   buildMessagesForLlm(systemPrompt: string): ChatMessage[] {
-    const visible = this.getCurrentMessages().filter((m) => !m.hiddenFromLlm && m.role !== 'event');
+    const visible = this.getLlmMessages().filter((m) => !m.hiddenFromLlm && m.role !== 'event');
 
     // Append activated skill instructions to the system prompt
     let enrichedPrompt = systemPrompt;
@@ -139,41 +144,50 @@ export class ConversationService {
 
   /**
    * Removes assistant turns whose tool_calls never received matching tool results.
+   * Applies to both frontend and LLM message lists.
    */
   sanitizeIncompleteToolCalls(): void {
-    const messages = this._session.getCurrentMessages();
-    let changed = false;
-    const clean: ChatMessage[] = [];
-
-    for (let i = 0; i < messages.length; i++) {
-      const msg = messages[i];
-
-      if (msg.role === 'assistant' && msg.tool_calls && msg.tool_calls.length > 0) {
-        const requiredIds = new Set(msg.tool_calls.map((tc: ToolCall) => tc.id));
-        const rest = messages.slice(i + 1);
-        const respondedIds = new Set(
-          rest
-            .filter((m: ChatMessage) => m.role === 'tool' && m.tool_call_id)
-            .map((m: ChatMessage) => m.tool_call_id!)
-        );
-
-        if (!Array.from(requiredIds).every(id => respondedIds.has(id))) {
-          changed = true;
-          let j = i + 1;
-          while (j < messages.length && messages[j].role === 'tool') {
-            j++;
+    const sanitizeList = (list: ChatMessage[]): ChatMessage[] | null => {
+      let changed = false;
+      const clean: ChatMessage[] = [];
+      for (let i = 0; i < list.length; i++) {
+        const msg = list[i];
+        if (msg.role === 'assistant' && msg.tool_calls && msg.tool_calls.length > 0) {
+          const requiredIds = new Set(msg.tool_calls.map((tc: ToolCall) => tc.id));
+          const rest = list.slice(i + 1);
+          const respondedIds = new Set(
+            rest
+              .filter((m: ChatMessage) => m.role === 'tool' && m.tool_call_id)
+              .map((m: ChatMessage) => m.tool_call_id!)
+          );
+          if (!Array.from(requiredIds).every(id => respondedIds.has(id))) {
+            changed = true;
+            let j = i + 1;
+            while (j < list.length && list[j].role === 'tool') {
+              j++;
+            }
+            i = j - 1;
+            continue;
           }
-          i = j - 1;
-          continue;
         }
+        clean.push(msg);
       }
+      return changed ? clean : null;
+    };
 
-      clean.push(msg);
+    const frontend = this._session.getCurrentMessages();
+    const cleaned = sanitizeList(frontend);
+    if (cleaned) {
+      this._session.setCurrentMessages(cleaned);
     }
 
-    if (changed) {
-      this._session.setCurrentMessages(clean);
-      this._session.saveCurrentSession();
+    // Also clean llmMessages if it exists and differs from frontend
+    const llmMessages = this._session.getLlmMessages();
+    if (llmMessages !== frontend) {
+      const cleanedLlm = sanitizeList(llmMessages);
+      if (cleanedLlm) {
+        this._session.setLlmMessages(cleanedLlm);
+      }
     }
   }
 
@@ -252,7 +266,8 @@ export class ConversationService {
    * Recent messages are preserved intact. Frontend is NOT updated.
    */
   async compactHistory(triggeredByTokenLimit = false): Promise<string> {
-    const messages = this._session.getCurrentMessages();
+    // Only compact the LLM message list; frontend (full messages) is untouched.
+    const messages = this._session.getLlmMessages();
     if (messages.length === 0) {
       return JSON.stringify({ success: false, message: 'Nothing to compact: conversation is empty.' });
     }
@@ -276,7 +291,7 @@ export class ConversationService {
 
       const compactMessages: ChatMessage[] = [
         { role: 'system', content: compactSystemPrompt },
-        ...toCompress, // ← kept in original format, not re-formatted
+        ...toCompress,
         {
           role: 'system',
           content:
@@ -295,36 +310,28 @@ export class ConversationService {
       const summaryResponse = await sendChatMessage(
         compactMessages,
         apiConfig,
-        TOOL_DEFINITIONS, // ← same tools as main conversation for cache compatibility
+        TOOL_DEFINITIONS,
         abortController.signal
       );
 
       const summary = summaryResponse.content?.trim() ?? '(summary unavailable)';
 
-      // ── Archive original messages ──────────────────────────────────────
-      this._session.addCompressedArchive({
-        timestamp: Date.now(),
-        summary,
-        messages: toCompress,
-      });
-
-      // ── New message list = [summary, ...toKeep] ────────────────────────
-      // The summary replaces old messages as a user-role context document.
-      // Frontend is NOT updated — compact happens silently, invisible to the user.
+      // ── Replace LLM message list = [summary, ...toKeep] ─────────────────
+      // Frontend (full messages) is NOT updated.
       const summaryMessage: ChatMessage = {
         role: 'user',
         content:
           `📋 **[Conversation history compacted]**\n\n${summary}\n\n> 💡 *${toKeep.length} recent messages preserved; ${toCompress.length} older messages archived.*`,
       };
 
-      this._session.setCurrentMessages([summaryMessage, ...toKeep]);
+      this._session.setLlmMessages([summaryMessage, ...toKeep]);
 
       return JSON.stringify({
         success: true,
-        message: `Conversation history compacted. Archived ${toCompress.length} messages, preserved ${toKeep.length}.`,
+        message: `Conversation history compacted. Preserved ${toKeep.length} messages, summarised ${toCompress.length}.`,
         summary: summaryMessage.content,
-        archived: toCompress.length,
         preserved: toKeep.length,
+        summarised: toCompress.length,
       });
     } catch (error: any) {
       if (error.name === 'AbortError') {

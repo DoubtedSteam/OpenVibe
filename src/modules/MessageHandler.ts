@@ -58,7 +58,7 @@ export class MessageHandler {
         const result = await this._context.compactHistory(false);
         const parsed = JSON.parse(result);
         if (parsed.success) {
-          this._context.post({ type: 'info', message: `🗜️ 对话历史已压缩：归档 ${parsed.archived} 条消息，保留 ${parsed.preserved} 条。` });
+          this._context.post({ type: 'info', message: `🗜️ 对话历史已压缩：摘要 ${parsed.summarised} 条消息，保留 ${parsed.preserved} 条。` });
         } else {
           this._context.post({ type: 'info', message: parsed.message || '压缩失败。' });
         }
@@ -244,10 +244,6 @@ export class MessageHandler {
             try {
               if (name === 'compact') {
                 result = await this._context.compactHistory(false);
-                // After user-initiated compact, stop the tool loop and wait for user input.
-                // compactHistory already updated the UI (clearMessages + addMessage summary).
-                stopAfterTools = true;
-                break;
               } else {
                 result = await this._context.executeTool(name, args);
               }
@@ -255,11 +251,9 @@ export class MessageHandler {
               result = JSON.stringify({ error: e.message });
             }
 
-            // compact's tool result should NOT be posted (compactHistory already replaced the UI)
-            if (name !== 'compact') {
-              this._context.post({ type: 'toolResult', name, result });
-              this._context.addMessage({ role: 'tool', content: result, tool_call_id: toolCall.id });
-            }
+            // Post tool result (compact only modifies llmMessages, frontend unaffected)
+            this._context.post({ type: 'toolResult', name, result });
+            this._context.addMessage({ role: 'tool', content: result, tool_call_id: toolCall.id });
           } // End of for (const toolCall of response.toolCalls)
           if (stopAfterTools) {
             break;

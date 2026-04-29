@@ -44,26 +44,15 @@ export interface AssistantTodoPersistedState {
   items: { text: string; done: boolean }[];
 }
 
-/**
- * A frozen snapshot of conversation turns that were compacted.
- * Stored in {@link ChatSession.compressedArchives} for data preservation.
- * Most recent archive first.
- */
-export interface CompressedArchive {
-  /** When this archive was created. */
-  timestamp: number;
-  /** The LLM-generated summary that replaced these messages. */
-  summary: string;
-  /** The original messages (pre-compact). */
-  messages: ChatMessage[];
-}
-
 export interface ChatSession {
   id: string;
   title: string;
   created: number;
   updated: number;
+  /** Full conversation history for frontend display. Never modified by compact. */
   messages: ChatMessage[];
+  /** Compact-friendly message list for LLM context. May contain summaries. */
+  llmMessages?: ChatMessage[];
   snapshots?: GitSnapshot[];
   agentLogs?: AgentLogEntry[];
   isActive?: boolean;
@@ -71,8 +60,6 @@ export interface ChatSession {
   assistantTodoState?: AssistantTodoPersistedState | null;
   /** Skill names activated in this conversation, loaded from global skills pool. */
   activatedSkills?: string[];
-  /** Archived pre-compact conversation turns, most recent first. Never deleted automatically. */
-  compressedArchives?: CompressedArchive[];
   /** Timestamp when this session was last opened/selected. Used to restore the most recent session on reload. */
   lastOpenedAt?: number;
   /** Cached user-message count for the session list. Stored in index.json, kept in memory for all sessions. */
