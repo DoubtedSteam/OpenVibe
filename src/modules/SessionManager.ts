@@ -230,6 +230,76 @@ export class SessionManager {
     }, 250);
   }
 
+  /** Write current session's messages/agentLogs/archives to its own file. */
+  private async _saveSessionDataFile(session: ChatSession, sessionsDir: string): Promise<void> {
+    const sessionFile = path.join(sessionsDir, `${session.id}.json`);
+    const data = {
+      messages: session.messages ?? [],
+      agentLogs: session.agentLogs ?? [],
+      compressedArchives: session.compressedArchives ?? [],
+      snapshots: session.snapshots ?? [],
+    };
+    await fs.promises.writeFile(sessionFile, JSON.stringify(data, null, 2), 'utf-8');
+  }
+
+  /** Load messages/agentLogs/archives from a per-session file and merge into the session object. */
+  private async _loadSessionDataFile(session: ChatSession, sessionsDir: string): Promise<void> {
+    const sessionFile = path.join(sessionsDir, `${session.id}.json`);
+    if (!fs.existsSync(sessionFile)) {
+      session.messages = [];
+      session.agentLogs = [];
+      session.compressedArchives = [];
+      return;
+    }
+    try {
+      const raw = await fs.promises.readFile(sessionFile, 'utf-8');
+      const data = JSON.parse(raw) as {
+        messages?: ChatMessage[];
+        agentLogs?: AgentLogEntry[];
+        compressedArchives?: CompressedArchive[];
+        snapshots?: any[];
+      };
+      session.messages = data.messages ?? [];
+      session.agentLogs = data.agentLogs ?? [];
+      session.compressedArchives = data.compressedArchives ?? [];
+      session.snapshots = data.snapshots ?? [];
+    } catch {
+      session.messages = [];
+      session.agentLogs = [];
+      session.compressedArchives = [];
+    }
+  }
+
+  /** Build the lightweight index entry (no messages/logs/archives) for a session. */
+  private _toIndexEntry(s: ChatSession): object {
+    return {
+      id: s.id,
+      title: s.title,
+      created: s.created,
+      updated: s.updated,
+      isActive: s.id === this._currentSessionId,
+      lastOpenedAt: s.lastOpenedAt,
+      activatedSkills: s.activatedSkills,
+      assistantTodoState: s.assistantTodoState,
+      messageCount: s.messages ? s.messages.filter(m => m.role === 'user').length : 0,
+    };
+  }
+
+  /** Rebuild a full ChatSession from an index entry (without messages — call _loadSessionDataFile separately). */
+  private _fromIndexEntry(entry: any): ChatSession {
+    return {
+      id: entry.id,
+      title: entry.title,
+      created: entry.created,
+      updated: entry.updated,
+      messages: [],        // loaded lazily
+      isActive: entry.isActive,
+      lastOpenedAt: entry.lastOpenedAt,
+      activatedSkills: entry.activatedSkills,
+      assistantTodoState: entry.assistantTodoState,
+    };
+  }
+
   private async _flushSaveSessions(): Promise<void> {
     if (this._saveInFlight) {
       return;
@@ -244,9 +314,16 @@ export class SessionManager {
       if (!sessionsDir) {
         return;
       }
+      // 1. Write lightweight index.json (metadata only, no messages/logs)
       const indexFile = path.join(sessionsDir, 'index.json');
-      const text = JSON.stringify(this._sessions, null, 2);
-      await fs.promises.writeFile(indexFile, text, 'utf-8');
+      const indexData = this._sessions.map(s => this._toIndexEntry(s));
+      await fs.promises.writeFile(indexFile, JSON.stringify(indexData, null, 2), 'utf-8');
+
+      // 2. Write current session's data file (messages, agentLogs, archives)
+      const currentSession = this._sessions.find(s => s.id === this._currentSessionId);
+      if (currentSession) {
+        await this._saveSessionDataFile(currentSession, sessionsDir);
+      }
     } catch (err) {
       this._post({ type: 'error', message: `Failed to save sessions: ${err}` });
     } finally {
