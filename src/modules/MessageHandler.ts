@@ -7,7 +7,7 @@ import { SYSTEM_PROMPT } from '../systemPrompt';
 import { TOOL_DEFINITIONS } from '../toolDefinitions';
 import { sendChatMessage } from '../api';
 import { gitSnapshotTool } from '../tools';
-import { AUTO_COMPACT_TOKEN_THRESHOLD, MAX_TOOL_ITERATIONS } from '../constants';
+import { AUTO_COMPACT_TOKEN_THRESHOLD } from '../constants';
 import type { OperationController } from '../operationController';
 import { extractXmlPlaceholders, applyXmlPlaceholders } from '../mmOutput';
 
@@ -115,11 +115,7 @@ export class MessageHandler {
     
     try {
       const apiConfig = this._context.getApiConfig();
-      let iterations = 0;
-      const maxIterations = apiConfig.maxInteractions === -1 ? Number.MAX_SAFE_INTEGER : (apiConfig.maxInteractions || MAX_TOOL_ITERATIONS);
-      
-      while (iterations < maxIterations && !this._context.operation.isStopped()) {
-        iterations++;
+      while (!this._context.operation.isStopped()) {
 
         // Check if user requested stop before each iteration
         if (this._context.operation.isStopped()) {
@@ -281,10 +277,6 @@ export class MessageHandler {
           // 说明它在等待用户的下一步指示——无论 todo list 是否还有未完成项。
           // 用户可以通过发送新消息来继续未完成的工作。
           break;
-        }
-        
-        if (iterations >= maxIterations) {
-          this._context.post({ type: 'info', message: `Iteration limit (${maxIterations}) reached. Send an empty message to keep going, or type a new instruction.` });
         }
       } // end while
     } catch (error: any) {
