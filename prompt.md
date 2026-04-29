@@ -30,25 +30,24 @@ SYSTEM_PROMPT + '\n\n\n' + getAgentRuntimeContextBlock() + langInstr
 
 ### ❶ 固定系统提示（`SYSTEM_PROMPT`）
 
-定义在 `systemPrompt.ts`，约 224 行硬编码字符串。按顺序包含：
+定义在 `systemPrompt.ts`，从 v0.5.5 重构后为 **99 行**（原 224 行），按顺序包含 7 个章节：
 
-| 区块 | 行号 | 内容 |
-|------|------|------|
-| 角色定义 | L5 | "You are Vibe Coding Assistant — an AI that can directly read and edit files inside the user's VS Code workspace." |
-| 最近更新 | L9-19 | 编辑术语统一、标签机制、规则更新说明 |
-| 工具列表 | L21-41 | 每个工具的名称、描述和使用规则 |
-| 编辑权限开关 | L43-44 | 🔓/🔒 锁图标切换说明 |
-| `<edit-content>` 标签 | L45-56 | 原始文本传递协议：tool call JSON 中留空，visible response 中用标签包裹 |
-| 配置说明 | L58-70 | API Base URL、Key、Model、confirmChanges、maxInteractions、language 等 |
-| Memory 系统 | L71-109 | `.OpenVibe/memory.md` 的四层结构（Project → Files → Classes → Functions）及使用规范 |
-| 任务规划 | L111-131 | `create_todo_list` / `complete_todo_item` 规范、Bug 异常处理、步骤粒度指南 |
-| 编辑工作流 | L132-137 | 读→改→验 流程 |
-| 编辑经验总结 | L139-169 | 失败原因分析、成功替换的黄金法则、渐进式修改策略 |
-| 会话节奏控制 | L171-198 | 最小连续执行单元（读→改→验）、不需要等待和应该暂停的场景 |
-| 错误处理 | L201-205 | 各类错误的处理方式 |
-| 重要规则 | L207-213 | 行号偏移、新建文件用 startLine=1 endLine=0、增量编译 tsc --noEmit |
-| 修改后输出 | L215-220 | 总结格式（文件列表 + 变更说明 + 验证 + 下一步） |
-| 完成 | L222-223 | task_complete 调用 |
+| 区块 | 内容 |
+|------|------|
+| **Tools** | 15 个工具的一行描述（详细定义在 `toolDefinitions.ts` 的 JSON Schema 中） |
+| **Edit Permission** | 🔓/🔒 锁图标切换说明 |
+| **`<edit-content>` Tag Protocol** | 原始文本传递协议：JSON 中留空、visible response 中用标签包裹 |
+| **Project Context & Memory** | `.OpenVibe/memory.md` 的四层结构（L1 Project → L2 Files → L3 Classes → L4 Functions）及使用规则 |
+| **Task Planning** | `create_todo_list` / `complete_todo_item` 规范、Bug 异常处理 |
+| **Workflow** | 读→改→验核心循环 + 通用规则（行号偏移、`tsc --noEmit`、错误处理）+ 输出/完成规范 |
+| **Configuration** | 用户可配置项列表（API、Model、confirmChanges、language 等） |
+
+**重构要点（v0.5.5）：**
+- 删除 `Recent updates`（开发历史日志）
+- 合并 `Editing workflow` + `编辑经验总结` + `会话节奏控制` + `Error handling` + `Important rules` + `Output after modifications` + `Completion` → 统一为 **Workflow** 章节
+- 工具描述从 21 行精简为 15 行
+- Memory 从 38 行精简为 15 行
+- 全英文统一，去除中英混杂
 
 ### ❷ 运行时上下文（`getAgentRuntimeContextBlock()`）
 
@@ -357,7 +356,7 @@ MessageHandler.handleUserMessage()
 
 | 文件 | 作用 |
 |------|------|
-| `src/systemPrompt.ts` | 硬编码的系统提示模板（约 224 行） |
+| `src/systemPrompt.ts` | 固定系统提示模板（v0.5.5 重构后 **99 行**，原 224 行） |
 | `src/agentRuntimeContext.ts` | 动态生成 Host environment + Active Editor 信息 |
 | `src/modules/ConversationService.ts` | `buildMessagesForLlm()` 组装、`compactHistory()` 压缩 |
 | `src/modules/MessageHandler.ts` | 主循环：nudge 注入、tool call 执行循环、compact 触发 |
