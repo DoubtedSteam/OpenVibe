@@ -355,9 +355,11 @@ this._session.addCompressedArchive({
 |------|--------|------|
 | **手动** | 用户输入 `/compact` 命令 | 立即触发 |
 | **手动** | AI 调用 `compact` 工具 | 在 tool call 循环中触发 |
-| **自动** | 单次 API 响应的 `prompt_tokens` ≥ 1,000,000 | Fire-and-forget |
+| **自动** | 累计 `total_tokens` ≥ 1,000,000 | Fire-and-forget |
 
-> 自动 compact 的判断依据是**单次 API 调用的 prompt_tokens**（`usage.prompt_tokens`），由 `_accumulateAndSendUsage()` 检查，超过阈值则异步触发。
+> 自动 compact 的判断依据是**累计的 total_tokens**（`this._accumulatedUsage.total_tokens`），即整个会话所有 API 调用返回的 `total_tokens`（prompt + completion）之和。每次 API 调用后在 `_accumulateAndSendUsage()` 中累加并检查，超过阈值则异步触发。
+
+> `total_tokens` 由 DeepSeek API 返回，表示单次请求中所有 token 的总数（prompt_tokens + completion_tokens），是当前上下文长度的准确度量。
 
 ### 5.5 新旧对比
 
@@ -370,6 +372,8 @@ this._session.addCompressedArchive({
 | **增量计算** | ❌ 全部重算 | ✅ 只需计算压缩指令 + 回复 |
 | **前端感知** | 无感知 | ✅ 无感知 |
 | **归档机制** | 最多 10 份 | ✅ 最多 10 份 |
+
+---
 ## 六、完整请求流程图
 
 ```
@@ -399,7 +403,7 @@ MessageHandler.handleUserMessage()
     │   └─ 新一轮 LLM 调用（含新的 tool 结果）
     │
     ├─ 6. 检查是否需要自动 compact
-    │   └─ prompt_tokens > 1,000,000 → 自动触发 compact
+    │   └─ 累计 total_tokens ≥ 1,000,000 → 自动触发 compact
     │
     └─ 7. 循环结束 → 等待下一条用户输入
 ```
