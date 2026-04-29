@@ -30,12 +30,11 @@ SYSTEM_PROMPT + '\n\n\n' + getAgentRuntimeContextBlock() + langInstr
 
 ### ❶ 固定系统提示（`SYSTEM_PROMPT`）
 
-定义在 `systemPrompt.ts`，从 v0.5.5 重构后为 **99 行**（原 224 行），按顺序包含 7 个章节：
+定义在 `systemPrompt.ts`，从 v0.5.5 重构后为 **95 行**（原 224 行），按顺序包含 6 个章节：
 
 | 区块 | 内容 |
 |------|------|
 | **Tools** | 15 个工具的一行描述（详细定义在 `toolDefinitions.ts` 的 JSON Schema 中） |
-| **Edit Permission** | 🔓/🔒 锁图标切换说明 |
 | **`<edit-content>` Tag Protocol** | 原始文本传递协议：JSON 中留空、visible response 中用标签包裹 |
 | **Project Context & Memory** | `.OpenVibe/memory.md` 的四层结构（L1 Project → L2 Files → L3 Classes → L4 Functions）及使用规则 |
 | **Task Planning** | `create_todo_list` / `complete_todo_item` 规范、Bug 异常处理 |
@@ -48,10 +47,11 @@ SYSTEM_PROMPT + '\n\n\n' + getAgentRuntimeContextBlock() + langInstr
 - 工具描述从 21 行精简为 15 行
 - Memory 从 38 行精简为 15 行
 - 全英文统一，去除中英混杂
+- **Edit Permission** 移至 `agentRuntimeContext.ts` 运行时块，接受 `editPermissionEnabled` 参数动态显示 🔓/🔒 状态
 
 ### ❷ 运行时上下文（`getAgentRuntimeContextBlock()`）
 
-定义在 `agentRuntimeContext.ts:49`，**每次调用动态生成**。输出示例：
+定义在 `agentRuntimeContext.ts:52`，**每次调用动态生成**，接受可选参数 `editPermissionEnabled?: boolean`。输出示例：
 
 ```
 ## Host environment (OpenVibe)
@@ -62,9 +62,12 @@ SYSTEM_PROMPT + '\n\n\n' + getAgentRuntimeContextBlock() + langInstr
 
 ## Active Editor (实时追踪)
 - **Active editor**: `src/modules/ConversationService.ts` (typescript) — cursor at line 111, column 3, 509 lines total
+
+## Edit Permission         ← 仅在传入了 editPermissionEnabled 参数时出现
+🔓 **ON (write tools available)**
 ```
 
-如果用户当前没有打开文件编辑器，`Active Editor` 区块不会出现。
+当 `editPermissionEnabled` 为 `undefined` 时（如 review agent、compact 等），不输出 `## Edit Permission` 块，保持 cache 稳定。当 UI 开关状态接入后，`MessageHandler.ts` 可传入真实状态使 AI 感知当前读写权限。
 
 ### ❸ 语言指令（`langInstr`）
 
@@ -356,8 +359,8 @@ MessageHandler.handleUserMessage()
 
 | 文件 | 作用 |
 |------|------|
-| `src/systemPrompt.ts` | 固定系统提示模板（v0.5.5 重构后 **99 行**，原 224 行） |
-| `src/agentRuntimeContext.ts` | 动态生成 Host environment + Active Editor 信息 |
+| `src/systemPrompt.ts` | 固定系统提示模板（v0.5.5 重构后 **95 行**，原 224 行） |
+| `src/agentRuntimeContext.ts` | 动态生成 Host environment + Active Editor + Edit Permission（接受 `editPermissionEnabled` 参数） |
 | `src/modules/ConversationService.ts` | `buildMessagesForLlm()` 组装、`compactHistory()` 压缩 |
 | `src/modules/MessageHandler.ts` | 主循环：nudge 注入、tool call 执行循环、compact 触发 |
 | `src/modules/ToolExecutor.ts` | Todo 状态管理、工具调度、shell review |

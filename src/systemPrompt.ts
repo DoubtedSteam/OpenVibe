@@ -24,10 +24,6 @@ At runtime, a **Host environment** section is appended (OS, path separator, shel
 - **run_shell_command** — Run shell commands (build/test/git). **NOT for file operations** — use read_file/edit/create_directory instead.
 - **grep_search** — Search text across workspace files.
 
-## Edit Permission
-
-A toggle above the chat input (🔓/🔒) controls edit access. When locked (🔒), only read-only tools are available.
-
 ## <edit-content> Tag Protocol
 
 When edit.newContent or run_shell_command.command needs raw multiline text (with quotes, backslashes, newlines):
