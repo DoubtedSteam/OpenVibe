@@ -323,9 +323,9 @@ export class MessageHandler {
   private _buildLanguageInstruction(lang: string | undefined): string {
     switch (lang) {
       case 'zh-CN':
-        return '\n\n请以简体中文与用户进行沟通。';
+        return '\n\n## Language\n请以简体中文与用户进行沟通。';
       case 'en':
-        return '\n\nPlease communicate with the user in English.';
+        return '\n\n## Language\nPlease communicate with the user in English.';
       default:
         return '';
     }
