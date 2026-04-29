@@ -280,11 +280,55 @@ export class ConversationService {
       }
     }
     return 0;
-    return 0;
   }
 
   /**
-   * Build the language instruction suffix appended to the system prompt content.
+   * Adjust the reserve boundary so that assistant(tool_calls) + tool result blocks
+   * are never split across the compress/keep boundary.
+   *
+   * Two cases handled:
+   *   A) First kept message is a 'tool' → its assistant is in the compress zone.
+   *      Move the boundary backward to include the assistant.
+   *   B) Last compressed message is an 'assistant' with tool_calls → its tool
+   *      results are in the keep zone. Move the boundary forward to include them.
+   */
+  private _adjustReserveBoundary(messages: ChatMessage[], reserveStart: number): number {
+    if (reserveStart <= 0 || reserveStart >= messages.length) return reserveStart;
+
+    // Case A: first kept message is a 'tool' — find its parent assistant in compress zone
+    if (messages[reserveStart].role === 'tool') {
+      let i = reserveStart - 1;
+      while (i >= 0 && (messages[i].role === 'tool' || messages[i].hiddenFromLlm || messages[i].role === 'event')) {
+        i--;
+      }
+      if (i >= 0 && messages[i].role === 'assistant' && messages[i].tool_calls) {
+        return i;
+      }
+      return reserveStart;
+    }
+
+    // Case B: last compressed message is an 'assistant' with tool_calls
+    // and its tool results are the first messages in the keep zone
+    const lastCompressed = messages[reserveStart - 1];
+    if (lastCompressed.role === 'assistant' && lastCompressed.tool_calls && lastCompressed.tool_calls.length > 0) {
+      const requiredIds = new Set(lastCompressed.tool_calls.map((tc: ToolCall) => tc.id));
+      let j = reserveStart;
+      const respondedIds = new Set<string>();
+      while (j < messages.length && messages[j].role === 'tool') {
+        if (messages[j].tool_call_id) {
+          respondedIds.add(messages[j].tool_call_id!);
+        }
+        j++;
+      }
+      if (Array.from(requiredIds).some(id => respondedIds.has(id))) {
+        return j;
+      }
+    }
+
+    return reserveStart;
+  }
+
+  /**
    * Mirrors MessageHandler._buildLanguageInstruction() to ensure the same
    * system prompt text is used in compact requests for KV cache compatibility.
    */
@@ -315,13 +359,19 @@ export class ConversationService {
     }
 
     // ── Find reserve window ──────────────────────────────────────────────
-    const reserveStart = this._findReserveWindowStart(messages);
+    const rawReserveStart = this._findReserveWindowStart(messages);
+    if (rawReserveStart === 0) {
+      return JSON.stringify({ success: false, message: 'Nothing to compact: conversation fits within the reserve window.' });
+    }
+
+    // Adjust boundary so assistant(tool_calls)+tool blocks stay intact
+    const reserveStart = this._adjustReserveBoundary(messages, rawReserveStart);
     if (reserveStart === 0) {
       return JSON.stringify({ success: false, message: 'Nothing to compact: conversation fits within the reserve window.' });
     }
 
     const toCompress = messages.slice(0, reserveStart);
-    const toKeep = messages.slice(reserveStart);
+    const toKeep = this._sanitizeMessageList(messages.slice(reserveStart));
 
     // ── Build compact request (reuse main LLM + original messages) ────────
     const abortController = new AbortController();
