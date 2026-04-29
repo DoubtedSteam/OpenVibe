@@ -89,9 +89,19 @@ export class MessageHandler {
       } catch {
         /* no Git repo or snapshot failure — non-fatal */
       }
-      
+      // Build user message with runtime context (Edit Permission + todo state).
+      // Embedded in the user message (not extra system msgs) to keep the prefix cache stable.
+      const ctxLines: string[] = [];
+      ctxLines.push(`🔓 Edit: ${this._context.getEditPermissionEnabled() ? 'ON' : 'OFF'}`);
+      const todoInfo = this._context.getTodoControlInfo();
+      if (todoInfo && todoInfo.remaining > 0) {
+        ctxLines.push(`📋 Todo: ${todoInfo.remaining} item(s) remaining`);
+      }
+      const ctxBlock = `─── Context ───\n${ctxLines.join('\n')}\n────────────────\n\n`;
+      const enrichedText = ctxBlock + text;
+
       this._context.post({ type: 'addMessage', message: { role: 'user', content: text } });
-      this._context.addMessage({ role: 'user', content: text });
+      this._context.addMessage({ role: 'user', content: enrichedText });
       // Fire-and-forget: auto-name the session from the first user message.
       this._context.autoNameSession?.();
     } else {
@@ -107,18 +117,6 @@ export class MessageHandler {
       const apiConfig = this._context.getApiConfig();
       let iterations = 0;
       const maxIterations = apiConfig.maxInteractions === -1 ? Number.MAX_SAFE_INTEGER : (apiConfig.maxInteractions || MAX_TOOL_ITERATIONS);
-      // Internal-only nudge for the next LLM call.
-      // Used to remind the model to update the todo list.
-      // Placed as a separate system message (not in system prompt) to preserve prompt-cache prefix.
-      // IMPORTANT: Do not append this as a visible chat message.
-      let pendingNudge = '';
-
-      // If a todo list is active, remind the LLM that it may need to update it
-      // when the user's new message changes requirements. Not visible to the user.
-      const todoInfo = this._context.getTodoControlInfo();
-      if (todoInfo && todoInfo.remaining > 0) {
-        pendingNudge = '\n\n[INTERNAL NUDGE]\n如有需要，请变更todo list。\n[END INTERNAL NUDGE]\n';
-      }
       
       while (iterations < maxIterations && !this._context.operation.isStopped()) {
         iterations++;
@@ -132,11 +130,6 @@ export class MessageHandler {
         const langInstr = this._buildLanguageInstruction(apiConfig.language);
 
         const allMessages = this._context.buildMessagesForLlm(SYSTEM_PROMPT + '\n\n\n' + getAgentRuntimeContextBlock() + langInstr);
-        // Append runtime state AFTER conversation history so the prefix ([0] system + history) stays cacheable.
-        allMessages.push({ role: 'system', content: this._buildEditPermissionBlock() });
-        if (pendingNudge) {
-          allMessages.push({ role: 'system', content: pendingNudge });
-        }
 
         const response = await sendChatMessage(allMessages, apiConfig, TOOL_DEFINITIONS, this._context.operation.signal());
         // Accumulate and report token usage after every LLM call
@@ -151,8 +144,7 @@ export class MessageHandler {
         }
 
         if (response.toolCalls && response.toolCalls.length > 0) {
-          // Nudge is consumed once the model starts using tools; system prompt stays stable for cache.
-          pendingNudge = '';
+          // ── Extract <edit-content> blocks from visible response ──────────
           // ── Extract <edit-content> blocks from visible response ──────────
           // The AI can place raw multi-line content inside <edit-content> tags
           // in the visible response instead of JSON-escaping it in newContent.
@@ -274,7 +266,6 @@ export class MessageHandler {
             }
           } // End of for (const toolCall of response.toolCalls)
           if (stopAfterTools) {
-            pendingNudge = '';
             break;
           }
           // Go back to the top of the loop to continue the conversation
@@ -289,7 +280,6 @@ export class MessageHandler {
           // 把控制权交还给用户。模型主动选择输出文本而不是调用工具，
           // 说明它在等待用户的下一步指示——无论 todo list 是否还有未完成项。
           // 用户可以通过发送新消息来继续未完成的工作。
-          pendingNudge = '';
           break;
         }
         
@@ -332,16 +322,7 @@ export class MessageHandler {
     }
   }
 
-  /** Build the Edit Permission status block reflecting the current toggle state. */
-  private _buildEditPermissionBlock(): string {
-    const enabled = this._context.getEditPermissionEnabled();
-    const icon = enabled ? '🔓' : '🔒';
-    const label = enabled ? 'ON (write tools available)' : 'OFF (read-only tools only)';
-    return `## Edit Permission\n${icon} **${label}**`;
-  }
-
   /**
-
   /**
    * Resolve @ references in user input.
    * Supports:

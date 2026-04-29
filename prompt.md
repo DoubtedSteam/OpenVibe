@@ -51,7 +51,7 @@ SYSTEM_PROMPT + '\n\n\n' + getAgentRuntimeContextBlock() + langInstr
 
 ### ❷ 运行时上下文（`getAgentRuntimeContextBlock()`）
 
-定义在 `agentRuntimeContext.ts:52`，**每次调用动态生成**，接受可选参数 `editPermissionEnabled?: boolean`。输出示例：
+定义在 `agentRuntimeContext.ts:49`，**每次调用动态生成**。输出示例：
 
 ```
 ## Host environment (OpenVibe)
@@ -62,13 +62,32 @@ SYSTEM_PROMPT + '\n\n\n' + getAgentRuntimeContextBlock() + langInstr
 
 ## Active Editor (实时追踪)
 - **Active editor**: `src/modules/ConversationService.ts` (typescript) — cursor at line 111, column 3, 509 lines total
-
-## Edit Permission         ← 仅在传入了 editPermissionEnabled 参数时出现
-🔓 **ON (write tools available)**
 ```
 
-当 `editPermissionEnabled` 为 `undefined` 时（如 review agent、compact 等），不输出 `## Edit Permission` 块，保持 cache 稳定。**完整数据流：** Webview 锁按钮 → `postMessage({ type: 'setEditPermission', enabled })` → `ChatViewProvider.onDidReceiveMessage` → `UIManager.setEditPermissionEnabled()` → `MessageHandler.ts:134` 传入 `getAgentRuntimeContextBlock(editPermissionEnabled)` → AI 感知当前权限状态。
+如果用户当前没有打开文件编辑器，`Active Editor` 区块不会出现。
 
+### ❸ 运行时上下文 → 嵌入用户消息（`MessageHandler.ts:92-104`）
+
+Edit Permission 和 Todo 状态不再作为独立消息，而是**嵌入用户消息正文开头**：
+
+```
+─── Context ───
+🔓 Edit: ON
+📋 Todo: 2 item(s) remaining
+────────────────
+
+[用户的实际输入]
+```
+
+**设计理由：** 用户消息每轮必定变化（输入不同），带上上下文不额外增加 LLM 的消息数，也不破坏前缀缓存。数据流：
+
+```
+Webview 锁按钮
+  → postMessage({ type: 'setEditPermission', enabled })
+  → ChatViewProvider.onDidReceiveMessage
+  → UIManager.setEditPermissionEnabled()
+  → MessageHandler.ts 构建用户消息时读取状态 → 嵌入上下文块
+```
 ### ❸ 语言指令（`langInstr`）
 
 在 `MessageHandler.ts:132` 由 `_buildLanguageInstruction()` 生成，追加到 system 消息尾部：
@@ -360,9 +379,9 @@ MessageHandler.handleUserMessage()
 | 文件 | 作用 |
 |------|------|
 | `src/systemPrompt.ts` | 固定系统提示模板（v0.5.5 重构后 **75 行**，原 224 行） |
-| `src/agentRuntimeContext.ts` | 动态生成 Host environment + Active Editor + Edit Permission（接受 `editPermissionEnabled` 参数） |
+| `src/agentRuntimeContext.ts` | 动态生成 Host environment + Active Editor（运行时上下文，拼接在 system 中） |
 | `src/modules/ConversationService.ts` | `buildMessagesForLlm()` 组装、`compactHistory()` 压缩 |
-| `src/modules/MessageHandler.ts` | 主循环：nudge 注入、tool call 执行循环、compact 触发 |
+| `src/modules/MessageHandler.ts` | 主循环：运行时上下文注入用户消息、tool call 执行循环、compact 触发 |
 | `src/modules/ToolExecutor.ts` | Todo 状态管理、工具调度、shell review |
 | `src/modules/ChatViewProvider.ts` | UI 消息持久化（`persistAssistantUiEcho` 的 `hiddenFromLlm` 逻辑） |
 | `src/api.ts` | API 调用封装（`sendChatMessage`） |
