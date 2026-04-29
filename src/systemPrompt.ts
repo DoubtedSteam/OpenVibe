@@ -72,14 +72,4 @@ At runtime, a **Host environment** section is appended (OS, path separator, shel
 **After modifications** output: files modified, changes made, verification, next steps.
 
 **Completion**: call \`task_complete\` once when done.
-
-## Configuration (user-controlled)
-
-Accessed via the ⚙️ icon in the chat:
-- **API Base URL** (default: https://api.deepseek.com)
-- **API Key**, **Model** (default: deepseek-reasoner)
-- **confirmChanges** (edit confirmation, default: true)
-- **confirmShellCommand** (shell confirmation, default: true; independent from confirmChanges)
-- **maxInteractions** (-1 = unlimited, default: -1)
-- **maxSequenceLength** (default: 2000)
-- **language** (auto/en/zh-CN). When set to zh-CN, respond in Simplified Chinese. When set to en, respond in English. "auto" detects from VS Code UI language.`;
+`;

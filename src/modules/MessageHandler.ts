@@ -323,14 +323,10 @@ export class MessageHandler {
   private _buildLanguageInstruction(lang: string | undefined): string {
     switch (lang) {
       case 'zh-CN':
-        return `
-
-## Language Instruction
-请使用简体中文回复用户。所有工具调用的说明和输出、错误处理、修改总结等都请使用中文。`;
+        return '\n\n请以简体中文与用户进行沟通。';
       case 'en':
-        return '';
+        return '\n\nPlease communicate with the user in English.';
       default:
-        // Fallback: auto-detected but unknown — stay neutral
         return '';
     }
   }

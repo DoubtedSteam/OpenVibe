@@ -30,7 +30,7 @@ SYSTEM_PROMPT + '\n\n\n' + getAgentRuntimeContextBlock() + langInstr
 
 ### ❶ 固定系统提示（`SYSTEM_PROMPT`）
 
-定义在 `systemPrompt.ts`，从 v0.5.5 重构后为 **86 行**（原 224 行），按顺序包含 5 个章节：
+定义在 `systemPrompt.ts`，从 v0.5.5 重构后为 **75 行**（原 224 行），按顺序包含 4 个章节：
 
 | 区块 | 内容 |
 |------|------|
@@ -38,7 +38,6 @@ SYSTEM_PROMPT + '\n\n\n' + getAgentRuntimeContextBlock() + langInstr
 | **Project Context & Memory** | `.OpenVibe/memory.md` 的四层结构（L1 Project → L2 Files → L3 Classes → L4 Functions）及使用规则 |
 | **Task Planning** | `create_todo_list` / `complete_todo_item` 规范、Bug 异常处理 |
 | **Workflow** | 读→改→验核心循环 + 通用规则（行号偏移、`tsc --noEmit`、错误处理）+ 输出/完成规范 |
-| **Configuration** | 用户可配置项列表（API、Model、confirmChanges、language 等） |
 
 **重构要点（v0.5.5）：**
 - 删除 `Recent updates`（开发历史日志）
@@ -48,6 +47,7 @@ SYSTEM_PROMPT + '\n\n\n' + getAgentRuntimeContextBlock() + langInstr
 - 全英文统一，去除中英混杂
 - **Edit Permission** 移至 `agentRuntimeContext.ts` 运行时块，接受 `editPermissionEnabled` 参数动态显示 🔓/🔒 状态
 - **`<edit-content>` Tag Protocol** 从独立章节移入 `edit` 和 `run_shell_command` 的工具描述中
+- **Configuration** 整章删除（仅 language 信息保留并移入 `_buildLanguageInstruction()`，以自然语言呈现）
 
 ### ❷ 运行时上下文（`getAgentRuntimeContextBlock()`）
 
@@ -71,11 +71,11 @@ SYSTEM_PROMPT + '\n\n\n' + getAgentRuntimeContextBlock() + langInstr
 
 ### ❸ 语言指令（`langInstr`）
 
-根据 `vibe-coding.language` 配置生成：
+在 `MessageHandler.ts:132` 由 `_buildLanguageInstruction()` 生成，追加到 system 消息尾部：
 
-- `zh-CN` → `请使用简体中文回复用户...`
-- `en` → `Please respond in English...`
-- `auto` → 根据 VS Code UI 语言自动检测
+- `zh-CN` → `请以简体中文与用户进行沟通。`
+- `en` → `Please communicate with the user in English.`
+- `auto` → 由 `getApiConfig()` 解析为 `zh-CN` 或 `en` 后对应生成
 
 ### ❹ 激活的 Skill（条件追加）
 
@@ -359,7 +359,7 @@ MessageHandler.handleUserMessage()
 
 | 文件 | 作用 |
 |------|------|
-| `src/systemPrompt.ts` | 固定系统提示模板（v0.5.5 重构后 **86 行**，原 224 行） |
+| `src/systemPrompt.ts` | 固定系统提示模板（v0.5.5 重构后 **75 行**，原 224 行） |
 | `src/agentRuntimeContext.ts` | 动态生成 Host environment + Active Editor + Edit Permission（接受 `editPermissionEnabled` 参数） |
 | `src/modules/ConversationService.ts` | `buildMessagesForLlm()` 组装、`compactHistory()` 压缩 |
 | `src/modules/MessageHandler.ts` | 主循环：nudge 注入、tool call 执行循环、compact 触发 |
