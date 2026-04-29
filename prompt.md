@@ -10,8 +10,11 @@
 
 ```
 [
-  system,              ← 位置 0：增强后的系统提示（SYSTEM_PROMPT + Host env + langInstr + skills）
-  visibleMessages...   ← 位置 1+：过滤后的历史对话（含用户消息上下文块）
+  system,              ← 位置 0：SYSTEM_PROMPT + Host env + langInstr
+  user,                ← 位置 1+：过滤后的历史对话（用户消息自带运行时 Context 块）
+  assistant,
+  tool,
+  ...
 ]
 ```
 
@@ -25,7 +28,7 @@
 SYSTEM_PROMPT + '\n\n\n' + getAgentRuntimeContextBlock() + langInstr
 ```
 
-展开后依次为以下四大部分：
+展开后依次为以下三大部分：
 
 ### ❶ 固定系统提示（`SYSTEM_PROMPT`）
 
@@ -67,7 +70,7 @@ SYSTEM_PROMPT + '\n\n\n' + getAgentRuntimeContextBlock() + langInstr
 
 ### ❷½ 完整的 User 消息模板
 
-结合 ❶（系统提示）+ ❷（运行时上下文）+ ❸（语言指令）+ ❹（技能）后，system 消息组装完成。但还有一块**运行时状态**需要让 AI 感知——它被嵌入在**每一条用户消息的正文开头**（`MessageHandler.ts:94-104`）：
+结合 ❶（系统提示）+ ❷（运行时上下文）+ ❸（语言指令）后，system 消息组装完成。但还有一块**运行时状态**需要让 AI 感知——它被嵌入在**每一条用户消息的正文开头**（`MessageHandler.ts:94-104`）：
 
 ```typescript
 // 构建 context 块，嵌入到用户消息正文开头
@@ -94,7 +97,7 @@ const enrichedText = ctxBlock + text;
 
 ```
 [
-  system,    ← 位置 0：❶ + ❷ + ❸ + ❹
+  system,    ← 位置 0：❶ + ❷ + ❸
   user,      ← 位置 1：附带了运行时 Context 块的用户消息
   assistant,
   tool,
@@ -122,18 +125,7 @@ Webview 锁按钮
 - `en` → `Please communicate with the user in English.`
 - `auto` → 由 `getApiConfig()` 解析为 `zh-CN` 或 `en` 后对应生成
 
-### ❹ 激活的 Skill（条件追加）
-
-在 `ConversationService.buildMessagesForLlm()` 第 116-136 行，如果当前会话激活了技能：
-
-```
----
-## Activated Skills
-The following skills are currently active in this conversation. Follow their instructions carefully.
-
-## Activated skill: xxx-skill
-[SKILL.md 的完整指令内容]
-```
+> **关于 Skill：** Skill 不嵌入 system prompt，而是通过 `load_skill` 工具的返回结果（tool result / feedback）进入 LLM 上下文。AI 调用 `load_skill("xxx")` 后，工具返回完整的技能指令文本，AI 在下文对话中自然遵循该指令。`activate_skill` 仅用于跨会话持久化激活状态，不改变当前消息结构。
 
 ---
 
@@ -208,7 +200,7 @@ AI 每次收到用户消息时，都能看到当前待办事项的数量。当 A
 
 ```
 [
-  system,          ← 主系统提示（SYSTEM_PROMPT + Host env + langInstr + skills）
+  system,          ← 主系统提示（SYSTEM_PROMPT + Host env + langInstr）
   user,            ← 用户消息（含 ─── Context ─── 块，仅显示 Edit 状态）
   assistant,
   tool,
@@ -371,7 +363,6 @@ MessageHandler.handleUserMessage()
     │
     ├─ 3. buildMessagesForLlm(SYSTEM_PROMPT)
     │   ├─ system = SYSTEM_PROMPT + hostContext + langInstr
-    │   ├─ 有激活 skills → 追加到 system 尾部
     │   ├─ 过滤 hiddenFromLlm 和 role==='event'
     │   └─ 返回 [system, user1, assistant1, tool1, ...]
     │
