@@ -65,20 +65,46 @@ SYSTEM_PROMPT + '\n\n\n' + getAgentRuntimeContextBlock() + langInstr
 
 如果用户当前没有打开文件编辑器，`Active Editor` 区块不会出现。
 
-### 附：运行时上下文 → 嵌入用户消息（`MessageHandler.ts:94-104`）
+### ❷½ 完整的 User 消息模板
 
-Edit Permission 和 Todo 状态不再作为独立消息，而是**嵌入用户消息正文开头**：
+结合 ❶（系统提示）+ ❷（运行时上下文）+ ❸（语言指令）+ ❹（技能）后，system 消息组装完成。但还有一块**运行时状态**需要让 AI 感知——它被嵌入在**每一条用户消息的正文开头**（`MessageHandler.ts:94-104`）：
+
+```typescript
+// 构建 context 块，嵌入到用户消息正文开头
+const ctxLines: string[] = [];
+ctxLines.push(`🔓 Edit: ${editPermission ? 'ON' : 'OFF'}`);
+const todoInfo = this._context.getTodoControlInfo();
+if (todoInfo && todoInfo.remaining > 0) {
+  ctxLines.push(`📋 Todo: ${todoInfo.remaining} item(s) remaining`);
+}
+const ctxBlock = `─── Context ───\n${ctxLines.join('\n')}\n────────────────\n\n`;
+const enrichedText = ctxBlock + text;
+```
+
+所以最终发给 LLM 的消息数组中，一条 `user` 消息的**完整结构**是这样的：
+
+```json
+{
+  "role": "user",
+  "content": "─── Context ───\n🔓 Edit: ON\n📋 Todo: 2 item(s) remaining\n────────────────\n\n帮我修改 config.ts 的数据库配置"
+}
+```
+
+在消息数组中的位置：
 
 ```
-─── Context ───
-🔓 Edit: ON
-📋 Todo: 2 item(s) remaining
-────────────────
-
-[用户的实际输入]
+[
+  system,    ← 位置 0：❶ + ❷ + ❸ + ❹
+  user,      ← 位置 1：附带了运行时 Context 块的用户消息
+  assistant,
+  tool,
+  ...
+]
 ```
 
-**设计理由：** 用户消息每轮必定变化（输入不同），带上上下文不额外增加 LLM 的消息数，也不破坏前缀缓存。数据流：
+**设计理由：** 用户消息每轮必定变化（输入不同），带上上下文不额外增加 LLM 的消息数，也不破坏 prompt cache 前缀缓存。
+
+**数据流：**
 
 ```
 Webview 锁按钮
@@ -87,6 +113,7 @@ Webview 锁按钮
   → UIManager.setEditPermissionEnabled()
   → MessageHandler.ts 构建用户消息时读取状态 → 嵌入上下文块
 ```
+
 ### ❸ 语言指令（`langInstr`）
 
 在 `MessageHandler.ts:130` 由 `_buildLanguageInstruction()` 生成，追加到 system 消息尾部：
