@@ -30,12 +30,11 @@ SYSTEM_PROMPT + '\n\n\n' + getAgentRuntimeContextBlock() + langInstr
 
 ### ❶ 固定系统提示（`SYSTEM_PROMPT`）
 
-定义在 `systemPrompt.ts`，从 v0.5.5 重构后为 **95 行**（原 224 行），按顺序包含 6 个章节：
+定义在 `systemPrompt.ts`，从 v0.5.5 重构后为 **86 行**（原 224 行），按顺序包含 5 个章节：
 
 | 区块 | 内容 |
 |------|------|
 | **Tools** | 15 个工具的一行描述（详细定义在 `toolDefinitions.ts` 的 JSON Schema 中） |
-| **`<edit-content>` Tag Protocol** | 原始文本传递协议：JSON 中留空、visible response 中用标签包裹 |
 | **Project Context & Memory** | `.OpenVibe/memory.md` 的四层结构（L1 Project → L2 Files → L3 Classes → L4 Functions）及使用规则 |
 | **Task Planning** | `create_todo_list` / `complete_todo_item` 规范、Bug 异常处理 |
 | **Workflow** | 读→改→验核心循环 + 通用规则（行号偏移、`tsc --noEmit`、错误处理）+ 输出/完成规范 |
@@ -48,6 +47,7 @@ SYSTEM_PROMPT + '\n\n\n' + getAgentRuntimeContextBlock() + langInstr
 - Memory 从 38 行精简为 15 行
 - 全英文统一，去除中英混杂
 - **Edit Permission** 移至 `agentRuntimeContext.ts` 运行时块，接受 `editPermissionEnabled` 参数动态显示 🔓/🔒 状态
+- **`<edit-content>` Tag Protocol** 从独立章节移入 `edit` 和 `run_shell_command` 的工具描述中
 
 ### ❷ 运行时上下文（`getAgentRuntimeContextBlock()`）
 
@@ -359,7 +359,7 @@ MessageHandler.handleUserMessage()
 
 | 文件 | 作用 |
 |------|------|
-| `src/systemPrompt.ts` | 固定系统提示模板（v0.5.5 重构后 **95 行**，原 224 行） |
+| `src/systemPrompt.ts` | 固定系统提示模板（v0.5.5 重构后 **86 行**，原 224 行） |
 | `src/agentRuntimeContext.ts` | 动态生成 Host environment + Active Editor + Edit Permission（接受 `editPermissionEnabled` 参数） |
 | `src/modules/ConversationService.ts` | `buildMessagesForLlm()` 组装、`compactHistory()` 压缩 |
 | `src/modules/MessageHandler.ts` | 主循环：nudge 注入、tool call 执行循环、compact 触发 |

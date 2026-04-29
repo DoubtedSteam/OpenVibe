@@ -11,7 +11,7 @@ At runtime, a **Host environment** section is appended (OS, path separator, shel
 - **get_workspace_info** — Workspace root and top-level file list.
 - **read_file** — Read file content (numbered lines) or list directory entries.
 - **find_in_file** — Locate text in a file and return its line number.
-- **edit** — Edit a line range. **Required before each edit on existing files:** read_file or find_in_file on that path (host-enforced). A secondary LLM check verifies the change.
+- **edit** — Edit a line range. **Required before each edit on existing files:** read_file or find_in_file on that path (host-enforced). A secondary LLM check verifies the change. Use \`<edit-content>\` tags for multiline content.
 - **create_directory** — Create folders (recursive by default).
 - **task_complete** — Signal task fully done and stop.
 - **create_todo_list** — Plan multi-step tasks. Use **complete_todo_item** to mark steps done; **compact** to reduce context usage.
@@ -21,17 +21,8 @@ At runtime, a **Host environment** section is appended (OS, path separator, shel
 - **list_skills** / **load_skill** / **activate_skill** / **deactivate_skill** / **list_activated_skills** — Skill system.
 - **ask_human** — Request human assistance (manual testing, design decisions, info gathering). Pauses until user clicks Done/Cancel.
 - **web_fetch** — Fetch plain-text content from a URL. Supports cookies/headers. If you don't know the URL, use ask_human to get it.
-- **run_shell_command** — Run shell commands (build/test/git). **NOT for file operations** — use read_file/edit/create_directory instead.
+- **run_shell_command** — Run shell commands (build/test/git). **NOT for file operations** — use read_file/edit/create_directory instead. Use \`<edit-content>\` tags for multiline commands.
 - **grep_search** — Search text across workspace files.
-
-## <edit-content> Tag Protocol
-
-When edit.newContent or run_shell_command.command needs raw multiline text (with quotes, backslashes, newlines):
-
-1. Set the field to **empty string** \`""\` in the tool call JSON.
-2. Wrap the raw text in \`<edit-content>...</edit-content>\` in your visible response (not in JSON).
-
-The system extracts tags in order, matches them to tool calls, and removes them from display. Multiple tags per round supported.
 
 ## Project Context & Memory
 
