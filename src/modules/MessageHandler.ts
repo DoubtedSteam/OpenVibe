@@ -131,10 +131,12 @@ export class MessageHandler {
         // Build language instruction based on user's setting
         const langInstr = this._buildLanguageInstruction(apiConfig.language);
 
-        const allMessages = this._context.buildMessagesForLlm(SYSTEM_PROMPT + '\n\n\n' + getAgentRuntimeContextBlock(this._context.getEditPermissionEnabled()) + langInstr);
+        const allMessages = this._context.buildMessagesForLlm(SYSTEM_PROMPT + '\n\n\n' + getAgentRuntimeContextBlock() + langInstr);
+        // Edit Permission as a separate system message (not in system prompt) so prefix cache stays stable.
+        allMessages.splice(1, 0, { role: 'system', content: this._buildEditPermissionBlock() });
         // Nudge as a separate system message (not in system prompt) so prompt-cache prefix stays stable.
         if (pendingNudge) {
-          allMessages.splice(1, 0, { role: 'system', content: pendingNudge });
+          allMessages.splice(2, 0, { role: 'system', content: pendingNudge });
         }
 
         const response = await sendChatMessage(allMessages, apiConfig, TOOL_DEFINITIONS, this._context.operation.signal());
@@ -330,6 +332,16 @@ export class MessageHandler {
         return '';
     }
   }
+
+  /** Build the Edit Permission status block reflecting the current toggle state. */
+  private _buildEditPermissionBlock(): string {
+    const enabled = this._context.getEditPermissionEnabled();
+    const icon = enabled ? '🔓' : '🔒';
+    const label = enabled ? 'ON (write tools available)' : 'OFF (read-only tools only)';
+    return `## Edit Permission\n${icon} **${label}**`;
+  }
+
+  /**
 
   /**
    * Resolve @ references in user input.

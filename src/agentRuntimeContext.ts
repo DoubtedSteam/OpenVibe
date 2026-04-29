@@ -44,12 +44,9 @@ function getActiveEditorInfo(): string {
 /**
  * Short block appended to agent system prompts (main assistant, reviewers, compact, etc.).
  * Keeps models aware of Windows vs Unix paths, shells, line-ending behavior,
- * active editor file, and current edit permission state.
- *
- * @param editPermissionEnabled - Current edit toggle state. When provided, shows 🔓/🔒 status.
- *                                Omit (or pass undefined) to skip the permission line.
+ * and the currently active editor file.
  */
-export function getAgentRuntimeContextBlock(editPermissionEnabled?: boolean): string {
+export function getAgentRuntimeContextBlock(): string {
   const plat = process.platform;
   const isWin = plat === 'win32';
   const lineEndingHint = isWin
@@ -70,15 +67,6 @@ export function getAgentRuntimeContextBlock(editPermissionEnabled?: boolean): st
 
   if (activeEditorInfo) {
     block += `\n## Active Editor (实时追踪)\n${activeEditorInfo}`;
-  }
-
-  // Edit permission: only emit when caller provides the state.
-  // This keeps cache stable (no variable content in SYSTEM_PROMPT) and
-  // lets the AI know whether it can use write tools right now.
-  if (editPermissionEnabled !== undefined) {
-    const icon = editPermissionEnabled ? '🔓' : '🔒';
-    const label = editPermissionEnabled ? 'ON (write tools available)' : 'OFF (read-only tools only)';
-    block += `\n## Edit Permission\n${icon} **${label}**\n`;
   }
 
   return block;
