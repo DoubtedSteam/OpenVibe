@@ -1,5 +1,7 @@
 import { ChatMessage, ToolCall, ApiConfig, AgentLogEntry, CompressedArchive } from '../types';
 import { getAgentRuntimeContextBlock } from '../agentRuntimeContext';
+import { SYSTEM_PROMPT } from '../systemPrompt';
+import { TOOL_DEFINITIONS } from '../toolDefinitions';
 import { sendChatMessage } from '../api';
 import { SessionManager } from './SessionManager';
 import { loadActivatedSkillInstruction } from '../tools';
@@ -222,20 +224,22 @@ export class ConversationService {
       }
     }
     return 0;
+    return 0;
   }
 
   /**
-   * Build language instruction for the summarizer based on user's API config.
+   * Build the language instruction suffix appended to the system prompt content.
+   * Mirrors MessageHandler._buildLanguageInstruction() to ensure the same
+   * system prompt text is used in compact requests for KV cache compatibility.
    */
-  private _buildCompactLanguageInstruction(): string {
-    const apiConfig = this._getApiConfig();
-    switch (apiConfig.language) {
+  private _buildLanguageInstruction(lang: string | undefined): string {
+    switch (lang) {
       case 'zh-CN':
-        return '\n- 请使用简体中文撰写摘要。\n- 使用第三人称现在时。';
+        return '\n\n## Language\n请以简体中文与用户进行沟通。';
       case 'en':
-        return '\n- Write the summary in English.\n- Use third-person present tense.';
+        return '\n\n## Language\nPlease communicate with the user in English.';
       default:
-        return '\n- Use the same language as the conversation history.\n- Use third-person present tense.';
+        return '';
     }
   }
 
@@ -243,7 +247,9 @@ export class ConversationService {
 
   /**
    * Compact conversation history: older messages (outside the 20k-token reserve window)
-   * are summarized by an LLM and archived. Recent messages are preserved intact.
+   * are sent to the **same main LLM** (same system prompt + original message format)
+   * along with a compact instruction, maximizing KV cache hit.
+   * Recent messages are preserved intact. Frontend is NOT updated.
    */
   async compactHistory(triggeredByTokenLimit = false): Promise<string> {
     const messages = this._session.getCurrentMessages();
@@ -260,50 +266,36 @@ export class ConversationService {
     const toCompress = messages.slice(0, reserveStart);
     const toKeep = messages.slice(reserveStart);
 
-    // ── Generate summary ─────────────────────────────────────────────────
+    // ── Build compact request (reuse main LLM + original messages) ────────
     const abortController = new AbortController();
     try {
       const apiConfig = this._getApiConfig();
+      const langInstr = this._buildLanguageInstruction(apiConfig.language);
 
-      const historyText = toCompress
-        .filter((m) => !m.hiddenFromLlm && m.role !== 'event')
-        .filter(m => m.role !== 'tool' || !!m.content)
-        .map(m => {
-          const roleLabel =
-            m.role === 'user' ? 'User' :
-            m.role === 'assistant' ? 'Assistant' :
-            m.role === 'tool' ? 'Tool result' : 'System';
-          let body = typeof m.content === 'string' ? m.content : JSON.stringify(m.content);
-          // Include reasoning_content for assistant messages so the summary
-          // captures the model's chain-of-thought reasoning as well.
-          if (m.role === 'assistant' && m.reasoning_content) {
-            body = `[Reasoning]\n${m.reasoning_content}\n[/Reasoning]\n\n${body}`;
-          }
-          return `[${roleLabel}]\n${body}`;
-        })
-        .join('\n\n---\n\n');
+      const compactSystemPrompt = SYSTEM_PROMPT + '\n\n\n' + getAgentRuntimeContextBlock() + langInstr;
 
-      const langInstr = this._buildCompactLanguageInstruction();
-
-      const summarizePrompt =
-        `You are a conversation summarizer. Below is part of a coding-assistant session history.\n` +
-        `Your job is to write a CONCISE but COMPLETE summary that will replace this portion.\n\n` +
-        `Rules:\n` +
-        `- Keep: all files created/modified (with key changes), decisions made, goals, current task state, and any open questions.\n` +
-        `- Omit: verbose tool output, repetitive reasoning, step-by-step narration already reflected in outcomes.\n` +
-        `- Write in third-person present tense ("The user is building…", "The assistant has modified…").\n` +
-        `- End with a short "## Current State" section describing the overall status.` +
-        langInstr + '\n\n' +
-        `=== CONVERSATION HISTORY ===\n${historyText}\n=== END ===\n\n` +
-        `Write the summary now:`;
+      const compactMessages: ChatMessage[] = [
+        { role: 'system', content: compactSystemPrompt },
+        ...toCompress, // ← kept in original format, not re-formatted
+        {
+          role: 'system',
+          content:
+            `[COMPACT_REQUEST]\n` +
+            `Please generate a concise but complete summary of the conversation history above. This summary will replace the archived portion.\n\n` +
+            `Requirements:\n` +
+            `- Keep: all files created/modified (with key changes), decisions made, goals, current task state, and any open questions.\n` +
+            `- Omit: verbose tool output, repetitive reasoning, step-by-step narration already reflected in outcomes.\n` +
+            `- Write in third-person present tense ("The user is building…", "The assistant has modified…").\n` +
+            `- End with a short "## Current State" section describing the overall status.\n` +
+            `- Use the same language as the conversation history.\n` +
+            `[/COMPACT_REQUEST]`,
+        },
+      ];
 
       const summaryResponse = await sendChatMessage(
-        [
-          { role: 'system', content: getAgentRuntimeContextBlock() },
-          { role: 'user', content: summarizePrompt },
-        ],
+        compactMessages,
         apiConfig,
-        undefined,
+        TOOL_DEFINITIONS, // ← same tools as main conversation for cache compatibility
         abortController.signal
       );
 

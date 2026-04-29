@@ -287,19 +287,34 @@ const toKeep = messages.slice(reserveStart);
 **步骤 2** — 构建压缩请求消息数组
 
 ```typescript
-// 复用主对话的 system prompt：
+// 复用主对话的 system prompt（与 MessageHandler.ts:132 完全一致）：
 //   SYSTEM_PROMPT + '\n\n\n' + getAgentRuntimeContextBlock() + langInstr
-// 待压缩的旧消息保持原始格式不变
-// 末尾追加一条 system 角色的压缩指令
+// 待压缩的旧消息保持原始格式不变，末尾追加一条 system 角色的压缩指令
 
-const compactRequest = SYSTEM_PROMPT + '\n\n\n' + getAgentRuntimeContextBlock() + langInstr;
+const apiConfig = this._getApiConfig();
+const langInstr = this._buildLanguageInstruction(apiConfig.language);
+
+const compactSystemPrompt = SYSTEM_PROMPT + '\n\n\n' + getAgentRuntimeContextBlock() + langInstr;
 
 const compactMessages: ChatMessage[] = [
-  { role: 'system', content: compactRequest },
+  { role: 'system', content: compactSystemPrompt },
   ...toCompress,  // ← 原始消息，不格式化
   {
     role: 'system',
-    content: '[COMPACT_REQUEST]\n请对以上对话历史生成一个简洁但完整的摘要，保留所有关键决策、修改的文件、当前任务状态和待办事项。摘要将替换被压缩的历史。\n要求：\n- 使用第三人称现在时\n- 以 "## Current State" 结尾\n- 使用与对话历史相同的语言\n[/COMPACT_REQUEST]'
+    content:
+      `[COMPACT_REQUEST]\n` +
+      `Please generate a concise but complete summary of the conversation history above. ` +
+      `This summary will replace the archived portion.\n\n` +
+      `Requirements:\n` +
+      `- Keep: all files created/modified (with key changes), decisions made, goals, ` +
+      `current task state, and any open questions.\n` +
+      `- Omit: verbose tool output, repetitive reasoning, step-by-step narration ` +
+      `already reflected in outcomes.\n` +
+      `- Write in third-person present tense ("The user is building…", ` +
+      `"The assistant has modified…").\n` +
+      `- End with a short "## Current State" section describing the overall status.\n` +
+      `- Use the same language as the conversation history.\n` +
+      `[/COMPACT_REQUEST]`,
   },
 ];
 ```
@@ -307,11 +322,18 @@ const compactMessages: ChatMessage[] = [
 **步骤 3** — 发给主对话同一个 API
 
 ```typescript
-const response = await sendChatMessage(compactMessages, apiConfig, TOOL_DEFINITIONS, signal);
-const summary = response.content?.trim() ?? '(summary unavailable)';
+// 使用与主对话相同的 apiConfig 和 TOOL_DEFINITIONS
+const summaryResponse = await sendChatMessage(
+  compactMessages,
+  apiConfig,
+  TOOL_DEFINITIONS,  // ← 相同的工具定义，保持 KV cache 前缀一致
+  abortController.signal
+);
+
+const summary = summaryResponse.content?.trim() ?? '(summary unavailable)';
 ```
 
-这里 `sendChatMessage` 使用的 `apiConfig` 和 `TOOL_DEFINITIONS` 与主对话**完全一致**。如果 provider 支持 KV cache（如 DeepSeek），`system + toCompress` 的前缀缓存可以直接命中，LLM 只需增量计算最后一条压缩指令和回复。
+> `TOOL_DEFINITIONS` 和主对话使用同一个，确保 API 请求结构一致，最大程度复用 KV cache。如果 provider 支持上下文缓存（如 DeepSeek 的硬盘缓存），`system + toCompress` 的前缀可以直接命中，LLM 只需增量计算压缩指令和回复。
 
 **步骤 4** — 后端拼接（前端无感知）
 

@@ -415,7 +415,7 @@ export class MessageHandler {
 
   /**
    * Accumulate token usage and send to webview.
-   * Also triggers auto-compact when prompt tokens exceed threshold.
+   * Also triggers auto-compact when accumulated total_tokens exceed threshold.
    */
   private _accumulateAndSendUsage(usage: { prompt_tokens: number; completion_tokens: number; total_tokens: number } | undefined): void {
     if (!usage) return;
@@ -427,8 +427,8 @@ export class MessageHandler {
       usage,
       accumulated: { ...this._accumulatedUsage },
     });
-    // Auto-compact when prompt_tokens exceed threshold
-    if (usage.prompt_tokens >= AUTO_COMPACT_TOKEN_THRESHOLD) {
+    // Auto-compact when accumulated total_tokens exceed threshold
+    if (this._accumulatedUsage.total_tokens >= AUTO_COMPACT_TOKEN_THRESHOLD) {
       // Fire-and-forget compact
       this._context.compactHistory(true).catch(() => {});
     }
