@@ -238,147 +238,138 @@ interface TodoState {
 
 通过 `persistAssistantTodoState` 保存到 `ChatSession.assistantTodoState`，**窗口重载后可恢复**。
 
-## 五、Compact 前后的对比
+## 五、Compact：最大化缓存命中的设计
 
-Compact 由 `ConversationService.compactHistory()`（第 248 行）实现。
+> **核心思想：** 不启动独立的摘要 LLM，而是**复用主对话 LLM**（同一个 system prompt + 原始消息格式），让旧消息的 KV cache 尽可能命中。
 
-### 5.1 Compact 前的消息结构
+### 5.1 问题：为什么传统方式缓存不命中？
+
+假设有 10 轮对话，需要压缩前 8 轮：
 
 ```
-[system]      ← 完整系统提示
-[user1]       ← "帮我添加用户登录功能"
-[assistant1]  ← AI 回复 + read_file 调用
-[tool]        ← read_file 结果
-[assistant1]  ← AI 回复 + edit 调用
-[tool]        ← edit 结果
-[user2]       ← "再加个注册页面"
-[assistant2]  ← AI 回复 + read_file 调用
-[tool]        ← read_file 结果
-[assistant2]  ← AI 回复 + edit 调用
-[tool]        ← edit 结果
-[assistant2]  ← AI 最终回复
-[user3]       ← 当前最新消息
+system + u1 + a1 + t1 + ... + u8 + a8 + t8 + u9 + a9 + t9 + u10
+│                                                              │
+└─────────── 需要压缩 ───────────┘└────── 保留 (20K token) ────┘
 ```
 
-### 5.2 Compact 的执行过程
+传统做法是启动一个**独立的摘要 LLM**，把前 8 轮格式化为纯文本发过去。**两次缓存不命中：**
 
-**步骤 1** — 找到保留窗口起点
+1. **system prompt 不同** — 摘要器用 `getAgentRuntimeContextBlock()`，主对话用 `SYSTEM_PROMPT + Host env + langInstr`，前缀缓存完全失效
+2. **消息格式不同** — 原始消息被重铸为 `[User]` / `[Assistant]` 纯文本，之前计算的 KV cache 全部浪费
+
+### 5.2 新设计：复用主 LLM + 原始消息
+
+```
+                       复用同一个 LLM + 同一个 system prompt
+          ┌────────────────────────────────────────────────────┐
+          │  system + u1 + a1 + t1 + ... + u8 + a8 + t8       │
+          │                                  + 压缩指令 (user) │
+          └────────────────────────────────────────────────────┘
+                    ↑                              ↑
+              system prompt 完全相同         原始消息格式不变
+              → 前缀缓存命中                 → KV cache 可复用
+```
+
+**执行过程：**
+
+**步骤 1** — 找到保留窗口起点（同前）
 
 ```typescript
 const COMPACT_RESERVE_TOKENS = 20_000;  // constants.ts:13
 
-// 从后往前扫描，累计 token 数（跳过 hiddenFromLlm 和 event），
-// 超出阈值时返回起始索引
 const reserveStart = this._findReserveWindowStart(messages);
-if (reserveStart === 0) {
-  // 全部消息都在窗口内 → 无需压缩
-  return;
-}
-// 约 5-10 轮对话
-```
+if (reserveStart === 0) return;  // 无需压缩
 
-`_findReserveWindowStart()` 使用 `_estimateMessageTokens()` 估算每条消息的 token 数，**只计入可见消息**（`hiddenFromLlm` 和 `event` 角色跳过）。
-
-**步骤 2** — 将旧消息格式化为纯文本
-
-```typescript
 const toCompress = messages.slice(0, reserveStart);
 const toKeep = messages.slice(reserveStart);
 ```
 
-旧消息经过过滤（排除 `hiddenFromLlm`、`event`、和 content 为空的 `tool` 消息）后，格式化为：
-
-```
-[User]
-帮我添加用户登录功能
-
----
-
-[Assistant]
-[Reasoning]
-...AI 的 chain-of-thought 推理...
-[/Reasoning]
-AI 的文本回复
-
----
-
-[Tool result]
-read_file 的结果内容
-```
-
-**步骤 3** — 轻量 LLM 生成摘要
-
-格式化后的历史作为 `user` 消息发送给 LLM，**系统提示仅使用运行时上下文**（`getAgentRuntimeContextBlock()`），不包含完整 SYSTEM_PROMPT：
+**步骤 2** — 构建压缩请求消息数组
 
 ```typescript
-const summarizePrompt =
-  `You are a conversation summarizer. Below is part of a coding-assistant session history.` +
-  `Your job is to write a CONCISE but COMPLETE summary that will replace this portion.\n\n` +
-  `Rules:\n` +
-  `- Keep: all files created/modified (with key changes), decisions made, goals, current task state, and any open questions.\n` +
-  `- Omit: verbose tool output, repetitive reasoning, step-by-step narration already reflected in outcomes.\n` +
-  `- Write in third-person present tense ("The user is building…", "The assistant has modified…").\n` +
-  `- End with a short "## Current State" section describing the overall status.` +
-  langInstr + '\n\n' +
-  `=== CONVERSATION HISTORY ===\n${historyText}\n=== END ===\n\n` +
-  `Write the summary now:`;
+// 复用主对话的 system prompt：
+//   SYSTEM_PROMPT + '\n\n\n' + getAgentRuntimeContextBlock() + langInstr
+// 待压缩的旧消息保持原始格式不变
+// 末尾追加一条 system 角色的压缩指令
+
+const compactRequest = SYSTEM_PROMPT + '\n\n\n' + getAgentRuntimeContextBlock() + langInstr;
+
+const compactMessages: ChatMessage[] = [
+  { role: 'system', content: compactRequest },
+  ...toCompress,  // ← 原始消息，不格式化
+  {
+    role: 'system',
+    content: '[COMPACT_REQUEST]\n请对以上对话历史生成一个简洁但完整的摘要，保留所有关键决策、修改的文件、当前任务状态和待办事项。摘要将替换被压缩的历史。\n要求：\n- 使用第三人称现在时\n- 以 "## Current State" 结尾\n- 使用与对话历史相同的语言\n[/COMPACT_REQUEST]'
+  },
+];
 ```
 
-**语言指令**（`_buildCompactLanguageInstruction()`）根据用户配置生成：
+**步骤 3** — 发给主对话同一个 API
 
-| 配置 | 指令 |
-|------|------|
-| `zh-CN` | `- 请使用简体中文撰写摘要。` + `- 使用第三人称现在时。` |
-| `en` | `- Write the summary in English.` + `- Use third-person present tense.` |
-| `auto` | `- Use the same language as the conversation history.` + `- Use third-person present tense.` |
+```typescript
+const response = await sendChatMessage(compactMessages, apiConfig, TOOL_DEFINITIONS, signal);
+const summary = response.content?.trim() ?? '(summary unavailable)';
+```
 
-**步骤 4** — 替换消息列表
+这里 `sendChatMessage` 使用的 `apiConfig` 和 `TOOL_DEFINITIONS` 与主对话**完全一致**。如果 provider 支持 KV cache（如 DeepSeek），`system + toCompress` 的前缀缓存可以直接命中，LLM 只需增量计算最后一条压缩指令和回复。
+
+**步骤 4** — 后端拼接（前端无感知）
 
 ```typescript
 const summaryMessage: ChatMessage = {
-  role: 'user',  // 注意：用 user role
-  content: '📋 **[Conversation history compacted]**\n\n[摘要内容]\n\n> 💡 *N recent messages preserved; M older messages archived.*'
+  role: 'user',
+  content: '📋 **[Conversation history compacted]**\n\n' + summary +
+    '\n\n> 💡 *' + toKeep.length + ' recent messages preserved; ' +
+    toCompress.length + ' older messages archived.*'
 };
 
+// 替换消息列表，只更新后端存储
 this._session.setCurrentMessages([summaryMessage, ...toKeep]);
+
+// 原始消息归档
+this._session.addCompressedArchive({
+  timestamp: Date.now(),
+  summary,
+  messages: toCompress,
+});  // 最多保留 10 份
 ```
 
-**原始消息归档**到 `ChatSession.compressedArchives`，通过 `SessionManager.addCompressedArchive()` 保存（最多保留 10 份档案，新档案插入头部）。
+**前端不变** — compact 完全发生在后端，用户看到的对话历史没有任何变化。
 
 ### 5.3 Compact 后的消息结构
 
 ```
 [system]      ← 完整系统提示（不变）
-[user]        ← 📋 [Conversation history compacted]  ← 角色是 user 但内容是摘要
+[user]        ← 📋 [Conversation history compacted]
                   ...摘要内容...
-                  > 💡 *8 recent messages preserved; 12 older messages archived.*
-[user3]       ← 保留窗口内的用户消息
-[assistant3]  ← 保留窗口内的 AI 回复
-[tool]        ← 保留窗口内的工具结果
-[assistant3]  ← 保留窗口内的 AI 最终回复
-[user4]       ← 当前最新用户消息
+                  > 💡 *8 recent messages preserved; 2 older messages archived.*
+[u9]          ← 保留窗口内的用户消息
+[a9]          ← 保留窗口内的 AI 回复
+[t9]          ← 保留窗口内的工具结果
+[u10]         ← 当前最新用户消息
 ```
 
 ### 5.4 触发方式
 
-| 方式 | 触发点 | 代码位置 |
-|------|--------|---------|
-| **手动** | 用户输入 `/compact` 命令 | `MessageHandler.ts:56` |
-| **手动** | AI 调用 `compact` 工具 | `MessageHandler.ts:249-252` |
-| **自动** | 单次 API 响应的 `prompt_tokens` ≥ 1,000,000 | `MessageHandler.ts:431` |
+| 方式 | 触发点 | 说明 |
+|------|--------|------|
+| **手动** | 用户输入 `/compact` 命令 | 立即触发 |
+| **手动** | AI 调用 `compact` 工具 | 在 tool call 循环中触发 |
+| **自动** | 单次 API 响应的 `prompt_tokens` ≥ 1,000,000 | Fire-and-forget |
 
-> 注意自动 compact 的判断依据是**单次 API 调用的 prompt_tokens**（`usage.prompt_tokens`），而非累计总 token 数。每次调用后由 `_accumulateAndSendUsage()` 检查，超过阈值则 fire-and-forget 触发压缩。
+> 自动 compact 的判断依据是**单次 API 调用的 prompt_tokens**（`usage.prompt_tokens`），由 `_accumulateAndSendUsage()` 检查，超过阈值则异步触发。
 
-### 5.5 对比总结
+### 5.5 新旧对比
 
-| 方面 | Compact 前 | Compact 后 |
-|------|-----------|-----------|
-| Token 数 | 可能上百万 | 约 20K + 摘要 token |
-| 旧消息细节 | 完整保留 | 丢失（归档到 `compressedArchives`，最多 10 份） |
-| 最近对话 | 完整保留（约 20K token） | 完整保留 |
-| 对 AI 的影响 | 完整上下文 → 更精确 | 摘要丢失细节 → 可能不够准确 |
-| UI 展示 | 不变 | 不变（compact 对用户透明） |
-
+| 方面 | 旧设计（独立摘要器） | 新设计（复用主 LLM） |
+|------|-------------------|-------------------|
+| **调用对象** | 轻量摘要 LLM | ✅ **主对话同一个 LLM** |
+| **system prompt** | `getAgentRuntimeContextBlock()`（不同） | ✅ `SYSTEM_PROMPT + Host env + langInstr`（相同） |
+| **旧消息格式** | 格式化为 `[User]` / `[Assistant]` 纯文本 | ✅ **保持原始消息格式** |
+| **KV 缓存命中** | ❌ 零命中 | ✅ system + 旧消息前缀可能命中 |
+| **增量计算** | ❌ 全部重算 | ✅ 只需计算压缩指令 + 回复 |
+| **前端感知** | 无感知 | ✅ 无感知 |
+| **归档机制** | 最多 10 份 | ✅ 最多 10 份 |
 ## 六、完整请求流程图
 
 ```
