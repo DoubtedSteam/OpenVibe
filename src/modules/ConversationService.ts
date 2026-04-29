@@ -191,6 +191,48 @@ export class ConversationService {
     }
   }
 
+  /**
+   * Removes assistant turns whose tool_calls never received matching tool results.
+   * This is a standalone version that operates on a given array and returns a new copy.
+   * Used by compactHistory to sanitize the to-be-compressed messages before sending to API.
+   */
+  private _sanitizeMessageList(messages: ChatMessage[]): ChatMessage[] {
+    const clean: ChatMessage[] = [];
+    let i = 0;
+    while (i < messages.length) {
+      const msg = messages[i];
+      if (msg.role === 'assistant' && msg.tool_calls && msg.tool_calls.length > 0) {
+        const requiredIds = new Set(msg.tool_calls.map((tc: ToolCall) => tc.id));
+        // Collect all consecutive tool messages following this assistant turn
+        let j = i + 1;
+        while (j < messages.length && messages[j].role === 'tool') {
+          j++;
+        }
+        const toolMessages = messages.slice(i + 1, j);
+        const respondedIds = new Set(
+          toolMessages
+            .filter((m: ChatMessage) => m.tool_call_id)
+            .map((m: ChatMessage) => m.tool_call_id!)
+        );
+        // Only keep this assistant+tool block if every tool_call has a matching response
+        if (Array.from(requiredIds).every(id => respondedIds.has(id))) {
+          clean.push(msg);
+          clean.push(...toolMessages);
+        }
+        i = j;
+      } else if (msg.role === 'tool') {
+        // Orphaned tool message (no preceding assistant) — skip it
+        i++;
+      } else {
+        clean.push(msg);
+        i++;
+      }
+    }
+    return clean;
+  }
+
+  // ─── Token estimation helpers ────────────────────────────────────────────
+
   // ─── Token estimation helpers ────────────────────────────────────────────
 
   /**
@@ -289,9 +331,14 @@ export class ConversationService {
 
       const compactSystemPrompt = SYSTEM_PROMPT + '\n\n\n' + getAgentRuntimeContextBlock() + langInstr;
 
+      // Sanitize toCompress before sending: remove any incomplete assistant+tool sequences
+      // (e.g. assistant with tool_calls but no matching tool results) to prevent API 400 errors
+      // caused by violating the "assistant tool_calls must be followed by tool responses" constraint.
+      const sanitizedToCompress = this._sanitizeMessageList(toCompress);
+
       const compactMessages: ChatMessage[] = [
         { role: 'system', content: compactSystemPrompt },
-        ...toCompress,
+        ...sanitizedToCompress,
         {
           role: 'system',
           content:
