@@ -10,9 +10,8 @@
 
 ```
 [
-  system,              ← 位置 0：增强后的系统提示（system prompt）
-  (system_nudge),      ← 位置 1（可选）：todo nudge，仅在有活跃 todo 时插入
-  visibleMessages...   ← 位置 1 或 2+：过滤后的历史对话
+  system,              ← 位置 0：增强后的系统提示（SYSTEM_PROMPT + Host env + langInstr + skills）
+  visibleMessages...   ← 位置 1+：过滤后的历史对话（含用户消息上下文块）
 ]
 ```
 
@@ -20,7 +19,7 @@
 
 ## 二、[system] 的详细构成
 
-在 `MessageHandler.ts:133` 实际组装为：
+在 `MessageHandler.ts:132` 实际组装为：
 
 ```typescript
 SYSTEM_PROMPT + '\n\n\n' + getAgentRuntimeContextBlock() + langInstr
@@ -45,7 +44,7 @@ SYSTEM_PROMPT + '\n\n\n' + getAgentRuntimeContextBlock() + langInstr
 - 工具描述从 21 行精简为 15 行
 - Memory 从 38 行精简为 15 行
 - 全英文统一，去除中英混杂
-- **Edit Permission** 移至 `agentRuntimeContext.ts` 运行时块，接受 `editPermissionEnabled` 参数动态显示 🔓/🔒 状态
+- **Edit Permission** 嵌入用户消息上下文（`MessageHandler.ts:95`），以 `🔓 Edit: ON/OFF` 形式动态显示 🔓/🔒 状态
 - **`<edit-content>` Tag Protocol** 从独立章节移入 `edit` 和 `run_shell_command` 的工具描述中
 - **Configuration** 整章删除（仅 language 信息保留并移入 `_buildLanguageInstruction()`，以自然语言呈现）
 
@@ -66,7 +65,7 @@ SYSTEM_PROMPT + '\n\n\n' + getAgentRuntimeContextBlock() + langInstr
 
 如果用户当前没有打开文件编辑器，`Active Editor` 区块不会出现。
 
-### ❸ 运行时上下文 → 嵌入用户消息（`MessageHandler.ts:92-104`）
+### 附：运行时上下文 → 嵌入用户消息（`MessageHandler.ts:94-104`）
 
 Edit Permission 和 Todo 状态不再作为独立消息，而是**嵌入用户消息正文开头**：
 
@@ -90,7 +89,7 @@ Webview 锁按钮
 ```
 ### ❸ 语言指令（`langInstr`）
 
-在 `MessageHandler.ts:132` 由 `_buildLanguageInstruction()` 生成，追加到 system 消息尾部：
+在 `MessageHandler.ts:130` 由 `_buildLanguageInstruction()` 生成，追加到 system 消息尾部：
 
 - `zh-CN` → `请以简体中文与用户进行沟通。`
 - `en` → `Please communicate with the user in English.`
@@ -98,7 +97,7 @@ Webview 锁按钮
 
 ### ❹ 激活的 Skill（条件追加）
 
-在 `ConversationService.buildMessagesForLlm()` 第 116-133 行，如果当前会话激活了技能：
+在 `ConversationService.buildMessagesForLlm()` 第 116-136 行，如果当前会话激活了技能：
 
 ```
 ---
@@ -159,42 +158,35 @@ interface ChatMessage {
 
 ## 四、有 Todo List 时的特殊处理
 
-### 4.1 内部 nudge（不展示给用户）
+### 4.1 Todo 状态嵌入用户消息上下文
 
-在 `MessageHandler.ts:117-136`：
+在 v0.5.5 中，todo 状态不再作为独立的 system nudge 消息，而是**嵌入用户消息的 `─── Context ───` 块**（`MessageHandler.ts:94-101`）：
 
 ```typescript
+const ctxLines: string[] = [];
+ctxLines.push(`🔓 Edit: ${editPermission ? 'ON' : 'OFF'}`);
 const todoInfo = this._context.getTodoControlInfo();
 if (todoInfo && todoInfo.remaining > 0) {
-  pendingNudge = '\n\n[INTERNAL NUDGE]\n如有需要，请变更todo list。\n[END INTERNAL NUDGE]\n';
+  ctxLines.push(`📋 Todo: ${todoInfo.remaining} item(s) remaining`);
 }
-
-// 将 nudge 作为独立的 system 消息插入到位置 1
-allMessages.splice(1, 0, { role: 'system', content: pendingNudge });
+const ctxBlock = `─── Context ───\n${ctxLines.join('\n')}\n────────────────\n\n`;
+const enrichedText = ctxBlock + text;
 ```
 
-**有 todo 且还有未完成项时**，消息数组变成：
+**设计理由：** 用户消息每轮必定变化（输入不同），带上上下文不额外增加 LLM 的消息数，也不破坏前缀缓存。
+
+AI 每次收到用户消息时，都能看到当前待办事项的数量。当 AI 调用 `create_todo_list` 或 `complete_todo_item` 后，更新后的状态会在下一条用户消息中自动反映。
+
+### 4.2 默认消息结构（无 todo 或 todo 已完成时）
 
 ```
 [
-  system,          ← 主系统提示（含 Host environment + 语言指令 + skills）
-  system,          ← [INTERNAL NUDGE] — 提醒 AI 更新 todo（不展示给用户）
-  user,
+  system,          ← 主系统提示（SYSTEM_PROMPT + Host env + langInstr + skills）
+  user,            ← 用户消息（含 ─── Context ─── 块，仅显示 Edit 状态）
   assistant,
   tool,
   ...
 ]
-```
-
-> 使用独立的 `role: 'system'` 消息而不是追加到主 system prompt，目的是**保持 prompt cache 前缀稳定**，减少每次 API 调用的计算成本。
-
-### 4.2 Todo 完成后的 nudge 清除
-
-在 `MessageHandler.ts:153`：
-```typescript
-if (response.toolCalls && response.toolCalls.length > 0) {
-  pendingNudge = '';  // AI 开始使用工具后，nudge 被消费掉
-}
 ```
 
 ### 4.3 UI 上的 todo 展示（`hiddenFromLlm`）
@@ -226,8 +218,6 @@ interface TodoState {
 ```
 
 通过 `persistAssistantTodoState` 保存到 `ChatSession.assistantTodoState`，**窗口重载后可恢复**。
-
----
 
 ## 五、Compact 前后的对比
 
@@ -347,8 +337,10 @@ MessageHandler.handleUserMessage()
     │
     ├─ 1. sanitizeIncompleteToolCalls()    ← 清理未完成的 tool call
     │
-    ├─ 2. getTodoControlInfo()              ← 检查 todo 状态
-    │   └─ 有未完成项 → pendingNudge = [INTERNAL NUDGE]
+    ├─ 2. 构建用户消息上下文
+    │   ├─ 读取 Edit Permission 状态
+    │   ├─ getTodoControlInfo()            ← 检查 todo 状态（如有则显示 📋）
+    │   └─ 嵌入 ─── Context ─── 块到用户消息正文开头
     │
     ├─ 3. buildMessagesForLlm(SYSTEM_PROMPT)
     │   ├─ system = SYSTEM_PROMPT + hostContext + langInstr
@@ -356,20 +348,18 @@ MessageHandler.handleUserMessage()
     │   ├─ 过滤 hiddenFromLlm 和 role==='event'
     │   └─ 返回 [system, user1, assistant1, tool1, ...]
     │
-    ├─ 4. 有 pendingNudge → allMessages.splice(1, 0, system_nudge)
+    ├─ 4. sendChatMessage(messages, tools)  ← API 调用
     │
-    ├─ 5. sendChatMessage(messages, tools)  ← API 调用
-    │
-    ├─ 6. 循环处理工具调用（最多 20 轮）
+    ├─ 5. 循环处理工具调用（最多 20 轮）
     │   ├─ 解析 AI 回复中的 tool_calls
     │   ├─ 逐一执行工具（可并行）
     │   ├─ 将 tool 结果加入消息列表
     │   └─ 新一轮 LLM 调用（含新的 tool 结果）
     │
-    ├─ 7. 检查是否需要自动 compact
+    ├─ 6. 检查是否需要自动 compact
     │   └─ prompt_tokens > 1,000,000 → 自动触发 compact
     │
-    └─ 8. 循环结束 → 等待下一条用户输入
+    └─ 7. 循环结束 → 等待下一条用户输入
 ```
 
 ---
@@ -388,3 +378,25 @@ MessageHandler.handleUserMessage()
 | `src/types.ts` | `ChatMessage`、`ToolCall`、`ChatSession` 等类型定义 |
 | `src/constants.ts` | `COMPACT_RESERVE_TOKENS = 20_000`、`AUTO_COMPACT_TOKEN_THRESHOLD = 1_000_000` |
 | `src/toolDefinitions.ts` | 工具的 JSON Schema 定义（526 行） |
+| `src/mmOutput.ts` | `<edit-content>` / `<shell-content>` XML 标签提取与占位符替换 |
+| `src/operationController.ts` | 操作中止控制（`AbortController` 封装） |
+| `src/tools/index.ts` | 统一 re-export 所有工具实现（49 行） |
+| `src/tools/replaceLinesTool.ts` | `edit` 工具核心实现（行替换 + LLM 审查） |
+| `src/tools/readFileTool.ts` | `read_file` 工具实现 |
+| `src/tools/findInFileTool.ts` | `find_in_file` 工具实现 |
+| `src/tools/shellTool.ts` | `run_shell_command` 工具实现 |
+| `src/tools/webFetchTool.ts` | `web_fetch` 工具实现（HTML 解析） |
+| `src/tools/workspaceTools.ts` | `get_workspace_info` / `create_directory` / `get_diagnostics` / `get_file_info` |
+| `src/tools/notificationTools.ts` | `show_notification` / `ask_human` 工具实现 |
+| `src/tools/gitTools.ts` | Git 快照与历史管理 |
+| `src/tools/skillTools.ts` | 技能系统（`list_skills` / `load_skill` / `activate_skill` 等） |
+| `src/tools/grepSearchTool.ts` | `grep_search` 工具实现 |
+| `src/tools/helpers.ts` | 全局技能池变量 + 激活回调设置 |
+| `src/utils/pathHelpers.ts` | 路径工具函数（`resolveWorkspacePath`、`readLines`、`writeLines` 等） |
+| `src/utils/htmlParser.ts` | HTML 转纯文本（`htmlToPlainText`、提取标题/链接/描述） |
+| `src/modules/UIManager.ts` | UI 状态管理（Edit Permission、Webview 通信） |
+| `src/modules/SessionManager.ts` | 会话持久化（消息、快照、技能、压缩档案） |
+| `src/modules/todolistReview.ts` | Todo 清单独立审查（LLM 代理） |
+| `src/modules/codeEditReview.ts` | 代码编辑独立审查（LLM 代理） |
+| `src/modules/shellCommandReview.ts` | Shell 命令编辑代理 + 安全审查 |
+| `src/modules/shellSecurity.ts` | Shell 安全检测（文件操作绕过、上下文采集检测） |
