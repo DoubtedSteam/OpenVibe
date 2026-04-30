@@ -452,11 +452,16 @@ export class ConversationService {
       cleaned = cleaned.replace(/```\s*```/g, '');
       return cleaned;
     };
+    // Strip the ─── Context ─── block (runtime LLM metadata) from user messages
+    // to prevent it from leaking to the user on window reload.
+    const stripContextBlock = (text: string): string => {
+      return text.replace(/─── Context ───\n[\s\S]*?\n────────────────\n\n/, '');
+    };
     let i = 0;
     while (i < messages.length) {
       const m = messages[i];
       if (m.role === 'user' && m.content) {
-        post({ type: 'addMessage', message: { role: 'user', content: stripTags(m.content) } });
+        post({ type: 'addMessage', message: { role: 'user', content: stripContextBlock(stripTags(m.content)) } });
         i++;
         continue;
       }
