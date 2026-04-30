@@ -46,7 +46,7 @@ import {
 
 export class ToolExecutor {
   private _todoList: { goal: string; items: { text: string; done: boolean }[] } | null = null;
-  private _lastShellExecutions: { command: string; at: number }[] = [];
+  private _lastShellExecutions: { command: string; at: number; summary: string; success: boolean }[] = [];
 
   /** Edit permission state - controls whether edit tools can be used */
   private _editPermissionEnabled: boolean = true;
@@ -519,24 +519,13 @@ ${list}
       });
     }
 
-    const userRequest = this._context.getLastUserTextForTools();
-    const relatedContextBase = this._context.getRelatedContextForTodolistReview();
-    const memoryExcerpt = loadMemoryExcerpt();
-
-    const todoInfo = this.getTodoControlInfo();
-    const todoBlock = todoInfo
-      ? `## Todo context\n**Goal**: ${todoInfo.goal}\n\n**Items**:\n${todoInfo.list}\n\n**Remaining**: ${todoInfo.remaining}\n`
-      : `## Todo context\n(none)\n`;
-
     const recentShell =
       this._lastShellExecutions.length > 0
         ? `## Recent shell commands (most recent first)\n${this._lastShellExecutions
             .slice(0, 5)
-            .map((x, i) => `${i + 1}. ${x.command}`)
+            .map((x, i) => `${i + 1}. [${x.success ? 'OK' : 'FAIL'}] ${x.command}\n   → ${x.summary}`)
             .join('\n')}\n`
         : `## Recent shell commands\n(none)\n`;
-
-    const relatedContext = `${relatedContextBase || '(none)'}\n\n${todoBlock}\n${recentShell}`;
 
     // Single review pass (code-edit-review style, no editor agent / no retry loop)
     if (this._stopped()) {
@@ -548,11 +537,8 @@ ${list}
     try {
       review = await reviewShellCommand({
         apiConfig,
-        userRequest,
-        relatedContext,
-        projectConstraints: memoryExcerpt,
         command: proposedFromTool,
-        proposedFromTool,
+        recentShell,
         reviewTimeoutMs: cfg.reviewTimeoutMs,
         signal: this._signal(),
         log: (e) => this._context.log?.(e),
@@ -583,7 +569,17 @@ ${list}
         return JSON.stringify({ success: false, operation: 'run_shell_command', error: 'Operation stopped by user.' });
       }
       const execResult = await runShellCommandTool({ command: proposedFromTool });
-      this._lastShellExecutions.unshift({ command: proposedFromTool, at: Date.now() });
+      // Extract result summary for history tracking
+      let execSummary = '';
+      let execSuccess = false;
+      try {
+        const parsed = JSON.parse(execResult) as Record<string, unknown>;
+        execSummary = typeof parsed.summary === 'string' ? parsed.summary : (parsed.success ? 'OK' : 'Failed');
+        execSuccess = parsed.success === true;
+      } catch {
+        execSummary = '(parse error)';
+      }
+      this._lastShellExecutions.unshift({ command: proposedFromTool, at: Date.now(), summary: execSummary, success: execSuccess });
       if (this._lastShellExecutions.length > 20) {
         this._lastShellExecutions.length = 20;
       }

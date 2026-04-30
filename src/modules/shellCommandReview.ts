@@ -99,10 +99,6 @@ async function chatJson(
 const REVIEW_SYSTEM = `You are an independent review agent for run_shell_command (terminal command in the workspace).
 You MUST NOT execute commands or modify files. Output JSON only.
 
-Scope rules (CRITICAL):
-- Review ONLY whether THIS ONE command is appropriate as the current step, not whether it completes the entire end-to-end goal.
-- The user may be working incrementally; DO NOT fail merely because this command isn't "one shot".
-
 Evaluate the proposed command:
 1) **Safety**: obvious destructive risk (e.g. rm -rf on broad paths), arbitrary remote code execution, piping curl/wget to shell, disabling security, etc.
 2) **Edit-tool bypass**: shell-based file edits to project source/config (sed/awk/perl one-liners, tee, redirection, PowerShell Set-Content/Out-File) when the task is ordinary code editing — those should use read_file + edit instead. Read-only git/status/log commands are usually fine.
@@ -110,29 +106,22 @@ Evaluate the proposed command:
    - Reject examples (code/context harvesting): cat/type/Get-Content on files under src/ or code extensions (.ts/.js/.py/...), dir /s, Get-ChildItem -Recurse, find/grep/rg/Select-String used to inspect project files.
    - Allow (read-only, narrow): viewing a **single non-code artifact** explicitly requested by the user (e.g. .log/.txt/.md) with a simple read-only command, no pipes, no recursion.
    - If the user needs code context, instruct them to use read_file / find_in_file instead (do NOT approve a shell workaround).
-4) **Reasonable scope**: the command should be a plausible action for the current step. Do not reject solely because it doesn't complete the full user request in one shot.
 
 Output strictly one JSON object:
 {"decision":"PASS"|"FAIL","notes":["string", ...],"summary":"one short sentence"}`;
 
-/** Single-review pass for shell commands (code-edit-review style, no editor agent). */
+/** Single-review pass for shell commands. */
 export async function reviewShellCommand(params: {
   apiConfig: ApiConfig;
-  userRequest: string;
-  relatedContext: string;
-  projectConstraints: string;
   command: string;
-  proposedFromTool: string;
+  recentShell: string;
   reviewTimeoutMs: number;
   signal?: AbortSignal;
   log?: (e: AgentLogEntry) => void;
 }): Promise<ShellReviewAgentResult> {
   const userMsg =
-    `## User request\n${params.userRequest || '(none)'}\n\n` +
-    `## Related context\n${params.relatedContext || '(none)'}\n\n` +
-    `## Original tool argument from main assistant\n${params.proposedFromTool}\n\n` +
     `## Proposed command\n${params.command}\n\n` +
-    `## Project constraints (memory excerpt)\n${params.projectConstraints}\n`;
+    `${params.recentShell}\n`;
 
   const content = await chatJson(
     [
