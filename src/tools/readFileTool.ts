@@ -12,6 +12,17 @@ export interface ReadFileParams {
   endLine?: number;
 }
 
+/**
+ * Read the contents of a file (or list directory entries).
+ *
+ * Returns the file's lines with line numbers prefixed, or a JSON listing of
+ * directory contents if the path points to a directory.
+ *
+ * @param params.filePath  Workspace-relative path to the file or directory.
+ * @param params.startLine Optional first line to read (1-based, default 1).
+ * @param params.endLine   Optional last line to read (1-based, default EOF).
+ * @returns Formatted text with numbered lines, or a JSON error string.
+ */
 export function readFileTool(params: ReadFileParams): string {
   let absPath: string;
   try {

@@ -44,6 +44,16 @@ function summarizeShellOutput(stdout: string, stderr: string): {
   return { keyErrors, summary };
 }
 
+/**
+ * Execute a shell command in the workspace root directory.
+ *
+ * Runs via Node `exec` with the system shell (cmd.exe on Windows).
+ * Output is captured (stdout + stderr) and returned. Error-level TypeScript
+ * diagnostics in the output are automatically extracted for quick feedback.
+ *
+ * @param params.command  The shell command to execute.
+ * @returns JSON string with `{ stdout, stderr, keyErrors, summary, exitCode }`.
+ */
 export async function runShellCommandTool(params: RunShellCommandParams): Promise<string> {
   try {
     const root = getWorkspaceRoot();

@@ -89,6 +89,11 @@ function parseGoalItems(content: string | null): { goal: string; items: string[]
   return { goal, items };
 }
 
+/**
+ * Merge new review notes into an accumulated array, deduplicating near-duplicates.
+ * Two notes are considered duplicates if their first 120 lowercase characters match.
+ * Empty/whitespace-only notes are silently skipped.
+ */
 export function mergeReviewNotes(acc: string[], newNotes: string[]): string[] {
   const out = [...acc];
   for (const n of newNotes) {
@@ -104,6 +109,16 @@ export function mergeReviewNotes(acc: string[], newNotes: string[]): string[] {
   return out;
 }
 
+/**
+ * Read the full content of `.OpenVibe/memory.md` for injection into review
+ * system prompts as "project constraints" context.
+ *
+ * Extracted by ToolExecutor and passed to todolist generate/edit review agents
+ * so they have project-level context when evaluating todo lists.
+ *
+ * @returns The raw file content, or an empty-string error message if the file
+ * cannot be read (no workspace open, file missing, or read error).
+ */
 export function loadMemoryExcerpt(): string {
   try {
     const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;

@@ -4,6 +4,10 @@ import * as fs from 'fs';
 
 // ─── Path helpers ─────────────────────────────────────────────────────────────
 
+/**
+ * Get the absolute file-system path of the first workspace folder.
+ * @throws Error if no workspace is open.
+ */
 function getWorkspaceRoot(): string {
   const folders = vscode.workspace.workspaceFolders;
   if (!folders || folders.length === 0) {
@@ -12,6 +16,14 @@ function getWorkspaceRoot(): string {
   return folders[0].uri.fsPath;
 }
 
+/**
+ * Resolve a possibly-relative workspace path to an absolute filesystem path.
+ * Path traversal attacks are blocked: any resolved path outside the workspace
+ * root throws an error.
+ * @param filePath  Workspace-relative or absolute path.
+ * @returns Absolute file-system path.
+ * @throws Error if the path escapes the workspace directory.
+ */
 function resolveWorkspacePath(filePath: string): string {
   const root = getWorkspaceRoot();
   const abs = path.isAbsolute(filePath) ? filePath : path.join(root, filePath);
@@ -37,12 +49,21 @@ export function workspaceFileExistsRelative(filePath: string): boolean {
 
 // ─── Line I/O ─────────────────────────────────────────────────────────────────
 
+/**
+ * Read a file from an absolute path and split it into lines.
+ * Detects whether the file uses CRLF or LF line endings.
+ * @returns lines and a boolean indicating CRLF (true) vs LF (false).
+ */
 function readLines(absPath: string): { lines: string[]; crlf: boolean } {
   const raw = fs.readFileSync(absPath, 'utf-8');
   const crlf = raw.includes('\r\n');
   return { lines: raw.split(/\r?\n/), crlf };
 }
 
+/**
+ * Write an array of lines to an absolute file path.
+ * Uses CRLF or LF as the line separator based on the `crlf` flag.
+ */
 function writeLines(absPath: string, lines: string[], crlf: boolean): void {
   fs.writeFileSync(absPath, lines.join(crlf ? '\r\n' : '\n'), 'utf-8');
 }

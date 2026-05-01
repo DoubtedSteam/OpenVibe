@@ -8,6 +8,20 @@ import {
   isPrivateHost,
 } from '../utils/htmlParser';
 
+/**
+ * Fetch a web page URL and extract its plain-text content.
+ *
+ * Validates the URL (http/https only), blocks requests to private/internal
+ * network addresses (SSRF protection), and extracts structured plain text
+ * from the HTML response. Supports optional cookies and custom headers.
+ *
+ * @param params.url         Full URL to fetch (e.g. "https://example.com").
+ * @param params.maxLength   Maximum characters in the extracted content (default 16000, max 50000).
+ * @param params.cookie      Optional cookie string (e.g. "session=abc123").
+ * @param params.headers     Optional JSON object of custom HTTP headers.
+ * @param params.timeoutMs   Request timeout in milliseconds (default 15000, max 30000).
+ * @returns JSON string with extracted content, title, links, or an error.
+ */
 export async function webFetchTool(params: WebFetchParams): Promise<string> {
   try {
     let parsed: URL;

@@ -14,6 +14,20 @@ export interface FindParams {
   occurrence?: number;
 }
 
+/**
+ * Search for an exact string inside a file and return matching line numbers
+ * with surrounding context.
+ *
+ * When the path points to a directory (instead of a file), performs a
+ * fuzzy filename search across all entries in that directory.
+ *
+ * @param params.filePath    Workspace-relative path to the file (or directory).
+ * @param params.searchString  Exact case-sensitive string to search for.
+ * @param params.contextBefore  Lines of context to show before each match (default 2).
+ * @param params.contextAfter   Lines of context to show after each match (default 2).
+ * @param params.occurrence     Which occurrence to return (default 1 = first).
+ * @returns Formatted text with match location and context, or a JSON error string.
+ */
 export function findInFileTool(params: FindParams): string {
   let absPath: string;
   try {

@@ -14,6 +14,20 @@ export interface SendChatMessageOptions {
   timeoutMs?: number;
 }
 
+/**
+ * Send a (non-streaming) chat completion request to an OpenAI-compatible API.
+ *
+ * Handles DeepSeek reasoning model fields (`reasoning_content`), tool calling,
+ * and parallel tool calls. All assistant messages with `reasoning_content` are
+ * automatically transformed for the upstream API.
+ *
+ * @param messages  Full message history (system/user/assistant/tool).
+ * @param config    API provider configuration (baseUrl, apiKey, model).
+ * @param tools     Optional tool definitions for function calling.
+ * @param signal    Optional AbortSignal to cancel the request.
+ * @param options   Optional overrides (e.g. custom timeout).
+ * @returns The model's response content, any tool calls, reasoning, and token usage.
+ */
 export async function sendChatMessage(
   messages: ChatMessage[],
   config: ApiConfig,

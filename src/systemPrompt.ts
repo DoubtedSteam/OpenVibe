@@ -28,18 +28,16 @@ At runtime, a **Host environment** section is appended (OS, path separator, shel
 
 \`.OpenVibe/memory.md\` bridges sessions — read it at session start, update it per-file after edits.
 
-**Four-level structure:**
+**Three-level structure:**
 - **L1 — Project**: purpose, design principles, tech stack, data-flow.
 - **L2 — Files**: directory tree; each file's purpose, imports/exports, impact if deleted.
 - **L3 — Classes**: responsibility, key fields (name·type·purpose), lifecycle, inheritance.
-- **L4 — Functions**: signature (name + params + return type) + 1–3 sentence description. No side-effect tracking.
 
 **Rules:**
 - Read memory before touching any source file.
 - If memory contradicts code → trust the code.
-- Update L3–L4 immediately after modifying each file.
+- Update L3 immediately after modifying a file's classes or fields.
 - Update L1 only after all files are done.
-- Do NOT batch all updates at the end.
 
 ## Task Planning (REQUIRED for multi-step)
 

@@ -198,4 +198,33 @@ export const PROJECT_KNOWLEDGE_FILE = '.OpenVibe/project-knowledge.md';
 
 ---
 
-*本文档由 Vibe Coding Assistant 于会话中自动生成。*
+## 五、最终结论（会话讨论后）
+
+### 变更：放弃重命名，改为精简结构
+
+**讨论后决策**：`.OpenVibe/memory.md` **保留原名，不再重命名**。
+
+**理由**：
+- 移除了 L4 函数索引后，memory.md 变为轻量高层概览文件（L1 项目描述 + L2 文件结构 + L3 类职责）
+- "memory" 作为"项目记忆"的语义是合适的，不需要改为 "project-knowledge"
+- 移除 L4 减少了约 43% 的文件体积和维护成本
+
+### 实际执行
+
+| 操作 | 状态 |
+|------|------|
+| memory.md 删除 L4（第354-627行） | ✅ 已完成 |
+| 更新 L1 设计原则（去掉 L4 引用） | ✅ 已完成 |
+| 更新 L2 memory.md 文件描述（四层→三层） | ✅ 已完成 |
+| systemPrompt.ts 四层→三层 | ✅ 已完成 |
+| systemPrompt.ts 更新维护规则 | ✅ 已完成 |
+| 关键导出函数补充 TSDoc 注释 | ⏳ 待执行 |
+
+### 不需要的操作
+
+- ❌ `.OpenVibe/memory.md` 重命名（不再需要）
+- ❌ `loadMemoryExcerpt` 函数名更改（保持原样）
+- ❌ 向后兼容迁移（文件名不变）
+- ❌ 路径常量提取到 `src/constants.ts`（除非未来需要）
+
+*本文档由 Vibe Coding Assistant 于会话中自动生成，后续更新。*

@@ -31,6 +31,18 @@ export interface ReplaceCheckResult {
   notes?: string[];
 }
 
+/**
+ * Replace a range of lines in a file with new content (the core "edit" operation).
+ *
+ * Flow: LLM secondary review → VS Code diff editor preview → user confirm → write.
+ * Supports creating new files (no prior read required) as well as modifying existing files.
+ * Handles CRLF/LF line-ending detection automatically.
+ *
+ * @param params         The file path and the line range to replace.
+ * @param llmCheckFn     Independent LLM review callback for code-level consistency check.
+ * @param userConfirmFn  Optional user confirmation dialog (diff preview).
+ * @returns JSON string with `{ success: true }` or `{ error: string }`.
+ */
 export async function replaceLinesTool(
   params: ReplaceParams,
   llmCheckFn: (ctx: ReplaceCheckContext) => Promise<ReplaceCheckResult>,
