@@ -1,357 +1,253 @@
-# 知识库三级架构泛化方案
+# 知识库三级架构泛化方案（迭代版）
 
-> 目标：将 `memory.md` 从 OpenVibe 项目专用知识库改造为**任何项目可用的通用知识库系统**，同时优化 API cache 命中率。
-
----
-
-## 一、现状 vs 目标
-
-| 维度 | 现状 | 目标 |
-|------|------|------|
-| 文件 | 单个 `.OpenVibe/memory.md` | `.OpenVibe/memory/` 目录，三个独立文件 |
-| 结构 | 中文描述，OpenVibe 特定 | 通用化命名，语言中立（英文） |
-| 访问 | AI 在 session 起始 `read_file` 一次 | L1 自动注入 system prompt；L2/L3 按需 `read_file` |
-| 缓存 | 单个文件 → 改 L3 使全部 cache 失效 | 三文件独立 → 改 L3 不影响 L1/L2 缓存 |
-| 初始化 | 人工手动创建 | AI 自动 bootstrap |
+> 目标：将 `memory.md` 从 OpenVibe 项目专用知识库改造为**任何项目可用的通用知识库系统**，同时通过三文件拆分优化 API cache 命中率。
 
 ---
 
-## 二、文件拆分
+## 一、设计原则
+
+1. **系统提示词只做提醒，不规定行为** — sys prompt 仅告知 AI 有 `.OpenVibe/memory/` 这个目录存在，具体读不读、何时读由 AI 自行判断
+2. **定义即文件** — 三级架构的定义规范独立存放（`memory/README.md`），AI 通过读取该文件了解各层的用途和规则
+3. **按需读写** — 没有自动注入，没有预加载。AI 在需要项目上下文时才 `read_file` 对应的层级文件
+4. **按需初始化** — bootstrap 不在 session 启动时触发，而是在 AI 第一次试图读取 memory 文件但发现不存在时触发
+
+---
+
+## 二、文件结构
 
 ```
 .OpenVibe/
 ├── memory/
-│   ├── L1-purpose.md      # 项目目的（稳定，自动注入）
+│   ├── README.md          # 三级架构定义规范（新增）
+│   ├── L1-purpose.md      # 项目目的（极少变）
 │   ├── L2-inventory.md    # 文件清单（中等变化）
 │   └── L3-roles.md        # 组件角色（高频变化）
-└── memory.md              # ❌ 移除（迁移到 memory/ 目录）
+└── memory.md              # ❌ 移除
 ```
 
-### 各层定义（通用化，不绑定任何技术栈或项目类型）
+### 各文件职责
 
-| 层级 | 文件名 | 稳定度 | 内容 | 适用场景 |
-|------|--------|--------|------|----------|
-| **L1** | `L1-purpose.md` | ★★★ 极少变 | 一句话项目定义、核心目标、设计原则、技术栈概览、数据流简图 | **始终可用**，自动注入到每次 LLM 调用的 system prompt |
-| **L2** | `L2-inventory.md` | ★★☆ 中等 | 目录树、每个文件的一行描述、导入导出关系、删除影响 | 探索不熟悉的文件时按需读取 |
-| **L3** | `L3-roles.md` | ★☆☆ 经常变 | 模块/类/组件的职责、关键字段（名称·类型·用途）、生命周期 | 修改代码前读取，修改后立即更新 |
-
-**为什么这样分？**
-- **L1 稳定** → 适合嵌入 system prompt，API 的 prefix caching 可命中
-- **L2 中等** → 文件增删时才改，不频繁
-- **L3 高频** → 每次代码改动都伴随 L3 更新，放在独立文件中不影响其他层缓存
+| 文件 | 角色 | 内容 | 稳定度 |
+|------|------|------|--------|
+| `README.md` | **定义存档** | 三级架构规范：每层是什么、何时读写、规则 | 几乎不变 |
+| `L1-purpose.md` | 项目全局 | 一句话定义、核心目标、设计原则、技术栈、数据流 | ★★★ 极少变 |
+| `L2-inventory.md` | 文件索引 | 目录树、每个文件的一行描述、导入导出、删除影响 | ★★☆ 中等 |
+| `L3-roles.md` | 组件职责 | 模块/类/组件的职责、关键字段、生命周期、关系 | ★☆☆ 经常变 |
 
 ---
 
-## 三、System Prompt 泛化
+## 三、README.md 定义规范（存档）
 
-当前（OpenVibe 专用）：
+这是整个知识库的"元定义"文件，AI 读取它来了解三级架构的含义：
+
+```markdown
+# Knowledge Base (.OpenVibe/memory/)
+
+This directory stores the project's structured knowledge across three
+independent files. **Read only what you need.**
+
+## L1-purpose.md — Project overview
+What is this project for? Core goals, design principles, technology stack,
+architecture and data flow, key decisions.
+- **Read**: at session start, or when you need the big picture.
+- **Update**: only when the project's high-level direction changes.
+
+## L2-inventory.md — File inventory
+Directory tree, each file's one-line purpose, imports/exports, impact if
+deleted. Think of it as a project map.
+- **Read**: when exploring unfamiliar files or deciding where to place new code.
+- **Update**: when files are added, removed, or reorganized.
+
+## L3-roles.md — Component roles
+Each key component/module/class: responsibility, key fields (name·type·
+purpose), lifecycle, relationships/inheritance.
+- **Read**: **before** modifying any component's source code.
+- **Update**: **immediately after** modifying a component's structure or fields.
+
+## Rules
+- If knowledge contradicts code → **trust the code**, then update the files.
+- Do NOT read all three at once — read only the level you need.
+- When creating a new component → add it to L3.
+- When adding a new file → add it to L2.
 ```
-## Project Context & Memory
-
-`.OpenVibe/memory.md` bridges sessions — read it at session start, update it per-file after edits.
-
-**Three-level structure:**
-- **L1 — Project**: purpose, design principles, tech stack, data-flow.
-- **L2 — Files**: directory tree; each file's purpose, imports/exports, impact if deleted.
-- **L3 — Classes**: responsibility, key fields (name·type·purpose), lifecycle, inheritance.
-
-**Rules:**
-- Read memory before touching any source file.
-- If memory contradicts code → trust the code.
-- Update L3 immediately after modifying a file's classes or fields.
-- Update L1 only after all files are done.
-```
-
-改造后（通用化）：
-```
-## Project Knowledge (.OpenVibe/memory/)
-
-The project stores structured knowledge in `.OpenVibe/memory/` with three
-independent levels. **L1 is always available** (auto-injected into every
-LLM call). Load L2/L3 on demand via `read_file`.
-
-**L1-purpose.md** — Project overview (auto-injected into every prompt).
-  - What is this project for? Core goals, design principles, tech stack,
-    data flow diagram, key architectural decisions.
-  - Read: always available, no need to `read_file`.
-  - Update: only when the project's high-level direction changes.
-
-**L2-inventory.md** — File directory inventory.
-  - Directory tree, each file's one-line purpose, imports/exports,
-    impact if deleted. Think of it as a project map.
-  - Read: when exploring unfamiliar files or deciding where to place new code.
-  - Update: when files are added, removed, or significantly reorganized.
-
-**L3-roles.md** — Component/module/class roles.
-  - Each key component's responsibility, key fields (name·type·purpose),
-    lifecycle, and inheritance/relationships.
-  - Read: **before** modifying any component's source code.
-  - Update: **immediately after** modifying a component's structure or fields.
-
-**Rules:**
-- If knowledge contradicts code → **trust the code** and update the file.
-- Do NOT read all three levels at once — only read what you need.
-- When creating a new component: add it to L3.
-- When adding a new file: add it to L2.
-```
-
-### 关键变化
-
-| 项目 | 原来 | 现在 |
-|------|------|------|
-| 文件引用 | 具体路径 `.OpenVibe/memory.md` | 目录 `.OpenVibe/memory/` |
-| 描述语言 | OpenVibe 特定（Classes, Fields） | 通用（Component roles, responsibilities） |
-| 访问方式 | "read at session start" | L1 自动注入；L2/L3 按需加载 |
-| 读取规则 | "Read before touching" | "Only read what you need" — 减少不必要的 read_file |
-| 批量读取 | 隐含一次性读全部 | 明确禁止一次性读全部 |
 
 ---
 
-## 四、L1 自动注入机制（实现方案）
+## 四、System Prompt 设计
 
-### 原理
+极简提醒，不规定 AI 行为：
 
-当前架构中，`getAgentRuntimeContextBlock()`（主机环境信息）已通过 `MessageHandler.ts:128` 注入到每次 LLM 调用的 system prompt：
+```markdown
+## Project Knowledge
 
-```typescript
-// MessageHandler.ts — 每次 LLM 调用时构建 messages
-const allMessages = this._context.buildMessagesForLlm(
-  SYSTEM_PROMPT + '\n\n\n' + getAgentRuntimeContextBlock() + langInstr
-);
+The project may store structured context in `.OpenVibe/memory/`
+(three levels: purpose/inventory/roles). See `README.md` inside
+that directory for the full definition. Read the relevant file
+when you need project context.
 ```
 
-L1 的自动注入可沿同一管道实现：
+相比之前的版本：
 
-### 方案 A：MessageHandler 层注入
-
-```typescript
-// 新增: src/agentRuntimeContext.ts
-export function getProjectPurposeBlock(): string {
-  // 读取 .OpenVibe/memory/L1-purpose.md（缓存，避免每次读盘）
-  // 如果文件不存在，返回空字符串
-}
-```
-
-然后在 MessageHandler.ts 中：
-```typescript
-const allMessages = this._context.buildMessagesForLlm(
-  SYSTEM_PROMPT + '\n\n\n' + getAgentRuntimeContextBlock() + '\n\n' + getProjectPurposeBlock() + langInstr
-);
-```
-
-### 方案 B：ConversationService 层注入
-
-在 `buildMessagesForLlm()` 内部自动拼接 L1 内容：
-
-```typescript
-buildMessagesForLlm(systemPrompt: string): ChatMessage[] {
-  let enrichedPrompt = systemPrompt;
-  const l1 = getProjectPurposeBlock();  // 从 disk 读取
-  if (l1) {
-    enrichedPrompt += '\n\n---\n' + l1;
-  }
-  // ... skill instructions ...
-  return [{ role: 'system', content: enrichedPrompt }, ...visible];
-}
-```
-
-### 推荐：方案 B
-
-理由：
-- `buildMessagesForLlm()` 是**所有** LLM 调用的统一入口（主助手、review 代理等）
-- 不需要在每个调用点手动添加
-- 与 skill 注入逻辑并列，架构一致
-
-### 缓存策略
-
-L1 文件很少变化，但每次都读盘仍有开销。可加入简单的内存缓存：
-
-```typescript
-let _l1Cache: { content: string; mtime: number } | null = null;
-
-export function getProjectPurposeBlock(): string {
-  const p = path.join(root, '.OpenVibe', 'memory', 'L1-purpose.md');
-  const stat = fs.statSync(p);
-  if (_l1Cache && _l1Cache.mtime === stat.mtimeMs) {
-    return _l1Cache.content;
-  }
-  const content = fs.readFileSync(p, 'utf-8');
-  _l1Cache = { content, mtime: stat.mtimeMs };
-  return content;
-}
-```
-
-这样 session 内只读一次盘，后续均为内存命中。
+| 之前（自动注入方案） | 现在 |
+|---------------------|------|
+| "L1 is always available (auto-injected)" | 无自动注入 |
+| "Read L3 before modifying" — 指令性 | "Read the relevant file when you need project context" — 提醒性 |
+| 10+ 行具体规则 | 3 行轻提示 |
+| 耦合读写时机 | 定义交给 README.md，AI 自行决策 |
 
 ---
 
-## 五、初始化 Bootstrap 流程
+## 五、Bootstrap 初始化流程
 
-当 AI 检测到 `.OpenVibe/memory/` 目录**不存在**时，应自动触发建库流程：
+### 触发时机
 
-### 触发器
+不是 session 开始自动触发，而是 **AI 第一次尝试读取 memory 文件时，发现文件不存在** 时触发。
 
-检测时机：每次 session 开始，AI 尝试 `read_file` L1-purpose.md 失败时。
+典型流程：
 
-但更好的做法是：**在 system prompt 中告诉 AI 去检查并创建**。
-
-```typescript
-// systemPrompt.ts 新增行为描述
-"- If .OpenVibe/memory/ does not exist: create the directory, then scan the project (README, package.json, directory structure, key source files) to generate initial L1/L2/L3 content."
+```
+AI 思考："我需要了解这个项目的结构来完成任务"
+  → read_file .OpenVibe/memory/README.md
+  → 返回 error: "file not found"（目录或文件不存在）
+  → AI 识别出这是"未初始化的知识库"场景
+  → 执行 bootstrap
 ```
 
 ### Bootstrap 步骤
 
 ```
 Step 1: create_directory .OpenVibe/memory/
-Step 2: read README.md + package.json → 生成 L1-purpose.md
-Step 3: get_workspace_info → 扫描目录树 → 生成 L2-inventory.md（初稿）
-Step 4: 读取关键源文件头部 → 提取导出/类定义 → 生成 L3-roles.md（初稿）
-Step 5: ask_human "知识库已建好，请 review 确认"
-```
 
-### L1 生成模板
+Step 2: 扫描项目信息
+  ├─ read_file README.md（项目根目录的 README）
+  ├─ read_file package.json（如果存在）
+  └─ get_workspace_info（查看目录结构）
 
-```markdown
-# Project Purpose
+Step 3: 写入 README.md（定义规范模板，见第三章）
 
-## One-line description
-{从 README/package.json 提取}
+Step 4: 写入 L1-purpose.md
+  ├─ 从 README/package.json 提取项目描述
+  ├→ 技术栈、设计原则、数据流
+  └→ 保持简短（200-400 tokens 以内）
 
-## Core goals
-- {goal 1}
-- {goal 2}
+Step 5: 写入 L2-inventory.md
+  ├─ 从 get_workspace_info 生成目录树
+  └→ 关键文件的一行描述
 
-## Technology stack
-- Language: {lang}
-- Framework: {framework}
-- Key dependencies: {deps}
+Step 6: 写入 L3-roles.md
+  └→ 从关键源文件头部提取导出/类定义
 
-## Architecture
-{简单数据流或架构描述}
-```
-
-### L2 生成模板
-
-```markdown
-# File Inventory
-
-```
-{目录树}
-```
-
-| Path | Purpose | Key exports | Deletion impact |
-|------|---------|-------------|-----------------|
-| src/index.ts | 入口文件 | activate(), deactivate() | 项目无法启动 |
-| ... | ... | ... | ... |
-```
-
-### L3 生成模板
-
-```markdown
-# Component Roles
-
-## {模块/类名}
-**Responsibility**: {一句话职责}
-
-**Key fields**:
-- `{field}` · {type} · {purpose}
-
-**Lifecycle**: {创建/初始化/销毁}
-**Relationships**: {依赖/继承关系}
+Step 7: ask_human "知识库已自动建好，请确认内容是否正确"
 ```
 
 ---
 
-## 六、API Cache 命中率分析
+## 六、访问路径
+
+### 场景 1：AI 刚启动，需要理解项目
+
+```
+思考："这是一个新项目/会话，我需要先了解项目是做什么的"
+  → read_file .OpenVibe/memory/README.md（了解三层定义）
+  → read_file .OpenVibe/memory/L1-purpose.md（了解项目目的）
+  ⚡ 这两次 read 返回的内容进入 conversation context
+  ⚡ 后续同一 session 不再需要重复读取（已在上下文中）
+```
+
+### 场景 2：AI 需要修改某个文件
+
+```
+思考："用户要求修改 src/tools/readFileTool.ts"
+  → read_file .OpenVibe/memory/L3-roles.md（查看 readFileTool 的职责和字段）
+  → 修改代码
+  → edit .OpenVibe/memory/L3-roles.md（更新组件描述）
+  ⚡ 只读 L3，不影响 L1/L2 的 cache
+```
+
+### 场景 3：AI 需要在项目中添加新功能
+
+```
+思考："需要创建一个新的工具函数"
+  → read_file .OpenVibe/memory/L2-inventory.md（确认在哪个目录下添加）
+  → read_file .OpenVibe/memory/L3-roles.md（了解现有组件避免重复）
+  → 创建文件 + 实现代码
+  → edit .OpenVibe/memory/L2-inventory.md（添加新文件条目）
+  → edit .OpenVibe/memory/L3-roles.md（添加新组件条目）
+```
+
+---
+
+## 七、API Cache 命中率分析
 
 ### 当前（单文件 memory.md）
 
 ```
-每次修改：
-  ├─ memory.md 内容变化 → 文件 mtime 变更
-  ├─ AI 重新 read_file → 新内容进入 conversation
-  └─ API 侧：system prompt 未变 ✅ | conversation 中 memory 内容变了 ❌
+memory.md 任何修改 → 文件 mtime 变更 → AI 重新 read_file
+  → conversation 中 memory 内容更新
+  → 后续 API 请求的 kv cache 涉及 memory 部分失效
+  ⚠ 但 system prompt 本身未变 → prefix caching 仍可命中
 ```
 
-API 级别的 prefix caching：system prompt 不变 → **可以 cache**。但 conversation 中 memory 内容变了 → 后续消息的 kv cache 失效。
-
-### 改造后（三文件 + L1 自动注入）
+### 改造后（四个独立文件）
 
 ```
-L1（注入 system prompt）：
-  ├─ 很少变化
-  ├─ 每次请求都出现在 system prompt 的固定位置
-  └─ API prefix caching ✅✅✅ 几乎始终命中
-
-L2（按需 read_file）：
-  ├─ 中等变化频率
-  ├─ 仅在需要时读取，加入 conversation
-  └─ 不影响 system prompt cache ✅
-
-L3（按需 read_file + 频繁更新）：
-  ├─ 经常变化
-  ├─ 修改后 conversation 中 L3 内容更新
-  └─ 但 system prompt 不受影响 ✅（只有当前轮次的 assistant message 变化）
+README.md     （几乎不变） → 第一次 session 读一次后不再碰
+L1-purpose.md （极少变）   → session 起始读一次，后续不重读
+L2-inventory.md（中等变化）→ 探索时读，修改时写，独立于 L1/L3
+L3-roles.md   （经常变）   → 频繁读写，但只影响自身
 ```
 
-### 关键收益
+**核心收益**：修改 L3-roles.md（最常见操作）不会 invalidate L1 和 L2 在 conversation 中的内容。从 API 侧看——
 
-| 场景 | 单文件 memory.md | 三文件拆分 |
-|------|-----------------|-----------|
-| 修改 L3（最常见） | memory.md 全量变化 → 所有 cache 失效 | 仅 L3 变化 → L1 system prompt cache ✅, L2 不变 ✅ |
-| 修改 L2 | 同上 | 仅 L2 变化 |
-| 连续相同 L1 请求 | conversation 中已缓存 | system prompt prefix caching ✅ 更高效 |
-| 跨 session 相同 L1 | 每次 session 重新 read | 自动注入，system prompt 一致 → 跨 session cache 可能 |
+- 修改 L3 → 只有包含 L3 内容的 assistant/tool 消息变化
+- system prompt 未变 → ✅ API prefix caching 命中
+- L1/L2 在 conversation 中未变 → ✅ 相关 kv cache 仍有效
+- 对比单文件：修改 memory.md 任何部分 → conversation 中整个 memory 内容变化 → 关联 cache 失效
+
+### 最佳实践建议
+
+为了让 AI 最大化 cache 收益，在 README.md 中强调：
+
+> **Read only what you need.** Reading all three files at once wastes
+> tokens and reduces cache effectiveness. Each file is independent.
 
 ---
 
-## 七、实现步骤
+## 八、实现步骤
 
-### Phase 1：文件拆分布局
+### Phase 1：文件拆分
 
-| # | 操作 | 文件 |
+| # | 操作 | 产出 |
 |---|------|------|
-| 1 | 创建 `.OpenVibe/memory/` 目录 | — |
-| 2 | 从 `memory.md` 提取 L1 内容 → 写入 `L1-purpose.md` | `.OpenVibe/memory/L1-purpose.md` |
-| 3 | 从 `memory.md` 提取 L2 内容 → 写入 `L2-inventory.md` | `.OpenVibe/memory/L2-inventory.md` |
-| 4 | 从 `memory.md` 提取 L3 内容 → 写入 `L3-roles.md` | `.OpenVibe/memory/L3-roles.md` |
-| 5 | 删除 `memory.md` | — |
+| 1 | 创建 `.OpenVibe/memory/` 目录 | 目录 |
+| 2 | 写入 `README.md`（三级定义模板） | `.OpenVibe/memory/README.md` |
+| 3 | 从 `memory.md` 提取 L1 内容 → 写入 | `.OpenVibe/memory/L1-purpose.md` |
+| 4 | 从 `memory.md` 提取 L2 内容 → 写入 | `.OpenVibe/memory/L2-inventory.md` |
+| 5 | 从 `memory.md` 提取 L3 内容 → 写入 | `.OpenVibe/memory/L3-roles.md` |
+| 6 | 删除 `.OpenVibe/memory.md` | — |
 
 ### Phase 2：代码改动
 
 | # | 操作 | 文件 |
 |---|------|------|
-| 6 | 新增 `getProjectPurposeBlock()` 函数 | `src/agentRuntimeContext.ts` |
-| 7 | 在 `buildMessagesForLlm()` 中注入 L1（方案 B） | `src/modules/ConversationService.ts` |
-| 8 | 更新 system prompt 为泛化版本 | `src/systemPrompt.ts` |
-| 9 | 更新 `loadMemoryExcerpt()` 改为读取 `memory/` 目录 | `src/modules/todolistReview.ts` |
-| 10 | 更新 `memory.md` 自引用（如果还有） | — |
+| 7 | 更新 system prompt 为极简提醒版 | `src/systemPrompt.ts` |
+| 8 | 更新 `loadMemoryExcerpt()` 读取路径（优先读 `memory/` 目录，回退 `memory.md`） | `src/modules/todolistReview.ts` |
+| 9 | 清理 TSDoc 中对 `memory.md` 的硬编码引用 | 各工具文件 |
 
 ### Phase 3：文档
 
 | # | 操作 |
 |---|------|
-| 11 | 更新 PLAN-memory-rename.md 记录新方向 |
-| 12 | 添加 bootstrap 流程说明到 README 或 system prompt |
+| 10 | 更新 `PLAN-memory-rename.md` 记录最终方向 |
 
 ---
 
-## 八、开放问题
+## 九、开放问题
 
-1. **L1 自动注入的 token 成本**：L1 每次请求都作为 system prompt 的一部分发送，增加 token 消耗。如果 L1 很大（>500 tokens），是否值得？
-   - 权衡：增加的 token 成本 vs 减少的 `read_file` 调用和更好的 cache 命中
-   - 建议：L1 控制在 200-400 tokens 以内
+1. **README.md 是否真的需要？** 三级定义也可以直接写在 system prompt 中（现在是轻提醒）。但独立文件的好处是：AI 可以 read 一次就理解规范，且定义不受 sys prompt 更新影响。
 
-2. **bootstrap 触发时机**：AI 在首次检测到缺失时自动创建，还是通过一个专门的命令（如 `/init-knowledge`）？
-   - 建议：AI 自动检测 + 自动创建，ask_human 确认
+2. **Bootstrap 中 `ask_human` 是否必要？** 自动生成的 L1/L2/L3 初稿可能不够准确。是必须用户确认，还是允许 AI 直接创建后让用户在后续对话中修正？
 
-3. **L1 的 mtime 缓存**：每次 API 调用都检查 stat 仍有 I/O 开销，是否有必要？
-   - 建议：简单加内存缓存，session 内只 stat 一次
+3. **memory.md 回退保留多久？** 现有用户的 memory.md 需要兼容。建议保留 `loadMemoryExcerpt()` 的回退逻辑至少一个版本周期。
 
-4. **向后兼容**：现有用户的 `memory.md` 如何处理？
-   - 方案：`loadMemoryExcerpt()` 先读 `memory/L1-purpose.md`，不存在则回退到 `memory.md`
-   - 过渡期后移除回退逻辑
-
-5. **文件命名风格**：`L1-purpose.md` vs `purpose.md` vs `1-purpose.md`？
-   - 建议：`L1-purpose.md`，层级前缀 + 语义名，排序友好、语义清晰
+4. **L1 的 token 规模控制**：不注入 system prompt 后 L1 不再有 token 成本压力，可适当丰富，但建议仍控制在 400-600 tokens 以内，避免 AI 不愿读取（太长）。
