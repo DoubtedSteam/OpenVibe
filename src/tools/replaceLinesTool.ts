@@ -187,10 +187,11 @@ export async function replaceLinesTool(
   if (!check.ok) {
     return JSON.stringify({
       success: false,
-      message: 'LLM check rejected the replacement - operation cancelled',
+      operation: 'edit_rejected',
       reviewReason: check.reason ?? '',
       reviewNotes: Array.isArray(check.notes) ? check.notes : [],
-      ...diffMeta,
+      filePath: params.filePath,
+      targetRange: `第 ${params.startLine}-${clampedEnd} 行`,
     });
   }
 
@@ -233,8 +234,10 @@ export async function replaceLinesTool(
     if (!userApproved) {
       return JSON.stringify({
         success: false,
-        message: 'User rejected the replacement - operation cancelled',
-        ...diffMeta,
+        operation: 'edit_rejected',
+        reason: 'User rejected the replacement',
+        filePath: params.filePath,
+        targetRange: `第 ${params.startLine}-${clampedEnd} 行`,
       });
     }
   }
