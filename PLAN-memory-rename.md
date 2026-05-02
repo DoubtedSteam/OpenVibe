@@ -218,13 +218,29 @@ export const PROJECT_KNOWLEDGE_FILE = '.OpenVibe/project-knowledge.md';
 | 更新 L2 memory.md 文件描述（四层→三层） | ✅ 已完成 |
 | systemPrompt.ts 四层→三层 | ✅ 已完成 |
 | systemPrompt.ts 更新维护规则 | ✅ 已完成 |
-| 关键导出函数补充 TSDoc 注释 | ⏳ 待执行 |
+| 关键导出函数补充 TSDoc 注释 | ✅ 已完成 |
+| 拆分 memory/ 目录（README.md + L1/L2/L3） | ✅ 已完成 |
+| systemPrompt.ts 极简提醒版（3行） | ✅ 已完成 |
+| todolistReview.ts loadMemoryExcerpt 新路径 | ✅ 已完成 |
+| memory.md 旧文件标记废弃 | ✅ 已完成 |
 
 ### 不需要的操作
 
-- ❌ `.OpenVibe/memory.md` 重命名（不再需要）
+- ❌ `.OpenVibe/memory.md` 重命名（已改用 memory/ 目录结构）
 - ❌ `loadMemoryExcerpt` 函数名更改（保持原样）
-- ❌ 向后兼容迁移（文件名不变）
-- ❌ 路径常量提取到 `src/constants.ts`（除非未来需要）
+- ❌ 向后兼容迁移（始终与代码一致）
+
+### 最终成果
+
+最终知识库结构：
+```
+.OpenVibe/
+├── memory/                    # 三级知识库目录
+│   ├── README.md              # 三级架构定义规范
+│   ├── L1-purpose.md          # 项目目的（稳定）
+│   ├── L2-inventory.md        # 文件清单（中等变化）
+│   └── L3-roles.md            # 组件角色（高频变化）
+└── memory.md                  # 仅含迁移提示，不再使用
+```
 
 *本文档由 Vibe Coding Assistant 于会话中自动生成，后续更新。*

@@ -110,14 +110,15 @@ export function mergeReviewNotes(acc: string[], newNotes: string[]): string[] {
 }
 
 /**
- * Read the full content of `.OpenVibe/memory.md` for injection into review
- * system prompts as "project constraints" context.
+ * Read all files from `.OpenVibe/memory/` for injection into review system
+ * prompts as "project constraints" context.
  *
- * Extracted by ToolExecutor and passed to todolist generate/edit review agents
- * so they have project-level context when evaluating todo lists.
+ * Concatenates README.md, L1-purpose.md, L2-inventory.md, and L3-roles.md
+ * with clear separators. Falls back to reading the old single-file memory.md
+ * if the directory structure is not yet set up.
  *
- * @returns The raw file content, or an empty-string error message if the file
- * cannot be read (no workspace open, file missing, or read error).
+ * @returns Combined file content with level headers, or an error message if
+ * no knowledge files can be read.
  */
 export function loadMemoryExcerpt(): string {
   try {
@@ -125,13 +126,28 @@ export function loadMemoryExcerpt(): string {
     if (!root) {
       return '(no workspace open; no project_constraints extracted)';
     }
-    const p = path.join(root, '.OpenVibe', 'memory.md');
-    if (!fs.existsSync(p)) {
-      return '(memory.md not found; no project_constraints extracted)';
+    const memoryDir = path.join(root, '.OpenVibe', 'memory');
+    if (fs.existsSync(memoryDir)) {
+      const parts: string[] = [];
+      const files = ['README.md', 'L1-purpose.md', 'L2-inventory.md', 'L3-roles.md'];
+      for (const f of files) {
+        const fp = path.join(memoryDir, f);
+        if (fs.existsSync(fp)) {
+          parts.push(`--- ${f} ---\n${fs.readFileSync(fp, 'utf-8')}`);
+        }
+      }
+      if (parts.length > 0) {
+        return parts.join('\n\n');
+      }
     }
-    return fs.readFileSync(p, 'utf-8');
+    // Fallback: old single-file path
+    const oldPath = path.join(root, '.OpenVibe', 'memory.md');
+    if (fs.existsSync(oldPath)) {
+      return fs.readFileSync(oldPath, 'utf-8');
+    }
+    return '(memory files not found; no project_constraints extracted)';
   } catch {
-    return '(could not read memory.md — workspace may be closed)';
+    return '(could not read memory files — workspace may be closed)';
   }
 }
 

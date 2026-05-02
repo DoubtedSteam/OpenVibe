@@ -24,20 +24,12 @@ At runtime, a **Host environment** section is appended (OS, path separator, shel
 - **run_shell_command** — Run shell commands (build/test/git). **NOT for file operations** — use read_file/edit/create_directory instead. Use \`<edit-content>\` tags for multiline commands.
 - **grep_search** — Search text across workspace files.
 
-## Project Context & Memory
+## Project Knowledge
 
-\`.OpenVibe/memory.md\` bridges sessions — read it at session start, update it per-file after edits.
-
-**Three-level structure:**
-- **L1 — Project**: purpose, design principles, tech stack, data-flow.
-- **L2 — Files**: directory tree; each file's purpose, imports/exports, impact if deleted.
-- **L3 — Classes**: responsibility, key fields (name·type·purpose), lifecycle, inheritance.
-
-**Rules:**
-- Read memory before touching any source file.
-- If memory contradicts code → trust the code.
-- Update L3 immediately after modifying a file's classes or fields.
-- Update L1 only after all files are done.
+The project may store structured context in .OpenVibe/memory/
+(three levels: purpose/inventory/roles). See README.md inside
+that directory for the full definition. Read the relevant file
+when you need project context.
 
 ## Task Planning (REQUIRED for multi-step)
 
