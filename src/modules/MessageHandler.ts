@@ -219,7 +219,7 @@ export class MessageHandler {
                 ? `\n\n**📄 本次修改了 ${modifiedFiles.length} 个文件**:\n${fileListStr}`
                 : '';
 
-              const memoryHint = 'Task complete. Remember to update .OpenVibe/memory.md if you modified any files during this task — update Level 3/4 per-file immediately, then Level 1 after all files are done.';
+              const memoryHint = 'Task complete. Remember to update .OpenVibe/memory/ if you modified any files during this task — update L3-roles.md per-file immediately, then L1-purpose.md and L2-inventory.md after all files are done.';
               const summary = (args['summary'] as string) || '';
               const result = JSON.stringify({
                 success: true,
