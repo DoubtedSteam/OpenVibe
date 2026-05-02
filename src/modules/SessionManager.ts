@@ -347,6 +347,20 @@ export class SessionManager {
       if (currentSession) {
         await this._saveSessionDataFile(currentSession, sessionsDir);
       }
+
+      // 3. Clean up orphaned data files (sessions deleted but files leftover)
+      try {
+        const activeIds = new Set(this._sessions.map(s => s.id));
+        const entries = await fs.promises.readdir(sessionsDir);
+        for (const entry of entries) {
+          if (entry.endsWith('.json') && entry !== 'index.json') {
+            const sessionId = entry.replace(/\.json$/, '');
+            if (!activeIds.has(sessionId)) {
+              await fs.promises.unlink(path.join(sessionsDir, entry));
+            }
+          }
+        }
+      } catch { /* non-fatal — orphan cleanup is best-effort */ }
     } catch (err) {
       this._post({ type: 'error', message: `Failed to save sessions: ${err}` });
     } finally {
@@ -419,7 +433,7 @@ export class SessionManager {
       return false;
     }
 
-    // 如果要删除的是当前会话，先尝试切换到另一个会话
+    // 如果要删除的是当前会话，先切换到另一个会话
     if (sessionId === this._currentSessionId) {
       const otherSession = this._sessions.find(s => s.id !== sessionId);
       if (otherSession) {
@@ -428,6 +442,7 @@ export class SessionManager {
     }
 
     // 删除对应的数据文件（如有）
+    let unlinkFailed = false;
     try {
       const sessionsDir = this._ensureSessionsDir();
       if (sessionsDir) {
@@ -436,7 +451,10 @@ export class SessionManager {
           await fs.promises.unlink(sessionFile);
         }
       }
-    } catch { /* non-fatal */ }
+    } catch (e) {
+      console.error(`[SessionManager] Failed to delete session file for ${sessionId}:`, e);
+      unlinkFailed = true;
+    }
 
     // 从数组中移除
     this._sessions.splice(sessionIndex, 1);
@@ -446,9 +464,16 @@ export class SessionManager {
       this._createDefaultSession();
     }
 
-    this._saveSessions();
+    // 强制同步落盘（跳过 debounce），确保 index.json 即时更新
+    this._saveQueued = true;
+    if (this._saveTimer) {
+      clearTimeout(this._saveTimer);
+      this._saveTimer = null;
+    }
+    await this._flushSaveSessions();
+
     this.postSessionsList();
-    return true;
+    return !unlinkFailed;
   }
 
   public async createSession(): Promise<ChatSession> {
