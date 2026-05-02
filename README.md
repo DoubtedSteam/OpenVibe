@@ -120,7 +120,7 @@ edit(filePath, startLine, endLine, newContent)
 ]
 ```
 
-### ❶ System 消息构成
+### System 消息构成
 
 | 区块 | 来源 | 说明 |
 |------|------|------|
@@ -128,7 +128,7 @@ edit(filePath, startLine, endLine, newContent)
 | **Host environment** | `src/agentRuntimeContext.ts` | 动态生成：OS 信息、路径分隔符、换行符、Shell 类型、当前活动编辑器 |
 | **语言指令** | `langInstr` | 根据 `vibe-coding.language` 配置生成（zh-CN / en），追加在尾部 |
 
-### ❷ 用户消息中的 Context 块
+### 用户消息中的 Context 块
 
 运行时状态不额外占一条消息，而是**嵌入每一条用户消息的正文开头**：
 
