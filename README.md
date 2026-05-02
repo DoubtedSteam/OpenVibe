@@ -44,6 +44,7 @@
 | 2026-04-26 | **Web Fetch 优化 + ask_human 交互改进**：1) `web_fetch` HTML 处理全面升级——保留标题层级（h1-h6 转 Markdown）、块级换行、`<pre>/<code>` 代码格式、提取链接列表和 meta description、移除 `<noscript>` 2) `ask_human` 对话框新增文本输入框和 Send 按钮，用户可输入消息回传 AI 3) System Prompt 中 `web_fetch` 与 `ask_human` 联动：AI 不知道 URL 时自动请求用户帮忙找到页面 |
 | 2026-04-28 | **ask_human 重载容错 + 持续改进**：1) 修复 `ask_human` 在 Reload Window 后显示"Missing tool result"晦涩错误的 bug，改为显示友好提示和原始问题内容，用户发送新消息即可继续 2) `<edit-content>` 标签现也支持 `run_shell_command`，编辑和 shell 统一使用同一个标签，简化转义处理 3) XML content fallback 完善：同一轮消息支持多个标签按顺序匹配 |
 | 2026-04-29 | **Compact 历史压缩重构**：放弃独立摘要 LLM，改为**复用主对话 LLM** + 保持原始消息格式，大幅提升 KV 缓存命中率。1) 使用与主对话相同的 system prompt（`SYSTEM_PROMPT + Host env + langInstr`），前缀缓存完美命中 2) 待压缩消息保持原始 `ChatMessage` 数组格式，中间 KV cache 可复用 3) 只修改 `llmMessages`（LLM 上下文），前端 `messages`（完整历史）完全不受影响 4) 新增 `_sanitizeMessageList` 确保发送前清理不完整 tool call 序列，避免 API 400 错误 |
+| 2026-05-02 | **知识库泛化重构**：将单文件 `.OpenVibe/memory.md` 拆分为**三级目录结构** `.OpenVibe/memory/`（`README.md` 元定义 + `L1-purpose.md` + `L2-inventory.md` + `L3-roles.md`），实现按需读写、互不影响。架构泛化为通用知识库系统，适用于任何项目。同步更新 system prompt 为极简提醒版。 |
 > **2026-04-11:** Git snapshots during coding; rollback and history in the UI.  
 
 > **2026-04-14:** Independent review for todo lists and code edits via separate LLM agents.  
@@ -58,6 +59,8 @@
 > **2026-04-28:** ask_human reload resilience + continuous improvements: 1) Fixed the "Missing tool result" cryptic error after Reload Window, replaced with a friendly prompt showing the original question — users can continue by sending a new message 2) `<edit-content>` tag now also supports `run_shell_command`, unifying the escaping protocol for both edit and shell 3) Enhanced XML content fallback: multiple tags in the same response are matched to tools in order
 
 > **2026-04-29:** **Compact history compaction rework**: Dropped the separate summarizer LLM in favor of **reusing the main conversation LLM** + keeping original message format for maximum KV cache hit rate. 1) Uses the exact same system prompt as the main conversation (`SYSTEM_PROMPT + Host env + langInstr`) — prefix cache hits perfectly 2) Messages to be compressed stay in raw `ChatMessage` array format — intermediate KV cache is reusable 3) Only `llmMessages` (LLM context) is modified; frontend `messages` (full history) remains untouched 4) Added `_sanitizeMessageList` to strip incomplete tool_call sequences before sending, preventing API 400 errors
+
+> **2026-05-02:** **Knowledge base generalization**: Split the single `.OpenVibe/memory.md` into a **3-level directory** `.OpenVibe/memory/` (`README.md` meta-definition + `L1-purpose.md` + `L2-inventory.md` + `L3-roles.md`), enabling on-demand reading and independent cache layers. The architecture is generalized as a universal knowledge base system applicable to any project. System prompt updated to a minimal reminder version.
 
 <h2 id="project-overview">项目概述 / Project overview</h2>
 
