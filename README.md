@@ -231,25 +231,26 @@ system + u1 + a1 + t1 + ... + u8 + a8 + t8 + u9 + a9 + t9 + u10
 
 <h2 id="multi-agent-architecture">多智能体架构 / Multi-agent architecture</h2>
 
-系统包含三个角色，形成「执行 ↔ 验证」分离：
+系统包含两个核心角色，形成「执行 ↔ 验证」分离：
 
 | 智能体 | 职责 |
 |--------|------|
-| **主智能体** (Primary) | 需求分析、任务规划、工具调用协调、与用户沟通 |
+| **主智能体** (Primary) | 需求分析、任务规划、工具调用协调与执行、与用户沟通 |
 | **审查智能体** (Review) | 独立校验 todo 合理性、编辑正确性、shell 命令安全性 |
-| **编辑智能体** (Editing) | 执行 `read_file`、`find_in_file`、`edit`、`run_shell_command` 等具体工具 |
+
+> 工具的调用由主智能体直接完成——不存在独立的"编辑智能体"。
 
 ### Shell 命令强化审查流程
 
 1. **严格安全规则**：禁止使用 shell 进行任何文件读写操作（如 cat、type、dir、grep），强制使用专用工具
 2. **防止命令漂移**：审查命令是否与用户请求和 todo 上下文一致
 3. **结构化返回**：执行结果包含 `command`、`cwd`、`exitCode`、`durationMs`、`summary`、`keyErrors`
-4. **多级审查**：主智能体 → shell 编辑代理优化 → 独立安全审查 → 用户确认（可选）
+4. **多级审查**：主智能体 → shell 安全检查 → 独立 LLM 审查 → 用户确认（可选）
 5. **XML content fallback**：多行复杂脚本使用 `<edit-content>` 标签传递原始文本
 6. **上下文注入**：自动注入 todo 目标与最近执行历史
 7. **防重复执行**：记录最近命令，避免无意义重复
 
-> **Primary agent** plans and coordinates; **editing agent** runs tools; **review agent** independently checks plans and edits. Failed reviews trigger rework loops.
+> **Primary agent** plans, coordinates and executes tools; **review agent** independently checks plans, edits and shell commands. Failed reviews trigger rework loops.
 
 <h2 id="request-flow">请求流程 / Request flow</h2>
 
