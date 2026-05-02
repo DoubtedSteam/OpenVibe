@@ -375,12 +375,17 @@ load_skill(name="paper-revision-router")
 
 ```
 .OpenVibe/
-├── skills/
-│   ├── code-reviewer/
-│   │   └── SKILL.md
-│   └── paper-revision-router/
-│       └── SKILL.md
-└── memory.md
+├── memory/                 # 项目知识库（三级架构）
+│   ├── README.md           # 定义规范
+│   ├── L1-purpose.md       # 项目目的
+│   ├── L2-inventory.md     # 文件清单
+│   └── L3-roles.md         # 组件职责
+├── sessions/               # 聊天会话
+└── skills/
+    ├── code-reviewer/
+    │   └── SKILL.md
+    └── paper-revision-router/
+        └── SKILL.md
 ```
 
 <h2 id="installation">安装 / Installation</h2>
@@ -423,17 +428,26 @@ load_skill(name="paper-revision-router")
 
 <h2 id="memory-management-system">内存管理 / Memory</h2>
 
-项目知识与会话上下文可维护在 **`.OpenVibe/memory.md`**，建议按固定层级组织：
+项目知识库采用**三级文件拆分**设计，存放在 `.OpenVibe/memory/` 目录下，实现**按需读写、互不影响**的项目上下文管理。
 
-1. **Level 1** — 项目概览、技术栈、核心设计  
-2. **Level 2** — 目录结构与关键文件依赖  
-3. **Level 3** — 类与类型  
-4. **Level 4** — 重要函数与方法（签名、副作用、错误处理）
+### 三级架构
 
-更新内存宜纳入任务清单，保证新会话能继承一致上下文。
+| 层级 | 文件 | 内容 | 稳定度 |
+|------|------|------|--------|
+| **定义规范** | `README.md` | 元定义：各层级用途、读写时机、维护规则 | ★★★★★ 几乎不变 |
+| **Level 1** | `L1-purpose.md` | 项目概览：一句话定义、核心目标、设计原则、技术栈、数据流 | ★★★ 极少变 |
+| **Level 2** | `L2-inventory.md` | 文件清单：目录树、每个文件一行描述、导入导出、删除影响 | ★★☆ 中等 |
+| **Level 3** | `L3-roles.md` | 组件职责：模块/类的职责、关键字段、生命周期、关系 | ★☆☆ 经常变 |
 
-> Optional **`.OpenVibe/memory.md`** with four levels from overview down to functions; keep it updated as part of planned work.
+### 设计要点
 
+- **按需读写** — 没有自动注入/预加载，AI 自行决策何时读取哪一层，不浪费 token
+- **互不影响** — 修改 `L3-roles.md`（最常见操作）不会 invalidate 对话中 L1/L2 的内容
+- **定义即文件** — `README.md` 是架构的"元定义"规范，AI 通过读取它了解各层的规则
+- **自举** — 本项目自身的知识库即按本目录规范管理
+- **Bootstrap** — 目录非自动创建，AI 发现文件不存在时触发初始化流程
+
+> Project knowledge is stored in **`.OpenVibe/memory/`** with three levels: purpose, inventory, and roles. See `README.md` inside that directory for the full definition.
 
 <h2 id="source-files-index">关键源文件索引 / Source files index</h2>
 
