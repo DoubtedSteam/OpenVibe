@@ -60,3 +60,7 @@ logo.png
 
 # Development test scripts
 webview_script_test.js
+# 内部开发文档
+prompt.md
+PLAN-*.md
+REFACTOR_PLAN.md
