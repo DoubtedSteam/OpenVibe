@@ -169,6 +169,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       if (msg.type === 'ready') {
         this._uiManager.sendWorkspaceBanner();
         this._sessionManager.postSessionsList();
+        this._sendModelListToWebview();
         this._replayWebview();
       }
       if (msg.type === 'webviewError') {
@@ -246,10 +247,27 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         );
       }
        if (msg.type === 'setEditPermission') {
-         this._uiManager.setEditPermissionEnabled(!!msg.enabled);
-       }
-     });
-   }
+          this._uiManager.setEditPermissionEnabled(!!msg.enabled);
+        }
+       if (msg.type === 'switchModel') {
+          const index = typeof msg.index === 'number' ? msg.index : -1;
+          this._uiManager.setSelectedModelIndex(index);
+          this._sendModelListToWebview();
+        }
+      });
+    }
+
+  private _sendModelListToWebview(): void {
+    const models = this._uiManager.getModels();
+    const selectedIndex = this._uiManager.getSelectedModelIndex();
+    const currentDisplayName = this._uiManager.getSelectedModelDisplayName();
+    this._uiManager.post({
+      type: 'modelList',
+      models: models.map((m) => ({ name: m.name, model: m.model })),
+      selectedIndex,
+      currentDisplayName,
+    });
+  }
 
   private _replayWebview(): void {
     this._conversation.replaySessionToWebview((m) => this._uiManager.post(m));
@@ -838,6 +856,43 @@ Uncommitted changes will be lost.`,
   }
   .add-session-btn:hover { background: var(--vscode-button-hoverBackground); }
 
+  /* Model selector */
+  .model-selector { position: relative; display: inline-flex; }
+  .model-select-btn {
+    display: flex; align-items: center; gap: 4px; padding: 3px 8px;
+    font-size: 11px; font-family: inherit;
+    background: transparent; color: var(--vscode-descriptionForeground);
+    border: 1px solid transparent; border-radius: 4px; cursor: pointer;
+    opacity: 0.7; transition: opacity 0.15s, border-color 0.15s;
+    white-space: nowrap;
+  }
+  .model-select-btn:hover { opacity: 1; border-color: var(--vscode-input-border, #555); background: var(--vscode-toolbar-hoverBackground, rgba(128,128,128,0.1)); }
+  .model-select-arrow { font-size: 8px; opacity: 0.6; }
+  .model-dropdown {
+    position: absolute; top: 100%; right: 0; z-index: 200;
+    min-width: 180px; max-height: 300px; overflow-y: auto;
+    background: var(--vscode-dropdown-background, var(--vscode-editor-background));
+    border: 1px solid var(--vscode-focusBorder, #007acc);
+    border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    font-size: 12px; margin-top: 4px;
+  }
+  .model-dropdown-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 12px; cursor: pointer; color: var(--vscode-foreground);
+    border-bottom: 1px solid var(--vscode-dropdown-border, transparent);
+    transition: background 0.1s;
+  }
+  .model-dropdown-item:last-child { border-bottom: none; }
+  .model-dropdown-item:hover { background: var(--vscode-list-hoverBackground, rgba(128,128,128,0.15)); }
+  .model-dropdown-item.active {
+    background: var(--vscode-list-activeSelectionBackground);
+    color: var(--vscode-list-activeSelectionForeground);
+  }
+  .model-dropdown-item .model-check { font-size: 12px; width: 16px; flex-shrink: 0; }
+  .model-dropdown-item .model-item-name { flex: 1; font-weight: 500; }
+  .model-dropdown-item .model-item-id { font-size: 10px; color: var(--vscode-descriptionForeground); opacity: 0.7; }
+
+  /* Toolbar */
   /* Toolbar */
   .toolbar { display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
   .toolbar-left { display: flex; align-items: center; gap: 8px; }
@@ -918,9 +973,16 @@ Uncommitted changes will be lost.`,
           <span>☰</span> Conversations
         </button>
       </div>
-      <div class="toolbar-right">
-        <button id="snapshots" title="View and rollback to Git snapshots">⏮️ Snapshots</button>
-        <button id="clear" title="Clear conversation history">🗑 Clear</button>
+      <div class=\"toolbar-right\">
+        <div id=\"model-selector\" class=\"model-selector\" style=\"display: none;\">
+          <button id=\"model-select-btn\" class=\"model-select-btn\" title=\"Switch model\">
+            <span id=\"model-select-label\">🤖 Model</span>
+            <span class=\"model-select-arrow\">▾</span>
+          </button>
+          <div id=\"model-dropdown\" class=\"model-dropdown\" style=\"display: none;\"></div>
+        </div>
+        <button id=\"snapshots\" title=\"View and rollback to Git snapshots\">⏮️ Snapshots</button>
+        <button id=\"clear\" title=\"Clear conversation history\">🗑 Clear</button>
       </div>
     </div>
     <div id="messages"></div>

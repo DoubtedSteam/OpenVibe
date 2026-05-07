@@ -79,6 +79,21 @@ export interface ApiConfig {
   /** Language for AI interaction: 'auto' | 'en' | 'zh-CN' */
   language?: string;
 }
+/**
+ * Configuration for a single model entry in the vibe-coding.models array.
+ * Each entry can optionally override apiBaseUrl and apiKey.
+ */
+export interface ModelConfig {
+  /** Display name shown in the model selector dropdown. */
+  name: string;
+  /** Model name to send to the API (e.g. gpt-4o, deepseek-chat). */
+  model: string;
+  /** Optional base URL override (falls back to vibe-coding.apiBaseUrl). */
+  apiBaseUrl?: string;
+  /** Optional API key override (falls back to vibe-coding.apiKey). */
+  apiKey?: string;
+}
+
 export interface ToolDefinition {
   type: 'function';
   function: {

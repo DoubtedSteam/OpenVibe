@@ -64,6 +64,34 @@
           "type": "string",
           "default": "deepseek-reasoner",
           "description": "Model name"
+          "description": "Model name"
+        },
+        "vibe-coding.models": {
+          "type": "array",
+          "default": [],
+          "description": "List of model configurations for model switching. Each entry can override apiBaseUrl and apiKey. Falls back to global vibe-coding.apiBaseUrl / vibe-coding.apiKey when omitted.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Display name shown in the model selector dropdown"
+              },
+              "model": {
+                "type": "string",
+                "description": "Model name to send to the API (e.g. gpt-4o, deepseek-chat)"
+              },
+              "apiBaseUrl": {
+                "type": "string",
+                "description": "Optional base URL override for this model (falls back to vibe-coding.apiBaseUrl)"
+              },
+              "apiKey": {
+                "type": "string",
+                "description": "Optional API key override for this model (falls back to vibe-coding.apiKey)"
+              }
+            },
+            "required": ["name", "model"]
+          }
         },
         "vibe-coding.confirmChanges": {
           "type": "boolean",

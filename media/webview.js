@@ -45,6 +45,13 @@
     var humanAssistCancelBtn = byId('human-assistance-cancel');
     var humanAssistInput = byId('human-assistance-input');
     var humanAssistSendBtn = byId('human-assistance-send');
+   // Model selector
+   var modelSelector = byId('model-selector');
+   var modelSelectBtn = byId('model-select-btn');
+   var modelSelectLabel = byId('model-select-label');
+   var modelDropdown = byId('model-dropdown');
+   var _modelList = []; // { name, model }
+   var _selectedModelIndex = -1;
    var TOOL_ICONS = {
     read_file: '📄',
     find_in_file: '🔍',
@@ -99,6 +106,80 @@
        type: 'setEditPermission', 
        enabled: editPermissionEnabled 
      });
+    }
+
+   // ── Model selector ─────────────────────────────────────────────────────
+   function updateModelSelector(models, selectedIndex, displayName) {
+     _modelList = models || [];
+     _selectedModelIndex = (selectedIndex != null) ? selectedIndex : -1;
+
+     // Show/hide the entire model selector
+     if (!modelSelector) return;
+     if (_modelList.length > 0) {
+       modelSelector.style.display = 'inline-flex';
+     } else {
+       modelSelector.style.display = 'none';
+       return;
+     }
+
+     // Update label
+     if (modelSelectLabel) {
+       if (_selectedModelIndex >= 0 && _selectedModelIndex < _modelList.length) {
+         modelSelectLabel.textContent = '🤖 ' + _modelList[_selectedModelIndex].name;
+       } else {
+         modelSelectLabel.textContent = '🤖 ' + (displayName || 'Model');
+       }
+     }
+
+     // Render dropdown
+     renderModelDropdown();
+     closeModelDropdown();
+   }
+
+   function renderModelDropdown() {
+     if (!modelDropdown) return;
+     var html = '';
+     for (var i = 0; i < _modelList.length; i++) {
+       var item = _modelList[i];
+       var isActive = (i === _selectedModelIndex);
+       var checkMark = isActive ? '●' : '○';
+       var activeClass = isActive ? ' active' : '';
+       html += '<div class=\"model-dropdown-item' + activeClass + '\" data-index=\"' + i + '\">' +
+         '<span class=\"model-check\">' + checkMark + '</span>' +
+         '<span class=\"model-item-name\">' + escHtml(item.name) + '</span>' +
+         '<span class=\"model-item-id\">' + escHtml(item.model) + '</span>' +
+         '</div>';
+     }
+     modelDropdown.innerHTML = html;
+   }
+
+   function closeModelDropdown() {
+     if (modelDropdown) modelDropdown.style.display = 'none';
+   }
+
+   function toggleModelDropdown() {
+     if (!modelDropdown) return;
+     if (modelDropdown.style.display === 'block') {
+       closeModelDropdown();
+     } else {
+       renderModelDropdown();
+       modelDropdown.style.display = 'block';
+     }
+   }
+
+   function switchModel(index) {
+     if (index === _selectedModelIndex) {
+       closeModelDropdown();
+       return;
+     }
+     _selectedModelIndex = index;
+     // Update label immediately for responsiveness
+     if (modelSelectLabel && index >= 0 && index < _modelList.length) {
+       modelSelectLabel.textContent = '🤖 ' + _modelList[index].name;
+     }
+     closeModelDropdown();
+     // Notify backend
+     safePost({ type: 'switchModel', index: index });
    }
 
    // Simple markdown parser for basic formatting
@@ -761,6 +842,33 @@
   if (clearBtn) clearBtn.addEventListener('click', function () { safePost({ type: 'clearHistory' }); });
    if (snapshotsBtn) snapshotsBtn.addEventListener('click', function () { safePost({ type: 'showSnapshots' }); });
    if (editToggleBtn) editToggleBtn.addEventListener('click', toggleEditPermission);
+   // Model selector events
+   if (modelSelectBtn) modelSelectBtn.addEventListener('click', function (e) {
+     e.stopPropagation();
+     toggleModelDropdown();
+   });
+   // Close dropdown on outside click
+   document.addEventListener('click', function (e) {
+     if (modelDropdown && modelDropdown.style.display === 'block') {
+       var target = e.target;
+       if (!target || (target !== modelSelectBtn && !modelSelectBtn.contains(target) && !modelDropdown.contains(target))) {
+         closeModelDropdown();
+       }
+     }
+   });
+   // Click on dropdown items (delegated)
+   if (modelDropdown) {
+     modelDropdown.addEventListener('click', function (e) {
+       var target = e.target;
+       var item = target.closest ? target.closest('.model-dropdown-item') : null;
+       if (item) {
+         var idx = parseInt(item.getAttribute('data-index'), 10);
+         if (!isNaN(idx)) {
+           switchModel(idx);
+         }
+       }
+     });
+   }
   if (input) {
     input.addEventListener('keydown', function (e) {
       if (_refOpen) {
@@ -869,10 +977,13 @@
         if (confirmBar) confirmBar.classList.remove('show');
         if (humanAssistBar) humanAssistBar.classList.remove('show');
         break;
-      case 'sessionsList':
-        updateSessionsList(msg.sessions);
-        break;
-    }
+       case 'sessionsList':
+         updateSessionsList(msg.sessions);
+         break;
+       case 'modelList':
+         updateModelSelector(msg.models, msg.selectedIndex, msg.currentDisplayName);
+         break;
+     }
   });
 
   // Notify extension that the webview is ready.

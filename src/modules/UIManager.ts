@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { getAgentRuntimeContextBlock } from '../agentRuntimeContext';
-import { ApiConfig } from '../types';
+import { ApiConfig, ModelConfig } from '../types';
 import { ReplaceCheckContext, ReplaceCheckResult } from '../tools';
 import { sendChatMessage } from '../api';
 
@@ -60,6 +60,8 @@ export class UIManager {
    private _pendingShellConfirms: Map<string, (approved: boolean) => void> = new Map();
    private _pendingHumanAssistanceConfirms: Map<string, (approved: boolean, userMessage?: string) => void> = new Map();
    private _editPermissionEnabled: boolean = true;
+   /** Current selected model index within vibe-coding.models array. -1 means use the legacy single-model settings. */
+   private _selectedModelIndex: number = -1;
    constructor(private readonly _context: vscode.ExtensionContext) {}
 
    public setView(view: vscode.WebviewView | undefined): void {
@@ -98,12 +100,59 @@ export class UIManager {
      this.post({ type: 'addMessage', message: { role: 'system', content: text } });
    }
 
+  /**
+   * Read the vibe-coding.models array from settings.
+   */
+  public getModels(): ModelConfig[] {
+    const cfg = vscode.workspace.getConfiguration('vibe-coding');
+    return cfg.get<ModelConfig[]>('models', []);
+  }
+
+  /** Get the currently selected model index. */
+  public getSelectedModelIndex(): number {
+    return this._selectedModelIndex;
+  }
+
+  /** Set the currently selected model index. */
+  public setSelectedModelIndex(index: number): void {
+    this._selectedModelIndex = index;
+  }
+
+  /**
+   * Get the display name of the currently selected model.
+   * Falls back to the legacy vibe-coding.model setting when no multi-model entry is selected.
+   */
+  public getSelectedModelDisplayName(): string {
+    if (this._selectedModelIndex >= 0) {
+      const models = this.getModels();
+      if (this._selectedModelIndex < models.length) {
+        return models[this._selectedModelIndex].name;
+      }
+    }
+    const cfg = vscode.workspace.getConfiguration('vibe-coding');
+    return cfg.get<string>('model', 'gpt-4o');
+  }
+
   public getApiConfig(): ApiConfig {
     const cfg = vscode.workspace.getConfiguration('vibe-coding');
-    const apiKey = cfg.get<string>('apiKey', '');
-    if (!apiKey) {
-      throw new Error('API key not configured. Please set vibe-coding.apiKey in Settings.');
+    const models = this.getModels();
+
+    // Determine which model entry to use
+    let activeModelName = cfg.get<string>('model', 'gpt-4o');
+    let activeBaseUrl = cfg.get<string>('apiBaseUrl', 'https://api.openai.com/v1');
+    let activeApiKey = cfg.get<string>('apiKey', '');
+
+    if (this._selectedModelIndex >= 0 && this._selectedModelIndex < models.length) {
+      const entry = models[this._selectedModelIndex];
+      if (entry.apiBaseUrl) { activeBaseUrl = entry.apiBaseUrl; }
+      if (entry.apiKey) { activeApiKey = entry.apiKey; }
+      activeModelName = entry.model;
     }
+
+    if (!activeApiKey) {
+      throw new Error('API key not configured. Please set vibe-coding.apiKey or provide apiKey in vibe-coding.models in Settings.');
+    }
+
     // Resolve language setting: "auto" → detect from VS Code UI language
     const rawLang = cfg.get<string>('language', 'auto');
     let resolvedLang = rawLang;
@@ -113,9 +162,9 @@ export class UIManager {
       resolvedLang = uiLang.startsWith('zh') ? 'zh-CN' : 'en';
     }
     return {
-      baseUrl: cfg.get<string>('apiBaseUrl', 'https://api.openai.com/v1'),
-      apiKey,
-      model: cfg.get<string>('model', 'gpt-4o'),
+      baseUrl: activeBaseUrl,
+      apiKey: activeApiKey,
+      model: activeModelName,
       confirmChanges: cfg.get<boolean>('confirmChanges', true),
       confirmShellCommand: cfg.get<boolean>('confirmShellCommand', true),
       maxInteractions: cfg.get<number>('maxInteractions', -1),
