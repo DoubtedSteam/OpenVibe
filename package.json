@@ -64,7 +64,6 @@
           "type": "string",
           "default": "deepseek-reasoner",
           "description": "Model name"
-          "description": "Model name"
         },
         "vibe-coding.models": {
           "type": "array",
