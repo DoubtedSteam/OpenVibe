@@ -106,7 +106,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
           },
           startLine: {
             type: 'number',
-            description: 'First line of the range to edit (1-based, inclusive)',
+            description: 'First line of the range to edit (1-based, inclusive). Set to total + 1 to append to end of file.',
           },
           endLine: {
             type: 'number',
