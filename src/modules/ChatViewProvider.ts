@@ -538,6 +538,18 @@ Uncommitted changes will be lost.`,
     max-height: min(46vh, 380px);
     min-height: 80px;
   }
+  .check-diff-unified .diff-del {
+    background-color: rgba(255, 56, 56, 0.18);
+    color: #f48771;
+    display: inline-block;
+    min-width: 100%;
+  }
+  .check-diff-unified .diff-add {
+    background-color: rgba(56, 198, 56, 0.18);
+    color: #89d185;
+    display: inline-block;
+    min-width: 100%;
+  }
   .reason-section { margin: 0; }
   .reason-section strong { display: inline-block; margin-right: 4px; }
 

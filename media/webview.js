@@ -419,7 +419,25 @@
       }
       var pre = document.createElement('pre');
       pre.className = 'check-diff-unified';
-      pre.textContent = data.unifiedDiff || '';
+      // Parse unified diff line by line, color-code deletions (red) and additions (green)
+      var rawDiff = data.unifiedDiff || '';
+      var diffHtml = '';
+      var lines = rawDiff.split('\n');
+      for (var i = 0; i < lines.length; i++) {
+        var line = lines[i];
+        var cls = '';
+        if (line.length > 2 && line.charAt(0) === '-') {
+          cls = 'diff-del';
+        } else if (line.length > 2 && line.charAt(0) === '+') {
+          cls = 'diff-add';
+        }
+        if (cls) {
+          diffHtml += '<span class="' + cls + '">' + escHtml(line) + '</span>\n';
+        } else {
+          diffHtml += escHtml(line) + '\n';
+        }
+      }
+      pre.innerHTML = diffHtml;
       body.appendChild(pre);
     }
 
