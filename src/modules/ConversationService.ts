@@ -113,26 +113,22 @@ export class ConversationService {
   /**
    * Assembles the message list for the main LLM call.
    *
-   * KV cache prefix structure (always):
-   *   msg[0]: [system] SYSTEM_PROMPT + langInstr     — purely static
-   *   msg[1]: [system] getStaticHostEnvironmentBlock() — stable per session
-   *   msg[2]: [system] (optional) Activated Skills     — changes only on skill toggle
-   *   msg[3+]: ...conversation turns...
+   * Callers should pass a systemPrompt that already includes the static
+   * host environment (e.g. SYSTEM_PROMPT + langInstr + getStaticHostEnvironmentBlock()).
    *
-   * This three‑layer prefix is identical to what compactHistory() sends,
-   * maximising prompt‑cache hits from the API provider.
+   * KV cache prefix structure:
+   *   msg[0]: [system] systemPrompt (includes host env) — purely static per session
+   *   msg[1]: [system] (optional) Activated Skills       — changes only on skill toggle
+   *   msg[2+]: ...conversation turns...
    */
   buildMessagesForLlm(systemPrompt: string): ChatMessage[] {
     const visible = this.getLlmMessages().filter((m) => !m.hiddenFromLlm && m.role !== 'event');
 
-    // msg[0]: Static system prompt (KV cache friendly)
+    // msg[0]: System prompt (caller has merged static host environment inside)
     const messages: ChatMessage[] = [{ role: 'system', content: systemPrompt }];
 
-    // msg[1]: Static host environment — same message 2 as compactHistory()
-    messages.push({ role: 'system', content: getStaticHostEnvironmentBlock() });
-
-    // msg[2]: Activated skills (optional) — after the stable prefix so
-    // skill changes don't disrupt KV cache for msg[0] + msg[1].
+    // msg[1]: Activated skills (optional) — after the stable prefix so
+    // skill changes don't disrupt KV cache for msg[0].
     const skillNames = this._getActivatedSkills?.() ?? [];
     if (skillNames.length > 0) {
       const blocks: string[] = [];
@@ -391,8 +387,8 @@ export class ConversationService {
     const toKeep = this._sanitizeMessageList(messages.slice(reserveStart));
 
       // ── Build compact request (reuse main LLM + original messages) ────────
-      // System prompt keeps the same three-layer prefix as buildMessagesForLlm:
-      // (1) SYSTEM_PROMPT + langInstr, (2) static host environment,
+      // System prompt includes static host environment (merged into msg[0]),
+      // same as what main flow sends via buildMessagesForLlm.
       const abortController = new AbortController();
       try {
         const apiConfig = this._getApiConfig();
@@ -404,8 +400,7 @@ export class ConversationService {
         const sanitizedToCompress = this._sanitizeMessageList(toCompress);
 
         const compactMessages: ChatMessage[] = [
-          { role: 'system', content: SYSTEM_PROMPT + langInstr },
-          { role: 'system', content: getStaticHostEnvironmentBlock() },
+          { role: 'system', content: SYSTEM_PROMPT + langInstr + '\n\n' + getStaticHostEnvironmentBlock() },
           ...sanitizedToCompress,
           {
             role: 'system',

@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 import { ChatMessage, ApiConfig } from '../types';
-import { getActiveEditorInfo } from '../agentRuntimeContext';
+import { getActiveEditorInfo, getStaticHostEnvironmentBlock } from '../agentRuntimeContext';
 import { SYSTEM_PROMPT } from '../systemPrompt';
 import { TOOL_DEFINITIONS } from '../toolDefinitions';
 import { sendChatMessage } from '../api';
@@ -132,7 +132,7 @@ export class MessageHandler {
         // Build language instruction based on user's setting
         const langInstr = this._buildLanguageInstruction(apiConfig.language);
 
-        const allMessages = this._context.buildMessagesForLlm(SYSTEM_PROMPT + langInstr);
+        const allMessages = this._context.buildMessagesForLlm(SYSTEM_PROMPT + langInstr + '\n\n' + getStaticHostEnvironmentBlock());
 
         const response = await sendChatMessage(allMessages, apiConfig, TOOL_DEFINITIONS, this._context.operation.signal());
         // Accumulate and report token usage after every LLM call
