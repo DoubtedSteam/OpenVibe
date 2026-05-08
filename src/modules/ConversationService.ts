@@ -111,15 +111,19 @@ export class ConversationService {
     }
   }
   /**
-   * Assembles the message list for the main LLM call. 
-   * If any skills are activated in this conversation, their instructions 
-   * are appended to the system prompt.
+   * Assembles the message list for the main LLM call.
+   * System prompt is kept purely static for KV cache efficiency.
+   * Activated skill instructions are added as a separate system message
+   * to avoid polluting the cached prefix.
    */
   buildMessagesForLlm(systemPrompt: string): ChatMessage[] {
     const visible = this.getLlmMessages().filter((m) => !m.hiddenFromLlm && m.role !== 'event');
 
-    // Append activated skill instructions to the system prompt
-    let enrichedPrompt = systemPrompt;
+    // Start with the static system prompt (KV cache friendly)
+    const messages: ChatMessage[] = [{ role: 'system', content: systemPrompt }];
+
+    // Add activated skill instructions as a separate system message
+    // (not appended to the main system prompt) to keep the prefix cache stable.
     const skillNames = this._getActivatedSkills?.() ?? [];
     if (skillNames.length > 0) {
       const blocks: string[] = [];
@@ -132,14 +136,18 @@ export class ConversationService {
         }
       }
       if (blocks.length > 0) {
-        enrichedPrompt +=
-          `\n\n---\n## Activated Skills\n` +
-          `The following skills are currently active in this conversation. Follow their instructions carefully.\n\n` +
-          blocks.join('\n\n');
+        messages.push({
+          role: 'system',
+          content:
+            `## Activated Skills\n` +
+            `The following skills are currently active in this conversation. Follow their instructions carefully.\n\n` +
+            blocks.join('\n\n')
+        });
       }
     }
 
-    return [{ role: 'system', content: enrichedPrompt }, ...visible];
+    messages.push(...visible);
+    return messages;
   }
 
   /**
@@ -373,36 +381,37 @@ export class ConversationService {
     const toCompress = messages.slice(0, reserveStart);
     const toKeep = this._sanitizeMessageList(messages.slice(reserveStart));
 
-    // ── Build compact request (reuse main LLM + original messages) ────────
-    const abortController = new AbortController();
-    try {
-      const apiConfig = this._getApiConfig();
-      const langInstr = this._buildLanguageInstruction(apiConfig.language);
+      // ── Build compact request (reuse main LLM + original messages) ────────
+      // System prompt is split into two messages to keep the prefix static
+      // for KV cache: (1) SYSTEM_PROMPT + langInstr, (2) runtime context.
+      const abortController = new AbortController();
+      try {
+        const apiConfig = this._getApiConfig();
+        const langInstr = this._buildLanguageInstruction(apiConfig.language);
 
-      const compactSystemPrompt = SYSTEM_PROMPT + '\n\n\n' + getAgentRuntimeContextBlock() + langInstr;
+        // Sanitize toCompress before sending: remove any incomplete assistant+tool sequences
+        // (e.g. assistant with tool_calls but no matching tool results) to prevent API 400 errors
+        // caused by violating the "assistant tool_calls must be followed by tool responses" constraint.
+        const sanitizedToCompress = this._sanitizeMessageList(toCompress);
 
-      // Sanitize toCompress before sending: remove any incomplete assistant+tool sequences
-      // (e.g. assistant with tool_calls but no matching tool results) to prevent API 400 errors
-      // caused by violating the "assistant tool_calls must be followed by tool responses" constraint.
-      const sanitizedToCompress = this._sanitizeMessageList(toCompress);
-
-      const compactMessages: ChatMessage[] = [
-        { role: 'system', content: compactSystemPrompt },
-        ...sanitizedToCompress,
-        {
-          role: 'system',
-          content:
-            `[COMPACT_REQUEST]\n` +
-            `Please generate a concise but complete summary of the conversation history above. This summary will replace the archived portion.\n\n` +
-            `Requirements:\n` +
-            `- Keep: all files created/modified (with key changes), decisions made, goals, current task state, and any open questions.\n` +
-            `- Omit: verbose tool output, repetitive reasoning, step-by-step narration already reflected in outcomes.\n` +
-            `- Write in third-person present tense ("The user is building…", "The assistant has modified…").\n` +
-            `- End with a short "## Current State" section describing the overall status.\n` +
-            `- Use the same language as the conversation history.\n` +
-            `[/COMPACT_REQUEST]`,
-        },
-      ];
+        const compactMessages: ChatMessage[] = [
+          { role: 'system', content: SYSTEM_PROMPT + langInstr },
+          { role: 'system', content: getAgentRuntimeContextBlock() },
+          ...sanitizedToCompress,
+          {
+            role: 'system',
+            content:
+              `[COMPACT_REQUEST]\n` +
+              `Please generate a concise but complete summary of the conversation history above. This summary will replace the archived portion.\n\n` +
+              `Requirements:\n` +
+              `- Keep: all files created/modified (with key changes), decisions made, goals, current task state, and any open questions.\n` +
+              `- Omit: verbose tool output, repetitive reasoning, step-by-step narration already reflected in outcomes.\n` +
+              `- Write in third-person present tense ("The user is building…", "The assistant has modified…").\n` +
+              `- End with a short "## Current State" section describing the overall status.\n` +
+              `- Use the same language as the conversation history.\n` +
+              `[/COMPACT_REQUEST]`,
+          },
+        ];
 
       const summaryResponse = await sendChatMessage(
         compactMessages,

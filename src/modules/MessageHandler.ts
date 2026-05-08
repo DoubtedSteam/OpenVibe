@@ -89,7 +89,7 @@ export class MessageHandler {
       } catch {
         /* no Git repo or snapshot failure — non-fatal */
       }
-      // Build user message with runtime context (Edit Permission + todo state).
+      // Build user message with runtime context (Edit Permission + todo state + host environment).
       // Embedded in the user message (not extra system msgs) to keep the prefix cache stable.
       const ctxLines: string[] = [];
       ctxLines.push(`🔓 Edit: ${this._context.getEditPermissionEnabled() ? 'ON' : 'OFF'}`);
@@ -97,6 +97,7 @@ export class MessageHandler {
       if (todoInfo && todoInfo.remaining > 0) {
         ctxLines.push(`📋 Todo: ${todoInfo.remaining} item(s) remaining`);
       }
+      ctxLines.push(getAgentRuntimeContextBlock().trimEnd());
       const ctxBlock = `─── Context ───\n${ctxLines.join('\n')}\n────────────────\n\n`;
       const enrichedText = ctxBlock + text;
 
@@ -125,7 +126,7 @@ export class MessageHandler {
         // Build language instruction based on user's setting
         const langInstr = this._buildLanguageInstruction(apiConfig.language);
 
-        const allMessages = this._context.buildMessagesForLlm(SYSTEM_PROMPT + '\n\n\n' + getAgentRuntimeContextBlock() + langInstr);
+        const allMessages = this._context.buildMessagesForLlm(SYSTEM_PROMPT + langInstr);
 
         const response = await sendChatMessage(allMessages, apiConfig, TOOL_DEFINITIONS, this._context.operation.signal());
         // Accumulate and report token usage after every LLM call
