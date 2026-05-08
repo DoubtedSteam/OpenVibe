@@ -15,12 +15,8 @@
 # 测试
 .vscode-test
 
-# 明确排除 devDependencies（不整体排除 node_modules/，
-# 以确保 axios 及其所有传递依赖被正确打包）
-node_modules/.bin/
-node_modules/typescript/
-node_modules/@types/
-node_modules/undici-types/
+# node_modules（已通过 esbuild 打包到 out/extension.js，无需包含在 VSIX 中）
+node_modules
 
 # TypeScript 源文件（已编译到 out/）
 src
@@ -33,12 +29,13 @@ tsconfig.json
 # 旧的构建产物
 *.vsix
 
-# 本地开发数据（不应随扩展发布）
+# 本地开发数据
 .OpenVibe/
 
 # 文档与图片
 imgs
 logo.png
 
-# 依赖锁定文件
+# 依赖锁定与构建脚本
 package-lock.json
+esbuild.mjs

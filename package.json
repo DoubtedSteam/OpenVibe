@@ -188,12 +188,15 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
-    "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./"
+    "compile": "npm run clean && node esbuild.mjs --production",
+    "watch": "node esbuild.mjs --watch",
+    "clean": "node -e \"require('fs').rmSync('out', { recursive: true, force: true }); require('fs').mkdirSync('out')\"",
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@types/node": "18.x",
     "@types/vscode": "^1.74.0",
+    "esbuild": "^0.28.0",
     "typescript": "^5.0.0"
   },
   "dependencies": {
