@@ -9,7 +9,7 @@ export type DefaultLineEnding = 'CRLF' | 'LF';
  * Returns a formatted section to inject into the agent prompt, or empty string
  * if no editor is active or no file is open.
  */
-function getActiveEditorInfo(): string {
+export function getActiveEditorInfo(): string {
   const editor = vscode.window.activeTextEditor;
   if (!editor) {
     return '';
@@ -42,11 +42,11 @@ function getActiveEditorInfo(): string {
 }
 
 /**
- * Short block appended to agent system prompts (main assistant, reviewers, compact, etc.).
- * Keeps models aware of Windows vs Unix paths, shells, line-ending behavior,
- * and the currently active editor file.
+ * Static host environment info (OS, paths, shell, line endings).
+ * Does NOT include active editor — use {@link getActiveEditorInfo} separately.
+ * Kept as a stable system message prefix for KV cache efficiency.
  */
-export function getAgentRuntimeContextBlock(): string {
+export function getStaticHostEnvironmentBlock(): string {
   const plat = process.platform;
   const isWin = plat === 'win32';
   const lineEndingHint = isWin
@@ -56,19 +56,26 @@ export function getAgentRuntimeContextBlock(): string {
     ? 'Terminal commands run via Node `exec` with the default Windows shell (often `cmd.exe`). Use syntax valid there, or wrap with `powershell -Command "..."` when you need PowerShell.'
     : 'Terminal commands run in a POSIX-style shell environment (typical `/bin/sh` semantics).';
 
-  const activeEditorInfo = getActiveEditorInfo();
-
-  let block =
+  return (
     `## Host environment (OpenVibe)\n` +
     `- **OS**: ${os.type()} — platform \`${plat}\`, ${os.arch()}, release ${os.release()}\n` +
     `- **Paths**: separator \`${path.sep}\`; prefer workspace-relative paths with forward slashes in tool arguments (e.g. \`src/index.ts\`) — they resolve correctly on all platforms.\n` +
     `- **Line endings**: ${lineEndingHint}\n` +
-    `- **Shell**: ${shellHint}\n`;
+    `- **Shell**: ${shellHint}\n`
+  );
+}
 
+/**
+ * Full runtime context block including Host Environment + Active Editor.
+ * For KV-cache-friendly system messages, prefer {@link getStaticHostEnvironmentBlock}
+ * and add {@link getActiveEditorInfo} in the user message context block instead.
+ */
+export function getAgentRuntimeContextBlock(): string {
+  let block = getStaticHostEnvironmentBlock();
+  const activeEditorInfo = getActiveEditorInfo();
   if (activeEditorInfo) {
     block += `\n## Active Editor (实时追踪)\n${activeEditorInfo}`;
   }
-
   return block;
 }
 

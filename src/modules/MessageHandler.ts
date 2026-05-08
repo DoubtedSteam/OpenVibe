@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 import { ChatMessage, ApiConfig } from '../types';
-import { getAgentRuntimeContextBlock } from '../agentRuntimeContext';
+import { getActiveEditorInfo } from '../agentRuntimeContext';
 import { SYSTEM_PROMPT } from '../systemPrompt';
 import { TOOL_DEFINITIONS } from '../toolDefinitions';
 import { sendChatMessage } from '../api';
@@ -89,15 +89,21 @@ export class MessageHandler {
       } catch {
         /* no Git repo or snapshot failure — non-fatal */
       }
-      // Build user message with runtime context (Edit Permission + todo state + host environment).
-      // Embedded in the user message (not extra system msgs) to keep the prefix cache stable.
+      // Build user message with per-turn context only.
+      // Static Host Environment is now in system msg[1] (buildMessagesForLlm),
+      // so it's NOT duplicated here to save tokens and keep user message compact.
       const ctxLines: string[] = [];
       ctxLines.push(`🔓 Edit: ${this._context.getEditPermissionEnabled() ? 'ON' : 'OFF'}`);
       const todoInfo = this._context.getTodoControlInfo();
       if (todoInfo && todoInfo.remaining > 0) {
         ctxLines.push(`📋 Todo: ${todoInfo.remaining} item(s) remaining`);
       }
-      ctxLines.push(getAgentRuntimeContextBlock().trimEnd());
+      // Active Editor changes per file switch — embedded here so it doesn't
+      // disrupt the stable system message prefix KV cache.
+      const activeInfo = getActiveEditorInfo();
+      if (activeInfo) {
+        ctxLines.push(`\n## Active Editor (实时追踪)\n${activeInfo.trimEnd()}`);
+      }
       const ctxBlock = `─── Context ───\n${ctxLines.join('\n')}\n────────────────\n\n`;
       const enrichedText = ctxBlock + text;
 

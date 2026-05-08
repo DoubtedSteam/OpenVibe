@@ -1,5 +1,5 @@
 import { ChatMessage, ToolCall, ApiConfig, AgentLogEntry } from '../types';
-import { getAgentRuntimeContextBlock } from '../agentRuntimeContext';
+import { getAgentRuntimeContextBlock, getStaticHostEnvironmentBlock } from '../agentRuntimeContext';
 import { SYSTEM_PROMPT } from '../systemPrompt';
 import { TOOL_DEFINITIONS } from '../toolDefinitions';
 import { sendChatMessage } from '../api';
@@ -112,18 +112,27 @@ export class ConversationService {
   }
   /**
    * Assembles the message list for the main LLM call.
-   * System prompt is kept purely static for KV cache efficiency.
-   * Activated skill instructions are added as a separate system message
-   * to avoid polluting the cached prefix.
+   *
+   * KV cache prefix structure (always):
+   *   msg[0]: [system] SYSTEM_PROMPT + langInstr     — purely static
+   *   msg[1]: [system] getStaticHostEnvironmentBlock() — stable per session
+   *   msg[2]: [system] (optional) Activated Skills     — changes only on skill toggle
+   *   msg[3+]: ...conversation turns...
+   *
+   * This three‑layer prefix is identical to what compactHistory() sends,
+   * maximising prompt‑cache hits from the API provider.
    */
   buildMessagesForLlm(systemPrompt: string): ChatMessage[] {
     const visible = this.getLlmMessages().filter((m) => !m.hiddenFromLlm && m.role !== 'event');
 
-    // Start with the static system prompt (KV cache friendly)
+    // msg[0]: Static system prompt (KV cache friendly)
     const messages: ChatMessage[] = [{ role: 'system', content: systemPrompt }];
 
-    // Add activated skill instructions as a separate system message
-    // (not appended to the main system prompt) to keep the prefix cache stable.
+    // msg[1]: Static host environment — same message 2 as compactHistory()
+    messages.push({ role: 'system', content: getStaticHostEnvironmentBlock() });
+
+    // msg[2]: Activated skills (optional) — after the stable prefix so
+    // skill changes don't disrupt KV cache for msg[0] + msg[1].
     const skillNames = this._getActivatedSkills?.() ?? [];
     if (skillNames.length > 0) {
       const blocks: string[] = [];
@@ -382,8 +391,8 @@ export class ConversationService {
     const toKeep = this._sanitizeMessageList(messages.slice(reserveStart));
 
       // ── Build compact request (reuse main LLM + original messages) ────────
-      // System prompt is split into two messages to keep the prefix static
-      // for KV cache: (1) SYSTEM_PROMPT + langInstr, (2) runtime context.
+      // System prompt keeps the same three-layer prefix as buildMessagesForLlm:
+      // (1) SYSTEM_PROMPT + langInstr, (2) static host environment,
       const abortController = new AbortController();
       try {
         const apiConfig = this._getApiConfig();
@@ -396,7 +405,7 @@ export class ConversationService {
 
         const compactMessages: ChatMessage[] = [
           { role: 'system', content: SYSTEM_PROMPT + langInstr },
-          { role: 'system', content: getAgentRuntimeContextBlock() },
+          { role: 'system', content: getStaticHostEnvironmentBlock() },
           ...sanitizedToCompress,
           {
             role: 'system',
