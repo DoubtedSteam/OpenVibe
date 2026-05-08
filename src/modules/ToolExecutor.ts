@@ -22,6 +22,7 @@ import {
   setActivatedSkillsCallbacks,
   webFetchTool,
   grepSearchTool,
+  browserSubAgentTool,
 } from '../tools';
 import type { ReplaceCheckContext, ReplaceCheckResult } from '../tools';
 import type { ApiConfig, AgentLogEntry, AssistantTodoPersistedState } from '../types';
@@ -411,6 +412,27 @@ ${list}
         });
       }
 
+      case 'browser_sub_agent': {
+        const apiConfig = this._context.getApiConfig();
+        if (!apiConfig.apiKey) {
+          return JSON.stringify({
+            success: false,
+            summary: 'API key not configured',
+            error: 'OPENVIBE_API_KEY is not set. The browser sub-agent requires an API key to make LLM calls.',
+            steps: 0,
+          });
+        }
+        return browserSubAgentTool(
+          {
+            task: args.task as string,
+            url: args.url as string | undefined,
+            timeoutMs: args.timeoutMs as number | undefined,
+            maxSteps: args.maxSteps as number | undefined,
+          },
+          apiConfig,
+          undefined
+        );
+      }
 
 
       default:

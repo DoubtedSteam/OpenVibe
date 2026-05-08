@@ -521,6 +521,47 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
     },
   },
 
+  {
+    type: 'function',
+    function: {
+      name: 'browser_sub_agent',
+      description:
+        'Execute a browsing task using a browser sub-agent. ' +
+        'The sub-agent can navigate to pages, fill forms, click buttons, extract text, and search — ' +
+        'all driven by its own AI reasoning loop. ' +
+        'Provide a natural-language task description (e.g. "搜索 Node.js 下载链接并告诉我第一个结果"). ' +
+        'The agent uses its own LLM calls (same provider as the main AI) to autonomously plan and execute steps. ' +
+        'Returns a JSON with success status, summary, action log, and final page info.',
+      parameters: {
+        type: 'object',
+        properties: {
+          task: {
+            type: 'string',
+            description:
+              'Natural language description of the browsing task. ' +
+              'Be specific about what information to find or what action to perform.',
+          },
+          url: {
+            type: 'string',
+            description:
+              'Optional starting URL. If not provided, the agent will choose based on the task ' +
+              '(e.g. Baidu for Chinese search queries, or example.com for testing).',
+          },
+          timeoutMs: {
+            type: 'number',
+            description:
+              'Max total execution time in milliseconds (default 120000 = 2 minutes).',
+          },
+          maxSteps: {
+            type: 'number',
+            description:
+              'Max action steps before the agent returns even if not done (default 15).',
+          },
+        },
+        required: ['task'],
+      },
+    },
+  },
 
 
 ];

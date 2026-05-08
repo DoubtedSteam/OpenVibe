@@ -44,5 +44,9 @@ export { webFetchTool } from './webFetchTool';
 export type { GrepSearchParams } from './grepSearchTool';
 export { grepSearchTool } from './grepSearchTool';
 
+// browser_sub_agent
+export type { BrowserSubAgentParams } from './browserAgentTool';
+export { browserSubAgentTool } from './browserAgentTool';
+
 // Backward-compat re-export (imported by ToolExecutor et al.)
 export { workspaceFileExistsRelative } from '../utils/pathHelpers';
