@@ -81,7 +81,9 @@ export interface ApiConfig {
 }
 /**
  * Configuration for a single model entry in the vibe-coding.models array.
- * Each entry can optionally override apiBaseUrl and apiKey.
+/**
+ * Configuration for a single model entry in the vibe-coding.models array.
+ * Each entry can optionally override apiBaseUrl, apiKey, maxInteractions, and maxSequenceLength.
  */
 export interface ModelConfig {
   /** Display name shown in the model selector dropdown. */
@@ -92,6 +94,10 @@ export interface ModelConfig {
   apiBaseUrl?: string;
   /** Optional API key override (falls back to vibe-coding.apiKey). */
   apiKey?: string;
+  /** Optional maximum tool call iterations override (falls back to vibe-coding.maxInteractions, -1 = unlimited). */
+  maxInteractions?: number;
+  /** Optional maximum context / sequence length override in characters (falls back to vibe-coding.maxSequenceLength). */
+  maxSequenceLength?: number;
 }
 
 export interface ToolDefinition {

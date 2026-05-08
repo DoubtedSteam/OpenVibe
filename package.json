@@ -68,7 +68,7 @@
         "vibe-coding.models": {
           "type": "array",
           "default": [],
-          "description": "List of model configurations for model switching. Each entry can override apiBaseUrl and apiKey. Falls back to global vibe-coding.apiBaseUrl / vibe-coding.apiKey when omitted.",
+          "description": "List of model configurations for model switching. Each entry can override apiBaseUrl, apiKey, maxInteractions, and maxSequenceLength. Falls back to global vibe-coding.* settings when omitted.",
           "items": {
             "type": "object",
             "properties": {
@@ -87,6 +87,14 @@
               "apiKey": {
                 "type": "string",
                 "description": "Optional API key override for this model (falls back to vibe-coding.apiKey)"
+              },
+              "maxInteractions": {
+                "type": "number",
+                "description": "Optional max tool call iterations override for this model (-1 = unlimited, falls back to vibe-coding.maxInteractions)"
+              },
+              "maxSequenceLength": {
+                "type": "number",
+                "description": "Optional max context/sequence length override for this model in characters (falls back to vibe-coding.maxSequenceLength)"
               }
             },
             "required": ["name", "model"]

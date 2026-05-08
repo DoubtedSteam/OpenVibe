@@ -141,12 +141,16 @@ export class UIManager {
     let activeModelName = cfg.get<string>('model', 'gpt-4o');
     let activeBaseUrl = cfg.get<string>('apiBaseUrl', 'https://api.openai.com/v1');
     let activeApiKey = cfg.get<string>('apiKey', '');
+    let activeMaxInteractions: number | undefined;
+    let activeMaxSequenceLength: number | undefined;
 
     if (this._selectedModelIndex >= 0 && this._selectedModelIndex < models.length) {
       const entry = models[this._selectedModelIndex];
       if (entry.apiBaseUrl) { activeBaseUrl = entry.apiBaseUrl; }
       if (entry.apiKey) { activeApiKey = entry.apiKey; }
       activeModelName = entry.model;
+      if (entry.maxInteractions != null) { activeMaxInteractions = entry.maxInteractions; }
+      if (entry.maxSequenceLength != null) { activeMaxSequenceLength = entry.maxSequenceLength; }
     }
 
     if (!activeApiKey) {
@@ -167,8 +171,8 @@ export class UIManager {
       model: activeModelName,
       confirmChanges: cfg.get<boolean>('confirmChanges', true),
       confirmShellCommand: cfg.get<boolean>('confirmShellCommand', true),
-      maxInteractions: cfg.get<number>('maxInteractions', -1),
-      maxSequenceLength: cfg.get<number>('maxSequenceLength', 2000),
+      maxInteractions: activeMaxInteractions != null ? activeMaxInteractions : cfg.get<number>('maxInteractions', -1),
+      maxSequenceLength: activeMaxSequenceLength != null ? activeMaxSequenceLength : cfg.get<number>('maxSequenceLength', 2000),
       language: resolvedLang,
     };
   }
