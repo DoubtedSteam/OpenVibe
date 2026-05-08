@@ -390,6 +390,7 @@ Uncommitted changes will be lost.`,
   #messages {
     flex: 1;
     overflow-y: auto;
+    font-size: var(--chat-font-size, 14px);
     display: flex;
     flex-direction: column;
     gap: 8px;
@@ -932,7 +933,33 @@ Uncommitted changes will be lost.`,
     opacity: 1; border-color: var(--vscode-input-border, #555);
     background: var(--vscode-toolbar-hoverBackground, rgba(128,128,128,0.1));
   }
-
+  /* Font size zoom controls */
+  .font-size-group {
+    display: flex;
+    align-items: center;
+    margin-right: 2px;
+    border-right: 1px solid var(--vscode-input-border, #444);
+    padding-right: 4px;
+  }
+  .font-size-group button {
+    background: transparent;
+    border: none;
+    color: var(--vscode-icon-foreground);
+    cursor: pointer;
+    padding: 2px 5px;
+    border-radius: 3px;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.2;
+    opacity: 0.6;
+    transition: opacity 0.15s, background 0.15s;
+  }
+  .font-size-group button:hover {
+    opacity: 1;
+    background: var(--vscode-toolbar-hoverBackground, rgba(128,128,128,0.12));
+  }
+  #font-size-reset { font-size: 13px; }
+  
   /* Snapshot panel */
   .snapshot-panel {
     border: 1px solid var(--vscode-input-border, #555); border-radius: 6px;
@@ -998,6 +1025,11 @@ Uncommitted changes will be lost.`,
             <span class=\"model-select-arrow\">▾</span>
           </button>
           <div id=\"model-dropdown\" class=\"model-dropdown\" style=\"display: none;\"></div>
+        </div>
+        <div class=\"font-size-group\">
+          <button id=\"font-size-down\" title=\"Decrease font size\">A−</button>
+          <button id=\"font-size-reset\" title=\"Reset font size\">A</button>
+          <button id=\"font-size-up\" title=\"Increase font size\">A+</button>
         </div>
         <button id=\"snapshots\" title=\"View and rollback to Git snapshots\">⏮️ Snapshots</button>
         <button id=\"clear\" title=\"Clear conversation history\">🗑 Clear</button>

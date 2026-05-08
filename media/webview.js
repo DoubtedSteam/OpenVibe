@@ -34,6 +34,9 @@
    var clearBtn = byId('clear');
    var snapshotsBtn = byId('snapshots');
    var editToggleBtn = byId('edit-toggle');
+   var fontSizeDown = byId('font-size-down');
+   var fontSizeReset = byId('font-size-reset');
+   var fontSizeUp = byId('font-size-up');
    var confirmBar = byId('replace-confirm');
    var confirmMeta = byId('confirm-meta');
    var confirmApplyBtn = byId('confirm-apply');
@@ -927,6 +930,33 @@
   if (clearBtn) clearBtn.addEventListener('click', function () { safePost({ type: 'clearHistory' }); });
    if (snapshotsBtn) snapshotsBtn.addEventListener('click', function () { safePost({ type: 'showSnapshots' }); });
    if (editToggleBtn) editToggleBtn.addEventListener('click', toggleEditPermission);
+   // Font size zoom controls
+   var _chatFontSize = 14;
+   var FONT_SIZE_MIN = 10;
+   var FONT_SIZE_MAX = 28;
+   var FONT_SIZE_DEFAULT = 14;
+   var FONT_SIZE_STEP = 2;
+   function initFontSize() {
+     try {
+       var saved = localStorage.getItem('chatFontSize');
+       if (saved !== null) {
+         var val = parseInt(saved, 10);
+         if (!isNaN(val) && val >= FONT_SIZE_MIN && val <= FONT_SIZE_MAX) {
+           _chatFontSize = val;
+         }
+       }
+     } catch(e) {}
+     document.documentElement.style.setProperty('--chat-font-size', _chatFontSize + 'px');
+   }
+   function applyFontSize(size) {
+     _chatFontSize = Math.max(FONT_SIZE_MIN, Math.min(FONT_SIZE_MAX, size));
+     document.documentElement.style.setProperty('--chat-font-size', _chatFontSize + 'px');
+     try { localStorage.setItem('chatFontSize', String(_chatFontSize)); } catch(e) {}
+   }
+   initFontSize();
+   if (fontSizeDown) fontSizeDown.addEventListener('click', function() { applyFontSize(_chatFontSize - FONT_SIZE_STEP); });
+   if (fontSizeReset) fontSizeReset.addEventListener('click', function() { applyFontSize(FONT_SIZE_DEFAULT); });
+   if (fontSizeUp) fontSizeUp.addEventListener('click', function() { applyFontSize(_chatFontSize + FONT_SIZE_STEP); });
    // Model selector events
    if (modelSelectBtn) modelSelectBtn.addEventListener('click', function (e) {
      e.stopPropagation();
