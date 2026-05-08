@@ -170,3 +170,78 @@ export interface WebFetchResult {
   /** Meta description extracted from <meta name="description"> tag. */
   description?: string;
 }
+
+// ─── Browser Sub-Agent Types ─────────────────────────────────────────────────
+
+/** Individual actions the browser sub-agent can execute internally */
+export type BrowserAgentAction =
+  | { type: 'navigate'; url: string }
+  | { type: 'fill'; selector: string; text: string }
+  | { type: 'click'; selector: string }
+  | { type: 'getText'; selector?: string }
+  | { type: 'getPageInfo' }
+  | { type: 'screenshot' }
+  | { type: 'wait'; ms: number }
+  | { type: 'waitForSelector'; selector: string; timeout?: number };
+
+/** Result of executing a single BrowserAgentAction */
+export interface BrowserActionResult {
+  action: BrowserAgentAction;
+  success: boolean;
+  data?: unknown;
+  error?: string;
+}
+
+/** Interactive element found on a page (input, button, link, etc.) */
+export interface PageElement {
+  tag: string;
+  type?: string;
+  name?: string;
+  id?: string;
+  placeholder?: string;
+  text?: string;
+  href?: string;
+  selector: string;
+}
+
+/** Snapshot of the current page state */
+export interface PageState {
+  url: string;
+  title: string;
+  /** Plain-text content of the page body */
+  content: string;
+  /** Interactive elements (inputs, buttons, links, selects) */
+  elements: PageElement[];
+  /** All links on the page */
+  links: Array<{ url: string; text: string }>;
+}
+
+/** Parameters for starting a browser task */
+export interface BrowserTaskParams {
+  /** Natural language description of the task */
+  task: string;
+  /** Optional starting URL */
+  url?: string;
+  /** Max total execution time in ms (default 120000 / 2 minutes) */
+  timeoutMs?: number;
+  /** Max action steps before forced return (default 20) */
+  maxSteps?: number;
+}
+
+/** Final result returned by the browser sub-agent */
+export interface BrowserTaskResult {
+  success: boolean;
+  /** One-sentence summary of what happened */
+  summary: string;
+  /** Final page state after task completion */
+  pageState?: PageState;
+  /** Full log of every action taken and its outcome */
+  actionLog: Array<{
+    action: BrowserAgentAction;
+    result: 'success' | 'error';
+    data?: unknown;
+    error?: string;
+  }>;
+  /** Error message if task failed */
+  error?: string;
+}
