@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 import { ChatMessage, ApiConfig } from '../types';
-import { getActiveEditorInfo, getStaticHostEnvironmentBlock } from '../agentRuntimeContext';
+import { getActiveEditorInfo, getStaticHostEnvironmentBlock, buildLanguageInstruction } from '../agentRuntimeContext';
 import { SYSTEM_PROMPT } from '../systemPrompt';
 import { TOOL_DEFINITIONS } from '../toolDefinitions';
 import { sendChatMessage } from '../api';
@@ -130,7 +130,7 @@ export class MessageHandler {
           break;
         }
         // Build language instruction based on user's setting
-        const langInstr = this._buildLanguageInstruction(apiConfig.language);
+        const langInstr = buildLanguageInstruction(apiConfig.language);
 
         const allMessages = this._context.buildMessagesForLlm(SYSTEM_PROMPT + langInstr + '\n\n' + getStaticHostEnvironmentBlock());
 
@@ -301,20 +301,6 @@ export class MessageHandler {
       this._context.onStopSideEffects?.();
       this._context.operation.stop();
       this._context.post({ type: 'info', message: 'Stopping current operation...' });
-    }
-  }
-  /**
-   * Build a language instruction block appended to the system prompt.
-   * Tells the AI to respond in the user's preferred language.
-   */
-  private _buildLanguageInstruction(lang: string | undefined): string {
-    switch (lang) {
-      case 'zh-CN':
-        return '\n\n## Language\n请以简体中文与用户进行沟通。';
-      case 'en':
-        return '\n\n## Language\nPlease communicate with the user in English.';
-      default:
-        return '';
     }
   }
 

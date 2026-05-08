@@ -97,3 +97,21 @@ export function getRuntimeEnvironmentSummary(): {
     defaultNewFileLineEndings: process.platform === 'win32' ? 'CRLF' : 'LF',
   };
 }
+
+/**
+ * Build a language instruction block to append to the system prompt.
+ * Mirrors the language setting from ApiConfig to tell the AI which
+ * language to use when communicating with the user.
+ * Kept as a separate export so both MessageHandler and ConversationService
+ * share the same implementation for KV cache prefix consistency.
+ */
+export function buildLanguageInstruction(lang: string | undefined): string {
+  switch (lang) {
+    case 'zh-CN':
+      return '\n\n## Language\n请以简体中文与用户进行沟通。';
+    case 'en':
+      return '\n\n## Language\nPlease communicate with the user in English.';
+    default:
+      return '';
+  }
+}

@@ -1,5 +1,5 @@
 import { ChatMessage, ToolCall, ApiConfig, AgentLogEntry } from '../types';
-import { getAgentRuntimeContextBlock, getStaticHostEnvironmentBlock } from '../agentRuntimeContext';
+import { getAgentRuntimeContextBlock, getStaticHostEnvironmentBlock, buildLanguageInstruction } from '../agentRuntimeContext';
 import { SYSTEM_PROMPT } from '../systemPrompt';
 import { TOOL_DEFINITIONS } from '../toolDefinitions';
 import { sendChatMessage } from '../api';
@@ -341,19 +341,9 @@ export class ConversationService {
     return reserveStart;
   }
 
-  /**
-   * Mirrors MessageHandler._buildLanguageInstruction() to ensure the same
-   * system prompt text is used in compact requests for KV cache compatibility.
-   */
+  /** @deprecated Use imported {@link buildLanguageInstruction} instead. */
   private _buildLanguageInstruction(lang: string | undefined): string {
-    switch (lang) {
-      case 'zh-CN':
-        return '\n\n## Language\n请以简体中文与用户进行沟通。';
-      case 'en':
-        return '\n\n## Language\nPlease communicate with the user in English.';
-      default:
-        return '';
-    }
+    return buildLanguageInstruction(lang);
   }
 
   // ─── Compact implementation ──────────────────────────────────────────────
@@ -394,7 +384,7 @@ export class ConversationService {
       const abortController = new AbortController();
       try {
         const apiConfig = this._getApiConfig();
-        const langInstr = this._buildLanguageInstruction(apiConfig.language);
+        const langInstr = buildLanguageInstruction(apiConfig.language);
 
         // Sanitize toCompress before sending: remove any incomplete assistant+tool sequences
         // (e.g. assistant with tool_calls but no matching tool results) to prevent API 400 errors
