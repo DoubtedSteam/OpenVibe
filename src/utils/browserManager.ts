@@ -1,5 +1,5 @@
 
-import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
+import type { Browser, BrowserContext, Page } from 'playwright';
 import { isPrivateHost } from './htmlParser';
 
 /**
@@ -112,6 +112,7 @@ export class BrowserManager {
 
   private static async _createPage(): Promise<Page> {
     if (!this._browser || !this._browser.isConnected()) {
+      const { chromium } = await import('playwright');
       this._browser = await chromium.launch({
         headless: true,
         args: [

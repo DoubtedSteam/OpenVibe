@@ -11,7 +11,7 @@ const baseConfig = {
   platform: 'node',
   target: 'ES2020',
   outfile: 'out/extension.js',
-  external: ['vscode'],
+  external: ['vscode', 'playwright', 'playwright-core'],
   sourcemap: !production,
   minify: production,
   keepNames: true,
