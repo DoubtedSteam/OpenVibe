@@ -219,7 +219,7 @@
       // Skip if already contains a math block placeholder
       if (/\u202E\u202EMATHBLOCK\d+\u202E\u202E/.test(line)) continue;
       // Skip empty, headers, lists, code fences, blockquotes
-      if (/^\s*(#|[*>\-]|\d+\.|```|&gt;)/.test(line)) continue;
+      if (/^\s*(#|[*>\-]|\d+\.|```|&gt;|\|)/.test(line)) continue;
       if (!hasMathUnicode.test(line)) continue;
       // Count how many math Unicode chars appear
       var ucMatches = line.match(new RegExp('[' + mathUnicodeRanges + ']', 'g'));
@@ -302,24 +302,38 @@
     result = result.replace(/^(\|.+\x0a\|[-:| ]+\|(?:\x0a\|.+)*)$/gm, function(tableBlock) {
       var NL = String.fromCharCode(10);
       var tLines = tableBlock.split(NL);
+
+      // Split a pipe-delimited row, stripping leading/trailing empty cells
+      // from the outer pipes (e.g. "| A | B |".split('|') => ['', ' A ', ' B ', ''])
+      function splitRow(row) {
+        var cells = row.split('|');
+        if (cells.length > 0 && cells[0].trim() === '') cells.shift();
+        if (cells.length > 0 && cells[cells.length - 1].trim() === '') cells.pop();
+        return cells;
+      }
+
+      // Determine column count from the separator row (|---|---|---|)
+      var sepCells = splitRow(tLines[1]);
+      var numCols = sepCells.length;
+
       var html = '<table>' + NL + '<thead>' + NL + '<tr>';
-      var headerCells = tLines[0].split('|');
-      for (var hi = 0; hi < headerCells.length; hi++) {
-        var hc = headerCells[hi].trim();
-        if (hc) html += '<th>' + hc + '</th>';
+      var headerCells = splitRow(tLines[0]);
+      for (var hi = 0; hi < numCols; hi++) {
+        html += '<th>' + (hi < headerCells.length ? headerCells[hi].trim() : '') + '</th>';
       }
       html += '</tr>' + NL + '</thead>' + NL + '<tbody>' + NL;
+
       for (var ri = 2; ri < tLines.length; ri++) {
-        var rowCells = tLines[ri].split('|');
+        var rowCells = splitRow(tLines[ri]);
+        // Skip completely empty rows
         var hasContent = false;
         for (var ci = 0; ci < rowCells.length; ci++) {
           if (rowCells[ci].trim() !== '') { hasContent = true; break; }
         }
         if (!hasContent) continue;
         html += '<tr>';
-        for (var ci = 0; ci < rowCells.length; ci++) {
-          var rc = rowCells[ci].trim();
-          if (rc) html += '<td>' + rc + '</td>';
+        for (var ci = 0; ci < numCols; ci++) {
+          html += '<td>' + (ci < rowCells.length ? rowCells[ci].trim() : '') + '</td>';
         }
         html += '</tr>' + NL;
       }
