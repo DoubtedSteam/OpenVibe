@@ -386,9 +386,11 @@ export class ConversationService {
     const toCompress = messages.slice(0, reserveStart);
     const toKeep = this._sanitizeMessageList(messages.slice(reserveStart));
 
-      // ── Build compact request (reuse main LLM + original messages) ────────
-      // System prompt includes static host environment (merged into msg[0]),
-      // same as what main flow sends via buildMessagesForLlm.
+      // ── Build compact request ────────────────────────────────────────────
+      // msg[0] = system prompt + host env
+      // msg[1] = (optional) activated skills — same position as buildMessagesForLlm
+      //           so the prefix cache is identical between compact and main flow
+      // msg[2..] = conversation turns to compress + [COMPACT_REQUEST]
       const abortController = new AbortController();
       try {
         const apiConfig = this._getApiConfig();
@@ -401,6 +403,32 @@ export class ConversationService {
 
         const compactMessages: ChatMessage[] = [
           { role: 'system', content: SYSTEM_PROMPT + langInstr + '\n\n' + getStaticHostEnvironmentBlock() },
+        ];
+
+        // msg[1]: Activated skills — mirrors buildMessagesForLlm for KV cache alignment
+        const skillNames = this._getActivatedSkills?.() ?? [];
+        if (skillNames.length > 0) {
+          const blocks: string[] = [];
+          for (const name of skillNames) {
+            const instruction = loadActivatedSkillInstruction(name);
+            if (instruction) {
+              blocks.push(
+                `## Activated skill: ${name}\n${instruction}`
+              );
+            }
+          }
+          if (blocks.length > 0) {
+            compactMessages.push({
+              role: 'system',
+              content:
+                `## Activated Skills\n` +
+                `The following skills are currently active in this conversation. Follow their instructions carefully.\n\n` +
+                blocks.join('\n\n')
+            });
+          }
+        }
+
+        compactMessages.push(
           ...sanitizedToCompress,
           {
             role: 'system',
@@ -415,7 +443,7 @@ export class ConversationService {
               `- Use the same language as the conversation history.\n` +
               `[/COMPACT_REQUEST]`,
           },
-        ];
+        );
 
       const summaryResponse = await sendChatMessage(
         compactMessages,
