@@ -16,7 +16,11 @@
 .vscode-test
 
 # node_modules（已通过 esbuild 打包到 out/extension.js，无需包含在 VSIX 中）
-node_modules
+# 例外：playwright 需要原生二进制，无法被 esbuild 打包，必须在运行时加载
+node_modules/**
+!node_modules/playwright/
+!node_modules/playwright-core/
+!node_modules/chromium-bidi/
 
 # TypeScript 源文件（已编译到 out/）
 src
