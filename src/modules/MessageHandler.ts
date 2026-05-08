@@ -90,7 +90,7 @@ export class MessageHandler {
         /* no Git repo or snapshot failure — non-fatal */
       }
       // Build user message with per-turn context only.
-      // Static Host Environment is now in system msg[1] (buildMessagesForLlm),
+      // Static Host Environment is merged into system msg[0] (by buildMessagesForLlm caller),
       // so it's NOT duplicated here to save tokens and keep user message compact.
       const ctxLines: string[] = [];
       ctxLines.push(`🔓 Edit: ${this._context.getEditPermissionEnabled() ? 'ON' : 'OFF'}`);
