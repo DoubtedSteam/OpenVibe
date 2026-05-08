@@ -60,9 +60,10 @@ export class UIManager {
    private _pendingShellConfirms: Map<string, (approved: boolean) => void> = new Map();
    private _pendingHumanAssistanceConfirms: Map<string, (approved: boolean, userMessage?: string) => void> = new Map();
    private _editPermissionEnabled: boolean = true;
-   /** Current selected model index within vibe-coding.models array. -1 means use the legacy single-model settings. */
-   private _selectedModelIndex: number = -1;
-   constructor(private readonly _context: vscode.ExtensionContext) {}
+   private _selectedModelIndex: number;
+   constructor(private readonly _context: vscode.ExtensionContext) {
+     this._selectedModelIndex = _context.globalState.get<number>('selectedModelIndex', -1);
+   }
 
    public setView(view: vscode.WebviewView | undefined): void {
      this._view = view;
@@ -113,9 +114,10 @@ export class UIManager {
     return this._selectedModelIndex;
   }
 
-  /** Set the currently selected model index. */
+  /** Set the currently selected model index and persist across sessions. */
   public setSelectedModelIndex(index: number): void {
     this._selectedModelIndex = index;
+    this._context.globalState.update('selectedModelIndex', index);
   }
 
   /**
