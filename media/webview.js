@@ -187,10 +187,59 @@
   function parseMarkdown(text) {
     if (!text || typeof text !== 'string') return '';
     
-    // Escape HTML first to prevent XSS
-    var escaped = escHtml(text);
+    // ── Math rendering ─────────────────────────────────────────────
+    // Extract math BEFORE HTML escaping so LaTeX syntax (\, _, ^) stays intact.
+    // After markdown processing, these blocks will be rendered with KaTeX.
     
-    // Process markdown tags (order matters)
+    var mathBlocks = [];
+    
+    // Step A: Extract display math $$...$$ (multi-line capable)
+    var working = text.replace(/\$\$([\s\S]*?)\$\$/g, function(match, math) {
+      var id = mathBlocks.length;
+      mathBlocks.push({ id: id, code: math.trim(), display: true });
+      return '\u202E\u202EMATHBLOCK' + id + '\u202E\u202E';
+    });
+    
+    // Step B: Extract inline math $...$
+    working = working.replace(/\$([^$\n]+?)\$/g, function(match, math) {
+      var id = mathBlocks.length;
+      mathBlocks.push({ id: id, code: math.trim(), display: false });
+      return '\u202E\u202EMATHBLOCK' + id + '\u202E\u202E';
+    });
+    
+    // Step C: Auto-detect math expressions with Unicode math symbols (no $ delimiters)
+    // Detects lines/passages that look like math formulas by checking for:
+    // 1) Unicode math operators (Σ, √, ∈, ·, ≠, ≈, ∫, ∂, ∞, ⊕, ⊗, ×, →, ←, ⇒, etc.)
+    // 2) LaTeX patterns (_{, ^{, \\frac, \\sum, etc.)
+    var mathUnicodeRanges = '\\u2200-\\u22FF\\u2280-\\u228B\\u2260-\\u2265\\u2295\\u2297\\u2211\\u220F\\u221A\\u2202\\u2207\\u222B\\u226A\\u226B\\u227A\\u227B\\u2190-\\u21FF\\u00D7\\u00B7\\u2070-\\u209F';
+    var hasMathUnicode = new RegExp('[' + mathUnicodeRanges + ']');
+    var lines = working.split('\n');
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i];
+      // Skip if already contains a math block placeholder
+      if (/\u202E\u202EMATHBLOCK\d+\u202E\u202E/.test(line)) continue;
+      // Skip empty, headers, lists, code fences, blockquotes
+      if (/^\s*(#|[*>\-]|\d+\.|```|&gt;)/.test(line)) continue;
+      if (!hasMathUnicode.test(line)) continue;
+      // Count how many math Unicode chars appear
+      var ucMatches = line.match(new RegExp('[' + mathUnicodeRanges + ']', 'g'));
+      // Check for LaTeX patterns: _{, ^{, \\command
+      var latexLike = /[_^{}]|\\[a-zA-Z]+/.test(line);
+      // Auto-wrap if: has 2+ math chars OR (1 math char + LaTeX syntax)
+      if ((ucMatches && ucMatches.length >= 2) || (ucMatches && ucMatches.length >= 1 && latexLike)) {
+        var id = mathBlocks.length;
+        var isDisplay = line.length > 50 || /^\\[a-z]+/.test(line.trim());
+        mathBlocks.push({ id: id, code: line.trim(), display: isDisplay });
+        lines[i] = '\u202E\u202EMATHBLOCK' + id + '\u202E\u202E';
+      }
+    }
+    working = lines.join('\n');
+    
+    // ── HTML escaping (prevents XSS) ──────────────────────────────
+    // Use a custom escape that preserves our math placeholders
+    var escaped = working.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    
+    // ── Markdown processing ───────────────────────────────────────
     // Headers (h1-h3)
     var result = escaped
       .replace(/^###\s+(.+)$/gm, '<h3>$1</h3>')
@@ -218,18 +267,18 @@
       .replace(/^\d+\.\s+(.+)$/gm, '<li>$1</li>');
     
     // Wrap list items in ul/ol
-    var lines = result.split('\n');
+    var lines2 = result.split('\n');
     var inList = false;
     var isOrderedList = false;
     var output = [];
     
-    for (var i = 0; i < lines.length; i++) {
-      var line = lines[i];
-      var isListItem = line.startsWith('<li>');
+    for (var j = 0; j < lines2.length; j++) {
+      var line2 = lines2[j];
+      var isListItem = line2.startsWith('<li>');
       
       if (isListItem && !inList) {
         // Determine if ordered list based on original line
-        var origLine = escaped.split('\n')[i];
+        var origLine = escaped.split('\n')[j];
         isOrderedList = /^\d+\.\s/.test(origLine);
         output.push(isOrderedList ? '<ol>' : '<ul>');
         inList = true;
@@ -239,7 +288,7 @@
         isOrderedList = false;
       }
       
-      output.push(line);
+      output.push(line2);
     }
     
     // Close any open list
@@ -306,6 +355,28 @@
     
     // Blockquotes
     result = result.replace(/^>\s+(.+)$/gm, '<blockquote>$1</blockquote>');
+    
+    // ── Render math placeholders with KaTeX ────────────────────────
+    result = result.replace(/\u202E\u202EMATHBLOCK(\d+)\u202E\u202E/g, function(match, idStr) {
+      var entry = mathBlocks[parseInt(idStr)];
+      if (!entry) return match;
+      try {
+        if (typeof katex !== 'undefined' && katex.renderToString) {
+          return katex.renderToString(entry.code, {
+            displayMode: entry.display,
+            throwOnError: false,
+            output: 'html'
+          });
+        }
+      } catch (e) {
+        // If KaTeX fails, render as fallback with plain text
+      }
+      // Fallback: show the raw LaTeX in a styled block
+      if (entry.display) {
+        return '<div class="katex-fallback">' + escHtml(entry.code) + '</div>';
+      }
+      return '<span class="katex-fallback">' + escHtml(entry.code) + '</span>';
+    });
     
     return result;
   }

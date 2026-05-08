@@ -97,7 +97,10 @@
                 "description": "Optional max context/sequence length override for this model in characters (falls back to vibe-coding.maxSequenceLength)"
               }
             },
-            "required": ["name", "model"]
+            "required": [
+              "name",
+              "model"
+            ]
           }
         },
         "vibe-coding.confirmChanges": {
@@ -123,7 +126,11 @@
         "vibe-coding.language": {
           "type": "string",
           "default": "zh-CN",
-          "enum": ["auto", "en", "zh-CN"],
+          "enum": [
+            "auto",
+            "en",
+            "zh-CN"
+          ],
           "enumDescriptions": [
             "Auto-detect based on user's VS Code display language (English if UI is English, Chinese if UI is Chinese)",
             "Always use English",
@@ -185,11 +192,12 @@
     "watch": "tsc -watch -p ./"
   },
   "devDependencies": {
-    "@types/vscode": "^1.74.0",
     "@types/node": "18.x",
+    "@types/vscode": "^1.74.0",
     "typescript": "^5.0.0"
   },
   "dependencies": {
-    "axios": "^1.6.0"
+    "axios": "^1.6.0",
+    "katex": "^0.16.45"
   }
 }

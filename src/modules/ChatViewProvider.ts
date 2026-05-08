@@ -357,6 +357,8 @@ Uncommitted changes will be lost.`,
 
   private _getHtml(webview: vscode.Webview): string {
     const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'webview.js'));
+    const katexCssUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'katex.min.css'));
+    const katexJsUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'katex.min.js'));
     return `<!DOCTYPE html>
 <html lang="en">
   <head>
@@ -364,6 +366,8 @@ Uncommitted changes will be lost.`,
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Vibe Coding Chat</title>
     <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} https: data:; style-src ${webview.cspSource} 'unsafe-inline'; font-src ${webview.cspSource} https: data:; script-src ${webview.cspSource};">
+    <link rel="stylesheet" href="${katexCssUri}">
+    <script src="${katexJsUri}"></script>
     <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -454,6 +458,20 @@ Uncommitted changes will be lost.`,
   .bubble a { color: var(--vscode-textLink-foreground); text-decoration: none; }
   .bubble a:hover { text-decoration: underline; }
 
+  /* ── KaTeX formula rendering ────────────────────────────────────── */
+  .bubble .katex { font-size: 1.1em; }
+  .bubble .katex-display { margin: 12px 0; overflow-x: auto; overflow-y: hidden; padding: 4px 0; }
+  .bubble .katex-display > .katex { white-space: nowrap; }
+  .bubble .katex-fallback {
+    font-family: var(--vscode-editor-font-family, 'Courier New', monospace);
+    font-size: 0.9em;
+    background: var(--vscode-textCodeBlock-background);
+    padding: 2px 6px;
+    border-radius: 4px;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+  
   .user .bubble {
     background: var(--vscode-button-background);
     color: var(--vscode-button-foreground);
