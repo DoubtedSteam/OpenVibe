@@ -41,6 +41,16 @@ export class ConversationService {
   addMessage(msg: ChatMessage): void {
     this._session.addMessage(msg);
   }
+  /**
+   * Adds a message to a specific session by sessionId.
+   * Used when the active session may have changed during async tool execution.
+   * Returns true if the session was found.
+   */
+  addMessageToSession(sessionId: string, msg: ChatMessage): boolean {
+    return this._session.addMessageToSession(sessionId, msg);
+  }
+
+
 
   /**
    * Adds an event notification message to the chat UI and persists it.

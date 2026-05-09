@@ -13,8 +13,12 @@ import { extractXmlPlaceholders, applyXmlPlaceholders } from '../mmOutput';
 
 export class MessageHandler {
   private _isRunning = false;
+  /** Captured at handleUserMessage start — used to route messages to the correct session. */
+  private _originSessionId: string | null = null;
   /** Cumulative token usage across all LLM calls in this session. */
   private _accumulatedUsage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
+
+
 
   constructor(
     private readonly _context: {
@@ -23,7 +27,10 @@ export class MessageHandler {
       /** Assembled system + history; extension point for multi-agent. */
       buildMessagesForLlm: (systemPrompt: string) => ChatMessage[];
       addMessage: (message: ChatMessage) => void;
+      /** Add message to a specific session by sessionId (for cross-session routing during async ops). */
+      addMessageToSession: (sessionId: string, message: ChatMessage) => boolean;
       getCurrentSessionId: () => string;
+
       saveCurrentSession: () => void;
       sanitizeIncompleteToolCalls: () => void;
       executeTool: (name: string, args: Record<string, unknown>) => Promise<string>;
@@ -42,11 +49,31 @@ export class MessageHandler {
       autoNameSession?: () => void;
     }
   ) {}
+  /**
+   * Only posts content-bearing messages (addMessage, toolCall, toolResult) to the webview
+   * if the active session hasn't changed since the operation started.
+   * Control messages (info, error, loading, setRunning) always pass through
+   * so the webview stays responsive.
+   */
+  private _postIfSameSession(msg: any): void {
+    const isContent = msg.type === 'addMessage' || msg.type === 'toolCall' || msg.type === 'toolResult';
+    if (isContent && this._originSessionId !== null) {
+      const currentId = this._context.getCurrentSessionId();
+      if (currentId !== this._originSessionId) {
+        return; // Session changed — don't pollute the wrong conversation's UI
+      }
+    }
+    this._context.post(msg);
+  }
+
+
 
   public async handleUserMessage(text: string): Promise<void> {
     if (this._isRunning) { return; }
 
     this._context.sanitizeIncompleteToolCalls();
+    this._originSessionId = this._context.getCurrentSessionId();
+    this._originSessionId = this._context.getCurrentSessionId();
 
     this._isRunning = true;
     this._context.operation.reset();
@@ -108,15 +135,15 @@ export class MessageHandler {
       const ctxBlock = `─── Context ───\n${ctxLines.join('\n')}\n────────────────\n\n`;
       const enrichedText = ctxBlock + text;
 
-      this._context.post({ type: 'addMessage', message: { role: 'user', content: text } });
-      this._context.addMessage({ role: 'user', content: enrichedText });
+      this._postIfSameSession({ type: 'addMessage', message: { role: 'user', content: text } });
+      this._context.addMessageToSession(this._originSessionId!, { role: 'user', content: enrichedText });
       // Fire-and-forget: auto-name the session from the first user message.
       this._context.autoNameSession?.();
     } else {
       // 空消息：添加占位消息，让LLM知道用户想继续
       const placeholder = "[继续]";
-      this._context.post({ type: 'addMessage', message: { role: 'user', content: placeholder } });
-      this._context.addMessage({ role: 'user', content: placeholder });
+      this._postIfSameSession({ type: 'addMessage', message: { role: 'user', content: placeholder } });
+      this._context.addMessageToSession(this._originSessionId!, { role: 'user', content: placeholder });
     }
     
     this._context.post({ type: 'loading', loading: true });
@@ -175,7 +202,7 @@ export class MessageHandler {
 
           // Push assistant turn with filtered content (no <edit-content> blocks)
           // Push assistant turn with filtered content (tags stripped)
-          this._context.addMessage({
+          this._context.addMessageToSession(this._originSessionId!, {
             role: 'assistant',
             content: displayContent,
             reasoning_content: response.reasoningContent,
@@ -184,7 +211,7 @@ export class MessageHandler {
 
           // Show assistant text with <edit-content> blocks filtered out
           if (displayContent) {
-            this._context.post({ type: 'addMessage', message: { role: 'assistant', content: displayContent } });
+            this._postIfSameSession({ type: 'addMessage', message: { role: 'assistant', content: displayContent } });
           }
 
 
@@ -236,20 +263,20 @@ export class MessageHandler {
                 summary,
                 modifiedFiles,
               });
-              this._context.post({ type: 'toolResult', name, result });
-              this._context.addMessage({ role: 'tool', content: result, tool_call_id: toolCall.id });
+              this._postIfSameSession({ type: 'toolResult', name, result });
+              this._context.addMessageToSession(this._originSessionId!, { role: 'tool', content: result, tool_call_id: toolCall.id });
 
               // ── 在聊天中显示修改文件列表（hiddenFromLlm 不占用 LLM 上下文）────
               const displayContent = `✅ **任务完成**${summary ? ': ' + summary : ''}${fileSummary}`;
-              this._context.post({ type: 'addMessage', message: { role: 'assistant', content: displayContent } });
-              this._context.addMessage({ role: 'assistant', content: displayContent, hiddenFromLlm: true });
+              this._postIfSameSession({ type: 'addMessage', message: { role: 'assistant', content: displayContent } });
+              this._context.addMessageToSession(this._originSessionId!, { role: 'assistant', content: displayContent, hiddenFromLlm: true });
 
               stopAfterTools = true;
               break;
             }
 
             // 其他工具正常处理
-            this._context.post({ type: 'toolCall', name, args });
+            this._postIfSameSession({ type: 'toolCall', name, args });
 
             let result: string;
             try {
@@ -263,8 +290,8 @@ export class MessageHandler {
             }
 
             // Post tool result (compact only modifies llmMessages, frontend unaffected)
-            this._context.post({ type: 'toolResult', name, result });
-            this._context.addMessage({ role: 'tool', content: result, tool_call_id: toolCall.id });
+            this._postIfSameSession({ type: 'toolResult', name, result });
+            this._context.addMessageToSession(this._originSessionId!, { role: 'tool', content: result, tool_call_id: toolCall.id });
           } // End of for (const toolCall of response.toolCalls)
           if (stopAfterTools) {
             break;
@@ -274,8 +301,8 @@ export class MessageHandler {
           // Text response (no tool calls)
           let content = response.content ?? '(no response)';
 
-          this._context.addMessage({ role: 'assistant', content, reasoning_content: response.reasoningContent });
-          this._context.post({ type: 'addMessage', message: { role: 'assistant', content } });
+          this._context.addMessageToSession(this._originSessionId!, { role: 'assistant', content, reasoning_content: response.reasoningContent });
+          this._postIfSameSession({ type: 'addMessage', message: { role: 'assistant', content } });
 
           // Plan A: 模型输出纯文本（无 tool_calls）时始终结束循环，
           // 把控制权交还给用户。模型主动选择输出文本而不是调用工具，

@@ -130,6 +130,28 @@ export class SessionManager {
     currentSession.updated = Date.now();
     this._saveSessions();
   }
+  /**
+   * Adds a message to a specific session identified by sessionId.
+   * This is used for routing messages to the correct session when the
+   * active session may have changed during an async operation (e.g.
+   * user switches conversations while tool calls are still executing).
+   * Returns true if the session was found and message was added.
+   */
+  public addMessageToSession(sessionId: string, msg: ChatMessage): boolean {
+    const session = this._sessions.find(s => s.id === sessionId);
+    if (!session) return false;
+    session.messages.push(msg);
+    if (!session.llmMessages) {
+      session.llmMessages = [...session.messages];
+    } else {
+      session.llmMessages.push(msg);
+    }
+    session.updated = Date.now();
+    this._saveSessions();
+    return true;
+  }
+
+
 
   public addAgentLog(entry: AgentLogEntry): void {
     let session = this._sessions.find(s => s.id === this._currentSessionId);

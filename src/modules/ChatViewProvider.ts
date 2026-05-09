@@ -105,6 +105,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       post: (msg) => this._uiManager.post(msg),
       buildMessagesForLlm: (systemPrompt) => this._conversation.buildMessagesForLlm(systemPrompt),
       addMessage: (msg) => this._conversation.addMessage(msg),
+      addMessageToSession: (sessionId, msg) => this._conversation.addMessageToSession(sessionId, msg),
+
       getCurrentSessionId: () => this._conversation.getCurrentSessionId(),
       saveCurrentSession: () => this._conversation.saveCurrentSession(),
       sanitizeIncompleteToolCalls: () => this._conversation.sanitizeIncompleteToolCalls(),
