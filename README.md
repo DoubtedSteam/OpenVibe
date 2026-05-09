@@ -45,6 +45,7 @@
 | 2026-04-28 | **ask_human 重载容错 + 持续改进**：1) 修复 `ask_human` 在 Reload Window 后显示"Missing tool result"晦涩错误的 bug，改为显示友好提示和原始问题内容，用户发送新消息即可继续 2) `<edit-content>` 标签现也支持 `run_shell_command`，编辑和 shell 统一使用同一个标签，简化转义处理 3) XML content fallback 完善：同一轮消息支持多个标签按顺序匹配 |
 | 2026-04-29 | **Compact 历史压缩重构**：放弃独立摘要 LLM，改为**复用主对话 LLM** + 保持原始消息格式，大幅提升 KV 缓存命中率。1) 使用与主对话相同的 system prompt（`SYSTEM_PROMPT + Host env + langInstr`），前缀缓存完美命中 2) 待压缩消息保持原始 `ChatMessage` 数组格式，中间 KV cache 可复用 3) 只修改 `llmMessages`（LLM 上下文），前端 `messages`（完整历史）完全不受影响 4) 新增 `_sanitizeMessageList` 确保发送前清理不完整 tool call 序列，避免 API 400 错误 |
 | 2026-05-02 | **知识库泛化重构**：将单文件 `.OpenVibe/memory.md` 拆分为**三级目录结构** `.OpenVibe/memory/`（`README.md` 元定义 + `L1-purpose.md` + `L2-inventory.md` + `L3-roles.md`），实现按需读写、互不影响。架构泛化为通用知识库系统，适用于任何项目。同步更新 system prompt 为极简提醒版。 |
+| 2026-05-09 | **浏览器子智能体 (Browser Sub-Agent)**：新增 `browser_sub_agent` 工具——AI 可将复杂浏览任务委派给子智能体，自主完成页面导航、表单填写、元素点击、文本提取等操作。子智能体使用独立 LLM 循环（同一 API 提供商）自主规划执行，基于 Playwright 实现无头浏览器自动化，支持 SSRF 防护。返回结构化 JSON 结果（状态摘要 + 操作日志 + 页面状态）。 |
 > **2026-04-11:** Git snapshots during coding; rollback and history in the UI.  
 
 > **2026-04-14:** Independent review for todo lists and code edits via separate LLM agents.  
@@ -61,6 +62,8 @@
 > **2026-04-29:** **Compact history compaction rework**: Dropped the separate summarizer LLM in favor of **reusing the main conversation LLM** + keeping original message format for maximum KV cache hit rate. 1) Uses the exact same system prompt as the main conversation (`SYSTEM_PROMPT + Host env + langInstr`) — prefix cache hits perfectly 2) Messages to be compressed stay in raw `ChatMessage` array format — intermediate KV cache is reusable 3) Only `llmMessages` (LLM context) is modified; frontend `messages` (full history) remains untouched 4) Added `_sanitizeMessageList` to strip incomplete tool_call sequences before sending, preventing API 400 errors
 
 > **2026-05-02:** **Knowledge base generalization**: Split the single `.OpenVibe/memory.md` into a **3-level directory** `.OpenVibe/memory/` (`README.md` meta-definition + `L1-purpose.md` + `L2-inventory.md` + `L3-roles.md`), enabling on-demand reading and independent cache layers. The architecture is generalized as a universal knowledge base system applicable to any project. System prompt updated to a minimal reminder version.
+
+> **2026-05-09:** **Browser Sub-Agent** — Added `browser_sub_agent` tool: AI can delegate complex browsing tasks to a sub-agent that autonomously handles page navigation, form filling, element clicking, and text extraction. The sub-agent uses its own LLM loop (same API provider) to plan and execute steps, powered by Playwright headless browser automation with SSRF protection. Returns structured JSON results (status summary + action log + page state).
 
 <h2 id="project-overview">项目概述 / Project overview</h2>
 
@@ -306,6 +309,7 @@ MessageHandler.handleUserMessage()
 | `load_skill` | 加载指定技能的 SKILL.md 文件并返回结构化指令内容 |
 | `ask_human` | 请求人工协助（手动测试、设计决策、收集信息、帮忙找网页等）。对话框含输入框 + **Send**（发送消息回传 AI）/ **Done**（确认完成）/ **Cancel** 按钮，30 分钟超时 |
 | `web_fetch` | 抓取网页并提取纯文本内容。支持 Cookie/自定义 Headers 访问登录页面。HTML 处理保留标题层级（h1-h6）、代码块格式（pre/code）、提取链接列表和 meta description |
+| `browser_sub_agent` | **浏览器子智能体**——委派复杂浏览器任务给独立的 LLM 循环代理。可自主导航、填表、点击、提取文本和搜索，基于 Playwright 无头浏览器自动化 + SSRF 防护。返回结构化 JSON（状态摘要 + 操作日志 + 页面状态）。需配置 API Key |
 | `text_diff` | 生成类似 git diff 的文本差异输出，支持上下文行数和行号显示（仅内存计算，无文件操作） |
 | Git 相关 | 快照与历史管理（见新闻） |
 
