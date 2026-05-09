@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 import { ChatMessage, ApiConfig } from '../types';
-import { getActiveEditorInfo, getStaticHostEnvironmentBlock, buildLanguageInstruction } from '../agentRuntimeContext';
+import { getActiveEditorInfo, getStaticHostEnvironmentBlock, buildLanguageInstruction, getDateInfo } from '../agentRuntimeContext';
 import { SYSTEM_PROMPT } from '../systemPrompt';
 import { TOOL_DEFINITIONS } from '../toolDefinitions';
 import { sendChatMessage } from '../api';
@@ -94,6 +94,7 @@ export class MessageHandler {
       // so it's NOT duplicated here to save tokens and keep user message compact.
       const ctxLines: string[] = [];
       ctxLines.push(`🔓 Edit: ${this._context.getEditPermissionEnabled() ? 'ON' : 'OFF'}`);
+      ctxLines.push(`📅 Date: ${getDateInfo()}`);
       const todoInfo = this._context.getTodoControlInfo();
       if (todoInfo && todoInfo.remaining > 0) {
         ctxLines.push(`📋 Todo: ${todoInfo.remaining} item(s) remaining`);

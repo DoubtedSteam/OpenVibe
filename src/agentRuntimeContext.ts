@@ -104,6 +104,26 @@ export function getRuntimeEnvironmentSummary(): {
  * language to use when communicating with the user.
  * Kept as a separate export so both MessageHandler and ConversationService
  * share the same implementation for KV cache prefix consistency.
+/**
+ * Build a formatted date string: YYYY/MM/DD DayOfWeek (Chinese).
+ * Used in the user Context block so the AI knows the current date.
+ */
+export function getDateInfo(): string {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  const weekdays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+  const wd = weekdays[now.getDay()];
+  return `${y}/${m}/${d} ${wd}`;
+}
+
+/**
+ * Build a language instruction block to append to the system prompt.
+ * Mirrors the language setting from ApiConfig to tell the AI which
+ * language to use when communicating with the user.
+ * Kept as a separate export so both MessageHandler and ConversationService
+ * share the same implementation for KV cache prefix consistency.
  */
 export function buildLanguageInstruction(lang: string | undefined): string {
   switch (lang) {

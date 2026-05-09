@@ -60,6 +60,8 @@ export interface ChatSession {
   assistantTodoState?: AssistantTodoPersistedState | null;
   /** Skill names activated in this conversation, loaded from global skills pool. */
   activatedSkills?: string[];
+  /** Index into the vibe-coding.models array for this conversation. -1 = use default legacy model. Persisted per session. */
+  selectedModelIndex?: number;
   /** Timestamp when this session was last opened/selected. Used to restore the most recent session on reload. */
   lastOpenedAt?: number;
   /** Cached user-message count for the session list. Stored in index.json, kept in memory for all sessions. */

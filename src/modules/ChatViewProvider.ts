@@ -169,6 +169,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       if (msg.type === 'ready') {
         this._uiManager.sendWorkspaceBanner();
         this._sessionManager.postSessionsList();
+        // Restore model selection from persisted session
+        this._restoreModelFromSession();
         this._sendModelListToWebview();
         this._replayWebview();
       }
@@ -195,6 +197,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         // Restore activated skills for the switched-to conversation
         const switchedSkills = this._sessionManager.getCurrentSessionActivatedSkills();
         this._toolExecutor.restoreActivatedSkills(switchedSkills);
+        // Restore model selection for the switched-to conversation
+        this._restoreModelFromSession();
+        this._sendModelListToWebview();
         this._uiManager.post({ type: 'clearMessages' });
         this._replayWebview();
       }
@@ -249,9 +254,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
        if (msg.type === 'setEditPermission') {
           this._uiManager.setEditPermissionEnabled(!!msg.enabled);
         }
-       if (msg.type === 'switchModel') {
+        if (msg.type === 'switchModel') {
           const index = typeof msg.index === 'number' ? msg.index : -1;
           this._uiManager.setSelectedModelIndex(index);
+          // Persist model selection to the current conversation
+          this._sessionManager.setCurrentSessionSelectedModelIndex(index);
           this._sendModelListToWebview();
         }
       });
@@ -267,6 +274,15 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       selectedIndex,
       currentDisplayName,
     });
+  }
+
+  /**
+   * Restore the model selection index from the current session into UIManager.
+   * Called on session switch, initial load, and after session creation.
+   */
+  private _restoreModelFromSession(): void {
+    const sessionIndex = this._sessionManager.getCurrentSessionSelectedModelIndex();
+    this._uiManager.setSelectedModelIndex(sessionIndex);
   }
 
   private _replayWebview(): void {

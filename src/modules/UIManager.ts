@@ -60,9 +60,8 @@ export class UIManager {
    private _pendingShellConfirms: Map<string, (approved: boolean) => void> = new Map();
    private _pendingHumanAssistanceConfirms: Map<string, (approved: boolean, userMessage?: string) => void> = new Map();
    private _editPermissionEnabled: boolean = true;
-   private _selectedModelIndex: number;
+   private _selectedModelIndex: number = -1;
    constructor(private readonly _context: vscode.ExtensionContext) {
-     this._selectedModelIndex = _context.globalState.get<number>('selectedModelIndex', -1);
    }
 
    public setView(view: vscode.WebviewView | undefined): void {
@@ -114,10 +113,9 @@ export class UIManager {
     return this._selectedModelIndex;
   }
 
-  /** Set the currently selected model index and persist across sessions. */
+  /** Set the currently selected model index. Persistence is handled by the caller (e.g. ChatViewProvider via SessionManager). */
   public setSelectedModelIndex(index: number): void {
     this._selectedModelIndex = index;
-    this._context.globalState.update('selectedModelIndex', index);
   }
 
   /**

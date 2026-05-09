@@ -301,6 +301,7 @@ export class SessionManager {
       isActive: s.id === this._currentSessionId,
       lastOpenedAt: s.lastOpenedAt,
       activatedSkills: s.activatedSkills,
+      selectedModelIndex: s.selectedModelIndex,
       assistantTodoState: s.assistantTodoState,
       messageCount,
     };
@@ -318,6 +319,7 @@ export class SessionManager {
       isActive: entry.isActive,
       lastOpenedAt: entry.lastOpenedAt,
       activatedSkills: entry.activatedSkills,
+      selectedModelIndex: entry.selectedModelIndex,
       assistantTodoState: entry.assistantTodoState,
       messageCount: entry.messageCount,
     };
@@ -562,6 +564,32 @@ export class SessionManager {
       return;
     }
     currentSession.activatedSkills = [...skills];
+    currentSession.updated = Date.now();
+    this._saveSessions();
+  }
+  // ─── Selected model index (conversation-scoped) ────────────────────────
+
+  /**
+   * Get the selected model index for the current conversation.
+   * -1 means use the default/legacy model setting.
+   */
+  public getCurrentSessionSelectedModelIndex(): number {
+    const currentSession = this._sessions.find((s) => s.id === this._currentSessionId);
+    if (!currentSession || currentSession.selectedModelIndex === undefined || currentSession.selectedModelIndex === null) {
+      return -1;
+    }
+    return currentSession.selectedModelIndex;
+  }
+
+  /**
+   * Set the selected model index for the current conversation and persist.
+   */
+  public setCurrentSessionSelectedModelIndex(index: number): void {
+    const currentSession = this._sessions.find((s) => s.id === this._currentSessionId);
+    if (!currentSession) {
+      return;
+    }
+    currentSession.selectedModelIndex = index;
     currentSession.updated = Date.now();
     this._saveSessions();
   }
