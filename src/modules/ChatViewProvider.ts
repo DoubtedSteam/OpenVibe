@@ -480,6 +480,39 @@ Uncommitted changes will be lost.`,
     user-select: none;
     border-bottom: 1px solid var(--vscode-input-border, transparent);
   }
+  /* ── Code block copy button ──────────────────────────────────── */
+  .bubble pre.code-block {
+    position: relative;
+  }
+  .copy-code-btn {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    z-index: 2;
+    background: var(--vscode-badge-background, rgba(128,128,128,0.6));
+    border: 1px solid var(--vscode-input-border, transparent);
+    border-radius: 4px;
+    color: var(--vscode-foreground);
+    cursor: pointer;
+    font-size: 12px;
+    padding: 1px 5px;
+    opacity: 0;
+    transition: opacity 0.15s;
+    line-height: 1.4;
+    user-select: none;
+  }
+  .bubble pre.code-block:hover .copy-code-btn {
+    opacity: 0.7;
+  }
+  .copy-code-btn:hover {
+    opacity: 1 !important;
+    background: var(--vscode-toolbar-hoverBackground, rgba(128,128,128,0.25));
+    border-color: var(--vscode-input-border, #555);
+  }
+  .copy-code-btn:active {
+    opacity: 0.9 !important;
+  }
+  
   
   .bubble ul, .bubble ol { padding-left: 24px; margin: 8px 0; }
   .bubble li { margin: 4px 0; }

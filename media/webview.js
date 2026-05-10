@@ -398,7 +398,7 @@
       var entry = codeBlocks[parseInt(idStr)];
       if (!entry) return match;
       var langAttr = entry.lang ? ' data-lang="' + entry.lang + '"' : '';
-      return '<pre class="code-block"' + langAttr + '><code>' + entry.code + '</code></pre>';
+      return '<pre class="code-block"' + langAttr + '><button class="copy-code-btn" title="复制代码">📋</button><code>' + entry.code + '</code></pre>';
     });
     
     // ── Render math placeholders with KaTeX ────────────────────────
@@ -1010,6 +1010,42 @@
        // Last resort fallback
        var ta = document.createElement('textarea');
        ta.value = rawText;
+       ta.style.position = 'fixed';
+       ta.style.opacity = '0';
+       document.body.appendChild(ta);
+       ta.select();
+       document.execCommand('copy');
+       document.body.removeChild(ta);
+     }
+   });
+   
+   // Code block copy button - event delegation on messages container
+   if (messagesDiv) messagesDiv.addEventListener('click', function (e) {
+     var btn = e.target.closest('.copy-code-btn');
+     if (!btn) return;
+     var pre = btn.closest('pre.code-block');
+     if (!pre) return;
+     var code = pre.querySelector('code');
+     if (!code) return;
+     var text = code.textContent;
+     try {
+       navigator.clipboard.writeText(text).then(function () {
+         var orig = btn.textContent;
+         btn.textContent = '✅';
+         setTimeout(function () { btn.textContent = orig; }, 2000);
+       }, function () {
+         var ta = document.createElement('textarea');
+         ta.value = text;
+         ta.style.position = 'fixed';
+         ta.style.opacity = '0';
+         document.body.appendChild(ta);
+         ta.select();
+         document.execCommand('copy');
+         document.body.removeChild(ta);
+       });
+     } catch (e) {
+       var ta = document.createElement('textarea');
+       ta.value = text;
        ta.style.position = 'fixed';
        ta.style.opacity = '0';
        document.body.appendChild(ta);
