@@ -1137,7 +1137,7 @@ Uncommitted changes will be lost.`,
       </div>
       <div id="human-assistance-question" class="confirm-meta"></div>
       <div class="confirm-row" style="margin-top: 8px;">
-        <input id="human-assistance-input" type="text" placeholder="Type a response (optional)..." style="flex: 1; padding: 6px 8px; border: 1px solid var(--vscode-input-border); border-radius: 4px; background: var(--vscode-input-background); color: var(--vscode-input-foreground); font-family: inherit; font-size: 13px;">
+        <textarea id="human-assistance-input" placeholder="Type a response (optional)...  Ctrl+Enter to send" rows="2" style="flex: 1; padding: 6px 8px; border: 1px solid var(--vscode-input-border); border-radius: 4px; background: var(--vscode-input-background); color: var(--vscode-input-foreground); font-family: inherit; font-size: 13px; resize: none; max-height: 120px; line-height: 1.4;"></textarea>
         <button id="human-assistance-send" class="confirm-btn apply" type="button">Send</button>
       </div>
     </div>

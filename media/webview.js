@@ -950,6 +950,21 @@
     var msg = humanAssistInput ? humanAssistInput.value.trim() : '';
     respondConfirm(true, msg);
   });
+  // Ctrl+Enter / Cmd+Enter to send in human assistance textarea
+  if (humanAssistInput) humanAssistInput.addEventListener('keydown', function (e) {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      e.preventDefault();
+      var msg = humanAssistInput.value.trim();
+      respondConfirm(true, msg);
+    }
+  });
+  // Auto-resize human assistance textarea on input
+  if (humanAssistInput) humanAssistInput.addEventListener('input', function () {
+    humanAssistInput.style.height = 'auto';
+    humanAssistInput.style.height = Math.min(humanAssistInput.scrollHeight, 120) + 'px';
+  });
+  
+  
   if (sendBtn) sendBtn.addEventListener('click', function () {
     if (!input) return;
     closeRefAutocomplete();
