@@ -429,6 +429,36 @@ Uncommitted changes will be lost.`,
     color: var(--vscode-descriptionForeground);
     padding: 0 4px;
   }
+  .message-header {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .msg-copy-btn {
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 11px;
+    padding: 0 3px;
+    opacity: 0;
+    transition: opacity 0.15s, border-color 0.15s, background 0.15s;
+    line-height: 1.4;
+    user-select: none;
+    color: var(--vscode-descriptionForeground);
+  }
+  .message-row:hover .msg-copy-btn {
+    opacity: 0.6;
+  }
+  .msg-copy-btn:hover {
+    opacity: 1 !important;
+    background: var(--vscode-toolbar-hoverBackground, rgba(128,128,128,0.1));
+    border-color: var(--vscode-input-border, #555);
+  }
+  .msg-copy-btn:active {
+    opacity: 0.9 !important;
+  }
+  
 
   .bubble {
     max-width: 90%;

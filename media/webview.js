@@ -434,11 +434,21 @@
     
     var row = document.createElement('div');
     row.className = 'message-row ' + role;
+    if (content != null) row.dataset.rawContent = String(content);
     if (role !== 'system' && role !== 'event') {
+      var header = document.createElement('div');
+      header.className = 'message-header';
       var label = document.createElement('div');
       label.className = 'message-role';
       label.textContent = role === 'user' ? 'You' : 'Assistant';
-      row.appendChild(label);
+      header.appendChild(label);
+      // Per-message copy button
+      var copyBtn = document.createElement('button');
+      copyBtn.className = 'msg-copy-btn';
+      copyBtn.title = '\u590D\u5236\u672C\u6761\u6D88\u606F';  // 复制本条消息
+      copyBtn.textContent = '\uD83D\uDCCB';  // 📋
+      header.appendChild(copyBtn);
+      row.appendChild(header);
     }
     var bubble = document.createElement('div');
     bubble.className = 'bubble';
@@ -1008,6 +1018,41 @@
        });
      } catch (e) {
        // Last resort fallback
+       var ta = document.createElement('textarea');
+       ta.value = rawText;
+       ta.style.position = 'fixed';
+       ta.style.opacity = '0';
+       document.body.appendChild(ta);
+       ta.select();
+       document.execCommand('copy');
+       document.body.removeChild(ta);
+     }
+   });
+   
+   // Per-message copy button - event delegation on messages container
+   if (messagesDiv) messagesDiv.addEventListener('click', function (e) {
+     var btn = e.target.closest('.msg-copy-btn');
+     if (!btn) return;
+     var row = btn.closest('.message-row');
+     if (!row) return;
+     var rawText = row.dataset.rawContent;
+     if (!rawText) return;
+     try {
+       navigator.clipboard.writeText(rawText).then(function () {
+         var orig = btn.textContent;
+         btn.textContent = '\u2705';    // ✅
+         setTimeout(function () { btn.textContent = orig; }, 2000);
+       }, function () {
+         var ta = document.createElement('textarea');
+         ta.value = rawText;
+         ta.style.position = 'fixed';
+         ta.style.opacity = '0';
+         document.body.appendChild(ta);
+         ta.select();
+         document.execCommand('copy');
+         document.body.removeChild(ta);
+       });
+     } catch (e) {
        var ta = document.createElement('textarea');
        ta.value = rawText;
        ta.style.position = 'fixed';
