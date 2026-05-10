@@ -238,6 +238,25 @@
     }
     working = lines.join('\n');
     
+    // ── Code block extraction ─────────────────────────────────────
+    // Extract fenced code blocks and inline code BEFORE HTML escaping
+    // and markdown processing, so content inside code blocks is not
+    // misinterpreted as markdown syntax (e.g. # as heading, * as bold).
+    var codeBlocks = [];
+    // Fenced code blocks ```lang\n...```
+    working = working.replace(/```([^\n]*)\n?([\s\S]*?)```/g, function(match, lang, code) {
+      if (!code.trim()) return '';
+      var id = codeBlocks.length;
+      codeBlocks.push({ id: id, lang: lang.trim(), code: code, type: 'fence' });
+      return '\u202D\u202ECODEBLOCK' + id + '\u202D\u202E';
+    });
+    // Inline code `...`
+    working = working.replace(/`([^`]+)`/g, function(match, code) {
+      var id = codeBlocks.length;
+      codeBlocks.push({ id: id, lang: '', code: code, type: 'inline' });
+      return '\u202D\u202ECODEINLINE' + id + '\u202D\u202E';
+    });
+    
     // ── HTML escaping (prevents XSS) ──────────────────────────────
     // Use a custom escape that preserves our math placeholders
     var escaped = working.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -255,17 +274,6 @@
       .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
       .replace(/\*(.*?)\*/g, '<em>$1</em>');
     
-    // Inline code and code blocks
-    // Step 1: Fenced code blocks with optional language identifier
-    result = result
-      .replace(/```([^\n]*)\n?([\s\S]*?)```/g, function(match, lang, code) {
-        // Skip empty/whitespace-only blocks to prevent black-background empty <pre> boxes
-        if (!code.trim()) return '';
-        var langTrimmed = lang.trim();
-        var langAttr = langTrimmed ? ' data-lang="' + langTrimmed + '"' : '';
-        return '<pre class="code-block"' + langAttr + '><code>' + code + '</code></pre>';
-      })
-      .replace(/`([^`]+)`/g, '<code>$1</code>');
     
     // Lists
     result = result
@@ -353,7 +361,8 @@
       if (!p) return '';
       // Don't wrap if it's already a block element
       if (p.startsWith('<h') || p.startsWith('<table') || p.startsWith('<ul') || p.startsWith('<ol') || 
-          p.startsWith('<li') || p.startsWith('<pre') || p.startsWith('<code')) {
+          p.startsWith('<li') || p.startsWith('<pre') || p.startsWith('<code') ||
+          p.startsWith('\u202D\u202ECODEBLOCK') || p.startsWith('\u202D\u202ECODEINLINE')) {
         return p;
       }
       return '<p>' + p + '</p>';
@@ -375,6 +384,20 @@
     
     // Blockquotes
     result = result.replace(/^>\s+(.+)$/gm, '<blockquote>$1</blockquote>');
+    
+    // ── Restore code block placeholders ───────────────────────────
+    // Restore inline code `...` first, then fenced blocks.
+    result = result.replace(/\u202D\u202ECODEINLINE(\d+)\u202D\u202E/g, function(match, idStr) {
+      var entry = codeBlocks[parseInt(idStr)];
+      if (!entry) return match;
+      return '<code>' + entry.code + '</code>';
+    });
+    result = result.replace(/\u202D\u202ECODEBLOCK(\d+)\u202D\u202E/g, function(match, idStr) {
+      var entry = codeBlocks[parseInt(idStr)];
+      if (!entry) return match;
+      var langAttr = entry.lang ? ' data-lang="' + entry.lang + '"' : '';
+      return '<pre class="code-block"' + langAttr + '><code>' + entry.code + '</code></pre>';
+    });
     
     // ── Render math placeholders with KaTeX ────────────────────────
     result = result.replace(/\u202E\u202EMATHBLOCK(\d+)\u202E\u202E/g, function(match, idStr) {
