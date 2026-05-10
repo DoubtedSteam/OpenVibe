@@ -256,11 +256,14 @@
       .replace(/\*(.*?)\*/g, '<em>$1</em>');
     
     // Inline code and code blocks
+    // Step 1: Fenced code blocks with optional language identifier
     result = result
-      .replace(/```([\s\S]*?)```/g, function(match, code) {
+      .replace(/```([^\n]*)\n?([\s\S]*?)```/g, function(match, lang, code) {
         // Skip empty/whitespace-only blocks to prevent black-background empty <pre> boxes
         if (!code.trim()) return '';
-        return '<pre><code>' + code + '</code></pre>';
+        var langTrimmed = lang.trim();
+        var langAttr = langTrimmed ? ' data-lang="' + langTrimmed + '"' : '';
+        return '<pre class="code-block"' + langAttr + '><code>' + code + '</code></pre>';
       })
       .replace(/`([^`]+)`/g, '<code>$1</code>');
     

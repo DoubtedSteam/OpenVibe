@@ -458,6 +458,29 @@ Uncommitted changes will be lost.`,
     font-size: 0.9em;
   }
   .bubble pre code { background-color: transparent; padding: 0; border-radius: 0; font-size: 1em; }
+  /* ── Code block language badge ────────────────────────────────── */
+  .bubble pre.code-block[data-lang] {
+    position: relative;
+    padding-top: 28px;
+  }
+  .bubble pre.code-block[data-lang]::before {
+    content: attr(data-lang);
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    padding: 2px 10px;
+    font-size: 11px;
+    font-family: var(--vscode-font-family);
+    color: var(--vscode-descriptionForeground);
+    background: var(--vscode-badge-background);
+    border-radius: 4px 4px 0 0;
+    text-transform: lowercase;
+    line-height: 1.6;
+    user-select: none;
+    border-bottom: 1px solid var(--vscode-input-border, transparent);
+  }
+  
   .bubble ul, .bubble ol { padding-left: 24px; margin: 8px 0; }
   .bubble li { margin: 4px 0; }
   .bubble h1, .bubble h2, .bubble h3, .bubble h4, .bubble h5, .bubble h6 { margin: 16px 0 8px 0; font-weight: 600; }
