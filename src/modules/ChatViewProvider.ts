@@ -1038,6 +1038,41 @@ Uncommitted changes will be lost.`,
     background: var(--vscode-button-secondaryHoverBackground, #4a4a4a);
     border-color: var(--vscode-focusBorder, #007acc);
   }
+  /* ── Messages actions (copy raw button) ──────────────────────── */
+  .messages-actions {
+    flex-shrink: 0;
+    display: flex;
+    justify-content: flex-start;
+    padding: 0 4px 2px 4px;
+    min-height: 0;
+  }
+  .copy-raw-btn {
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    color: var(--vscode-descriptionForeground);
+    cursor: pointer;
+    font-size: 13px;
+    padding: 2px 6px;
+    opacity: 0.5;
+    transition: opacity 0.15s, border-color 0.15s, background 0.15s;
+    line-height: 1.4;
+    user-select: none;
+  }
+  .copy-raw-btn:hover {
+    opacity: 1;
+    border-color: var(--vscode-input-border, #555);
+    background: var(--vscode-toolbar-hoverBackground, rgba(128,128,128,0.1));
+  }
+  .copy-raw-btn:active {
+    opacity: 0.8;
+  }
+  .copy-raw-btn.copied {
+    color: var(--vscode-testing-runAction, #388a34);
+    border-color: var(--vscode-testing-runAction, #388a34);
+    opacity: 1;
+  }
+  
 </style>
 </head>
 <body>
@@ -1077,6 +1112,10 @@ Uncommitted changes will be lost.`,
       </div>
     </div>
     <div id="messages"></div>
+    <div class="messages-actions">
+      <button id="copy-raw-btn" class="copy-raw-btn" title="复制 LLM 原始输出">📋</button>
+    </div>
+    
     <div id="replace-confirm">
       <div class="confirm-row">
         <div class="confirm-title">Apply this edit?</div>

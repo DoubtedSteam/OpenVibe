@@ -70,6 +70,8 @@
    // Edit permission state
    var editPermissionEnabled = true;
     var _lastUserMessage = '';
+    var _rawAssistantContents = [];
+    
   function scrollBottom() {
     if (!messagesDiv) return;
     messagesDiv.scrollTop = messagesDiv.scrollHeight;
@@ -425,6 +427,11 @@
   }
   function addMessage(role, content) {
     if (!messagesDiv) return;
+    // Store raw assistant content for copy feature
+    if (role === 'assistant' && content != null) {
+      _rawAssistantContents.push(String(content));
+    }
+    
     var row = document.createElement('div');
     row.className = 'message-row ' + role;
     if (role !== 'system' && role !== 'event') {
@@ -953,7 +960,50 @@
     safePost({ type: 'sendMessage', text: text });
   });
   if (stopBtn) stopBtn.addEventListener('click', function () { safePost({ type: 'stopOperation' }); });
-  if (clearBtn) clearBtn.addEventListener('click', function () { safePost({ type: 'clearHistory' }); });
+  if (clearBtn) clearBtn.addEventListener('click', function () { safePost({ type: 'clearHistory' }); _rawAssistantContents = []; });
+  
+   var copyRawBtn = byId('copy-raw-btn');
+   if (copyRawBtn) copyRawBtn.addEventListener('click', function () {
+     if (_rawAssistantContents.length === 0) return;
+     var rawText = _rawAssistantContents.join('\n\n---\n\n');
+     try {
+       navigator.clipboard.writeText(rawText).then(function () {
+         copyRawBtn.textContent = '✅';
+         copyRawBtn.classList.add('copied');
+         setTimeout(function () {
+           copyRawBtn.textContent = '📋';
+           copyRawBtn.classList.remove('copied');
+         }, 2000);
+       }, function () {
+         // Fallback: select-based copy
+         var ta = document.createElement('textarea');
+         ta.value = rawText;
+         ta.style.position = 'fixed';
+         ta.style.opacity = '0';
+         document.body.appendChild(ta);
+         ta.select();
+         document.execCommand('copy');
+         document.body.removeChild(ta);
+         copyRawBtn.textContent = '✅';
+         copyRawBtn.classList.add('copied');
+         setTimeout(function () {
+           copyRawBtn.textContent = '📋';
+           copyRawBtn.classList.remove('copied');
+         }, 2000);
+       });
+     } catch (e) {
+       // Last resort fallback
+       var ta = document.createElement('textarea');
+       ta.value = rawText;
+       ta.style.position = 'fixed';
+       ta.style.opacity = '0';
+       document.body.appendChild(ta);
+       ta.select();
+       document.execCommand('copy');
+       document.body.removeChild(ta);
+     }
+   });
+   
    if (snapshotsBtn) snapshotsBtn.addEventListener('click', function () { safePost({ type: 'showSnapshots' }); });
    if (editToggleBtn) editToggleBtn.addEventListener('click', toggleEditPermission);
    // Font size zoom controls
@@ -1113,6 +1163,8 @@
       }
       case 'clearMessages':
         if (messagesDiv) messagesDiv.innerHTML = '';
+        _rawAssistantContents = [];
+        
         pendingToolCard = null;
         pendingConfirm = null;
         if (confirmBar) confirmBar.classList.remove('show');
