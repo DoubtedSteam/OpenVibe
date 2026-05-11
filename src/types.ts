@@ -100,6 +100,10 @@ export interface ModelConfig {
   maxInteractions?: number;
   /** Optional maximum context / sequence length override in characters (falls back to vibe-coding.maxSequenceLength). */
   maxSequenceLength?: number;
+  /** Optional VPN / proxy toggle for this model (falls back to vibe-coding.vpnEnabled). */
+  vpnEnabled?: boolean;
+  /** Optional VPN / proxy URL override for this model (falls back to vibe-coding.vpnProxyUrl). */
+  vpnProxyUrl?: string;
 }
 
 export interface ToolDefinition {

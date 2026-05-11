@@ -95,6 +95,16 @@
               "maxSequenceLength": {
                 "type": "number",
                 "description": "Optional max context/sequence length override for this model in characters (falls back to vibe-coding.maxSequenceLength)"
+              },
+              "vpnEnabled": {
+                "type": "boolean",
+                "default": false,
+                "description": "Optional VPN/proxy toggle for this model (falls back to vibe-coding.vpnEnabled)"
+              },
+              "vpnProxyUrl": {
+                "type": "string",
+                "default": "",
+                "description": "Optional VPN/proxy URL override for this model (e.g. http://127.0.0.1:7890, falls back to vibe-coding.vpnProxyUrl)"
               }
             },
             "required": [
