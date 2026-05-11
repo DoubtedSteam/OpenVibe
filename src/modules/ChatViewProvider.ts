@@ -465,7 +465,7 @@ Uncommitted changes will be lost.`,
     padding: 8px 12px;
     border-radius: 12px;
     line-height: 1.55;
-    white-space: pre-wrap;
+     white-space: normal;
   }
   .bubble p { margin: 8px 0; }
   .bubble p:first-child { margin-top: 0; }
