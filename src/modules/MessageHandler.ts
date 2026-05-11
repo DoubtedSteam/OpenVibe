@@ -267,7 +267,7 @@ export class MessageHandler {
               this._context.addMessageToSession(this._originSessionId!, { role: 'tool', content: result, tool_call_id: toolCall.id });
 
               // ── 在聊天中显示修改文件列表（hiddenFromLlm 不占用 LLM 上下文）────
-              const displayContent = `✅ **任务完成**${summary ? ': ' + summary : ''}${fileSummary}`;
+              const displayContent = `✅ **任务完成**${summary ? '\n' + summary : ''}${fileSummary}`;
               this._postIfSameSession({ type: 'addMessage', message: { role: 'assistant', content: displayContent } });
               this._context.addMessageToSession(this._originSessionId!, { role: 'assistant', content: displayContent, hiddenFromLlm: true });
 
