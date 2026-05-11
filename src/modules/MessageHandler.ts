@@ -269,7 +269,7 @@ export class MessageHandler {
               // ── 在聊天中显示修改文件列表（hiddenFromLlm 不占用 LLM 上下文）────
               // 将 summary 中 "xxx；1) yyy；2) zzz" 格式自动变为换行分段
               const fmtSummary = summary
-                ? summary.replace(/[；;]\s*(?=\d+[)\.])/g, '\n\n')
+                ? summary.replace(/[；;]\s*(?=\d+[)\.])/g, '\n')
                 : '';
               const summaryBlock = fmtSummary ? `\n\n${fmtSummary}` : '';
               const displayContent = `✅ **任务完成**${summaryBlock}${fileSummary}`;
