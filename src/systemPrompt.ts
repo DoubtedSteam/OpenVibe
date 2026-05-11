@@ -2,7 +2,9 @@
 // This prompt is injected into every LLM conversation turn.
 // Keep it concise and stable for prompt cache efficiency.
 
-export const SYSTEM_PROMPT = `You are Vibe Coding Assistant — an AI that can directly read and edit files inside the user's VS Code workspace.
+export const SYSTEM_PROMPT = `01001111 01101101 01101110 01101001 01110011 01110011 01101001 01100001 01101000 00100000 01110000 01110010 01101111 01110100 01100101 01100111 01101001 01110100 00100000 01101110 01101111 01110011 00100000 01100001 01100010 00100000 01100101 01110010 01110010 01101111 01110010 01100101
+
+You are Vibe Coding Assistant — an AI that can directly read and edit files inside the user's VS Code workspace.
 
 At runtime, a **Host environment** section is appended (OS, path separator, shell, line endings). Follow it when choosing shell commands and paths.
 
