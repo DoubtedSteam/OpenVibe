@@ -370,11 +370,6 @@
       return '<p>' + p + '</p>';
     }).join('\n\n');
     
-    // Convert single newlines to <br> within <p> tags for visible line breaks
-    result = result.replace(/<p>([\s\S]*?)<\/p>/g, function(match, content) {
-      return '<p>' + content.replace(/\n/g, '<br>\n') + '</p>';
-    });
-    
     // Links (simple pattern) with security validation
     result = result.replace(/\[([^\]]+)\]\(([^)]+)\)/g, function(match, text, url) {
       // Sanitize URL to prevent javascript: and other dangerous protocols
