@@ -360,17 +360,15 @@
     result = paragraphs.map(function(p) {
       p = p.trim();
       if (!p) return '';
-      // Don't wrap if it's already a block element
+      // Don't wrap if it starts with a block element, or already contains list markup
       if (p.startsWith('<h') || p.startsWith('<table') || p.startsWith('<ul') || p.startsWith('<ol') || 
           p.startsWith('<li') || p.startsWith('<pre') || p.startsWith('<code') ||
-          p.startsWith('\u202D\u202ECODEBLOCK') || p.startsWith('\u202D\u202ECODEINLINE')) {
+          p.startsWith('\u202D\u202ECODEBLOCK') || p.startsWith('\u202D\u202ECODEINLINE') ||
+          /<(ul|ol)\b/.test(p)) {
         return p;
       }
       return '<p>' + p + '</p>';
     }).join('\n\n');
-    // Convert single newlines to <br> for visible line breaks within paragraphs.
-    // \n\n between paragraphs is preserved (first \n is followed by another \n so not matched).
-    result = result.replace(/\n(?!\n)/g, '<br>\n');
     
     // Links (simple pattern) with security validation
     result = result.replace(/\[([^\]]+)\]\(([^)]+)\)/g, function(match, text, url) {
