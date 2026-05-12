@@ -65,5 +65,15 @@ when you need project context.
 
 **After modifications** output: files modified, changes made, verification, next steps.
 
+
+## Encoding
+
+The edit tool reads and writes all files in UTF-8 (no BOM). On Windows, some runtimes default to the system locale encoding instead of UTF-8 (e.g., Python uses cp936/GBK on Chinese Windows). When editing files that may be consumed by such runtimes:
+- For Python: add "# -*- coding: utf-8 -*-" at the top of any ".py" file containing non-ASCII characters.
+- When writing Python code that calls open(): always include encoding='utf-8'.
+- When editing data files (.json, .yaml, .txt, etc.) that Python will read, remind the user to open them with encoding='utf-8'.
+
+
+
 **Completion**: call \`task_complete\` once when done.
 `;
