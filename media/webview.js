@@ -843,9 +843,10 @@
             '<span>' + formatTime(session.updated) + '</span>' +
           '</div>' +
         '</div>' +
-        '<div class="session-actions">' +
-          '<button class="session-btn edit-btn" title="Rename">✏️</button>' +
-          '<button class="session-btn delete-btn" title="Delete">🗑</button>' +
+        '<div class=\"session-actions\">' +
+          '<button class=\"session-btn edit-btn\" title=\"Rename\">✏️</button>' +
+          '<button class=\"session-btn copy-btn\" title=\"Duplicate\">📋</button>' +
+          '<button class=\"session-btn delete-btn\" title=\"Delete\">🗑</button>' +
         '</div>';
       item.addEventListener('click', function (e) {
         if (!e.target.closest('.session-actions')) {
@@ -861,6 +862,11 @@
       if (delBtn) delBtn.addEventListener('click', function (e) {
         e.stopPropagation();
         safePost({ type: 'deleteSession', sessionId: session.id });
+      });
+      var copyBtn = item.querySelector('.copy-btn');
+      if (copyBtn) copyBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        safePost({ type: 'duplicateSession', sessionId: session.id });
       });
       sessionsList.appendChild(item);
     });

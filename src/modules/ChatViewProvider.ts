@@ -214,7 +214,16 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           this._replayWebview();
         }
       }
+      if (msg.type === 'duplicateSession') {
+        const newSession = await this._sessionManager.duplicateSession(msg.sessionId);
+        if (newSession) {
+          this._toolExecutor.restorePersistedTodoState(null);
+          this._uiManager.post({ type: 'clearMessages' });
+          this._replayWebview();
+        }
+      }
       if (msg.type === 'updateSessionTitle') {
+
         await this._updateSessionTitle(msg.sessionId, msg.title);
       }
       if (msg.type === 'renameSession') {

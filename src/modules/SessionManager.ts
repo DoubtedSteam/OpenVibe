@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { ChatMessage, ChatSession, AgentLogEntry, AssistantTodoPersistedState } from '../types';
+import { ChatMessage, ChatSession, AgentLogEntry, AssistantTodoPersistedState, GitSnapshot } from '../types';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -524,6 +524,64 @@ export class SessionManager {
     
     return newSession;
   }
+
+  /**
+   * Creates a deep copy of an existing session. The duplicate has its own unique ID,
+   * its own copy of all messages, agent logs, snapshots, activated skills, and model
+   * selection. The assistant todo state is NOT copied so the duplicate starts fresh.
+   * Switches to the new session after creation.
+   */
+  public async duplicateSession(sourceSessionId: string): Promise<ChatSession | null> {
+    const sourceSession = this._sessions.find(s => s.id === sourceSessionId);
+    if (!sourceSession) {
+      return null;
+    }
+
+    // Ensure full data is loaded for the source session
+    const sessionsDir = this._ensureSessionsDir();
+    if (sessionsDir && sourceSession.messages.length === 0) {
+      await this._loadSessionDataFile(sourceSession, sessionsDir);
+    }
+
+    const now = Date.now();
+    const newId = `session_${now}_${Math.random().toString(36).substr(2, 9)}`;
+
+    // Deep copy messages, llmMessages, agentLogs, snapshots
+    const deepCopyMessages: ChatMessage[] = JSON.parse(JSON.stringify(sourceSession.messages ?? []));
+    const deepCopyLlmMessages: ChatMessage[] | undefined = sourceSession.llmMessages
+      ? JSON.parse(JSON.stringify(sourceSession.llmMessages))
+      : undefined;
+    const deepCopyAgentLogs: AgentLogEntry[] | undefined = sourceSession.agentLogs
+      ? JSON.parse(JSON.stringify(sourceSession.agentLogs))
+      : undefined;
+    const deepCopySnapshots: GitSnapshot[] | undefined = sourceSession.snapshots
+      ? JSON.parse(JSON.stringify(sourceSession.snapshots))
+      : undefined;
+
+    const newSession: ChatSession = {
+      id: newId,
+      title: `Copy of ${sourceSession.title}`,
+      created: now,
+      updated: now,
+      messages: deepCopyMessages,
+      llmMessages: deepCopyLlmMessages,
+      agentLogs: deepCopyAgentLogs,
+      snapshots: deepCopySnapshots,
+      isActive: true,
+      lastOpenedAt: now,
+      // Copy skill and model configuration so the duplicate behaves identically
+      activatedSkills: sourceSession.activatedSkills ? [...sourceSession.activatedSkills] : undefined,
+      selectedModelIndex: sourceSession.selectedModelIndex,
+      // Intentionally NOT copying assistantTodoState — duplicate starts fresh
+    };
+
+    this._sessions.push(newSession);
+    this._saveSessions();
+    await this.switchSession(newId);
+
+    return newSession;
+  }
+
 
   public clearHistory(): void {
     // Clear messages in current session
