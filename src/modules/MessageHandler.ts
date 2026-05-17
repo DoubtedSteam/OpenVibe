@@ -287,6 +287,26 @@ export class MessageHandler {
             try {
               if (name === 'compact') {
                 result = await this._context.compactHistory(false);
+              } else if (name === 'ask_human') {
+                // ask_human: user's response is injected as a user message (like main dialog),
+                // not as a tool result. Break out of the for loop so the while loop continues
+                // and the LLM responds to the user's input.
+                result = await this._context.executeTool(name, args);
+                const parsed = JSON.parse(result);
+                if (parsed.success) {
+                  // Add the user's response as a user message
+                  const userText = parsed.cancelled
+                    ? `[User cancelled: ${parsed.question}]`
+                    : parsed.message || '[User responded]';
+                  this._postIfSameSession({ type: 'addMessage', message: { role: 'user', content: userText } });
+                  this._context.addMessageToSession(this._originSessionId!, { role: 'user', content: userText });
+                } else {
+                  // Fallback: add as tool result
+                  this._postIfSameSession({ type: 'toolResult', name, result });
+                  this._context.addMessageToSession(this._originSessionId!, { role: 'tool', content: result, tool_call_id: toolCall.id });
+                }
+                // Skip remaining tool_calls in this turn (user input interrupts the flow)
+                break; // break out of for loop, while loop will continue
               } else {
                 result = await this._context.executeTool(name, args);
               }
@@ -294,9 +314,11 @@ export class MessageHandler {
               result = JSON.stringify({ error: e.message });
             }
 
-            // Post tool result (compact only modifies llmMessages, frontend unaffected)
-            this._postIfSameSession({ type: 'toolResult', name, result });
-            this._context.addMessageToSession(this._originSessionId!, { role: 'tool', content: result, tool_call_id: toolCall.id });
+            // For non-ask_human tools, post tool result normally
+            if (name !== 'ask_human') {
+              this._postIfSameSession({ type: 'toolResult', name, result });
+              this._context.addMessageToSession(this._originSessionId!, { role: 'tool', content: result, tool_call_id: toolCall.id });
+            }
           } // End of for (const toolCall of response.toolCalls)
           if (stopAfterTools) {
             break;

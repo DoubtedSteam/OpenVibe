@@ -218,8 +218,13 @@ export class ConversationService {
    * Removes assistant turns whose tool_calls never received matching tool results.
    * This is a standalone version that operates on a given array and returns a new copy.
    * Used by compactHistory to sanitize the to-be-compressed messages before sending to API.
+   *
+   * @param preservePendingAssistant - If true, the trailing assistant+tool block (at the end
+   *   of the array) is kept even if some tool_calls lack responses, because those responses
+   *   are still being generated in the current LLM turn and will be appended after compact
+   *   completes. This prevents the tool responses from becoming orphaned `tool` messages.
    */
-  private _sanitizeMessageList(messages: ChatMessage[]): ChatMessage[] {
+  private _sanitizeMessageList(messages: ChatMessage[], preservePendingAssistant = false): ChatMessage[] {
     const clean: ChatMessage[] = [];
     let i = 0;
     while (i < messages.length) {
@@ -239,9 +244,17 @@ export class ConversationService {
         );
         // Only keep this assistant+tool block if every tool_call has a matching response
         if (Array.from(requiredIds).every(id => respondedIds.has(id))) {
+          // All tool_calls responded → keep the block
+          clean.push(msg);
+          clean.push(...toolMessages);
+        } else if (preservePendingAssistant && j >= messages.length) {
+          // Reached end of array: this is the current turn awaiting tool responses.
+          // Keep the assistant (and any partial tool results) so its future tool
+          // responses (added by MessageHandler after compact) are not orphaned.
           clean.push(msg);
           clean.push(...toolMessages);
         }
+        // Otherwise: incomplete block not at end → remove it (responses will never come)
         i = j;
       } else if (msg.role === 'tool') {
         // Orphaned tool message (no preceding assistant) — skip it
@@ -384,7 +397,7 @@ export class ConversationService {
     }
 
     const toCompress = messages.slice(0, reserveStart);
-    const toKeep = this._sanitizeMessageList(messages.slice(reserveStart));
+    const toKeep = this._sanitizeMessageList(messages.slice(reserveStart), true);
 
       // ── Build compact request ────────────────────────────────────────────
       // msg[0] = system prompt + host env

@@ -40,21 +40,20 @@ export async function askHumanTool(
       return JSON.stringify({ error: 'ask_human requires a non-empty question.' });
     }
     const result = await userConfirmFn(question);
-    if (result.approved) {
-      return JSON.stringify({
-        success: true,
-        requestId: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-        question,
-        completedAt: Date.now(),
-        message: result.userMessage || 'User confirmed completion of the requested task.',
-      });
-    } else {
-      return JSON.stringify({
-        success: false,
-        error: 'cancelled',
-        message: 'User cancelled the assistance request.',
-      });
-    }
+    // Always return success=true so the LLM sees a normal tool result.
+    // The cancelled/done distinction is conveyed via the message content.
+    return JSON.stringify({
+      success: true,
+      requestId: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      question,
+      completedAt: Date.now(),
+      cancelled: !result.approved,
+      message: result.userMessage
+        ? result.userMessage
+        : result.approved
+          ? 'User confirmed completion of the requested task.'
+          : 'User cancelled the assistance request.',
+    });
   } catch (e: any) {
     return JSON.stringify({ error: e.message });
   }
