@@ -963,12 +963,23 @@
     var msg = humanAssistInput ? humanAssistInput.value.trim() : '';
     respondConfirm(true, msg);
   });
-  // Ctrl+Enter / Cmd+Enter to send in human assistance textarea
+  // Enter to send, Ctrl+Enter / Cmd+Enter to insert newline in human assistance textarea
   if (humanAssistInput) humanAssistInput.addEventListener('keydown', function (e) {
-    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+    if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
       e.preventDefault();
       var msg = humanAssistInput.value.trim();
       respondConfirm(true, msg);
+    }
+    // Ctrl+Enter / Cmd+Enter to insert newline
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      var start = humanAssistInput.selectionStart;
+      var end = humanAssistInput.selectionEnd;
+      humanAssistInput.value = humanAssistInput.value.substring(0, start) + '\n' + humanAssistInput.value.substring(end);
+      humanAssistInput.selectionStart = humanAssistInput.selectionEnd = start + 1;
+      // Trigger input event to auto-resize
+      var evt = new Event('input', { bubbles: true });
+      humanAssistInput.dispatchEvent(evt);
     }
   });
   // Auto-resize human assistance textarea on input
@@ -1141,7 +1152,18 @@
           return;
         }
       }
-      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (sendBtn) sendBtn.click(); }
+      if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.metaKey) { e.preventDefault(); if (sendBtn) sendBtn.click(); }
+      // Ctrl+Enter / Cmd+Enter to insert newline
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        var start = input.selectionStart;
+        var end = input.selectionEnd;
+        input.value = input.value.substring(0, start) + '\n' + input.value.substring(end);
+        input.selectionStart = input.selectionEnd = start + 1;
+        // Trigger input event to auto-resize
+        var evt = new Event('input', { bubbles: true });
+        input.dispatchEvent(evt);
+      }
     });
     input.addEventListener('input', function () {
       input.style.height = 'auto';
