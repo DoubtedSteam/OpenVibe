@@ -115,6 +115,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       getSessionEditedFiles: () => this._toolExecutor.getSessionEditedFiles(),
       getEditPermissionEnabled: () => this._uiManager.getEditPermissionEnabled(),
       compactHistory: (triggeredByTokenLimit) => this._conversation.compactHistory(triggeredByTokenLimit),
+      addUsageSnapshot: (promptTokens) => this._conversation.addUsageSnapshot(promptTokens),
       onUserInstructionStart: () => this._toolExecutor.resetReviewUiCounters(),
       operation: this._operation,
       onStopSideEffects: () => this._uiManager.cancelPendingConfirms(),

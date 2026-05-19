@@ -16,6 +16,28 @@ import { COMPACT_RESERVE_TOKENS } from '../constants';
  * transcripts, agent IDs, or merge parallel branches without touching the webview.
  */
 export class ConversationService {
+  /** Snapshot of each main LLM call: { msgCount, totalPromptTokens }.
+   *  Used by compactHistory to determine the 20k-token reserve window
+   *  using accurate API prompt_tokens instead of local character estimation. */
+  private _usageSnapshots: Array<{ msgCount: number; totalPromptTokens: number }> = [];
+
+  /** Record a usage snapshot after each main LLM call.
+   *  totalPromptTokens = usage.prompt_tokens from the API response
+   *  (exact count for the entire prompt including system message). */
+  addUsageSnapshot(totalPromptTokens: number): void {
+    const llmMessages = this._session.getLlmMessages();
+    this._usageSnapshots.push({
+      msgCount: llmMessages.length,
+      totalPromptTokens,
+    });
+  }
+
+  /** Reset usage snapshots (e.g. after compact or session switch). */
+  resetUsageSnapshots(): void {
+    this._usageSnapshots = [];
+  }
+
+
   constructor(
     private readonly _session: SessionManager,
     private readonly _getApiConfig: () => ApiConfig,
@@ -267,54 +289,30 @@ export class ConversationService {
     return clean;
   }
 
-  // ─── Token estimation helpers ────────────────────────────────────────────
-
-  // ─── Token estimation helpers ────────────────────────────────────────────
+  // ─── Reserve window (based on API prompt_tokens snapshots) ───────────────
 
   /**
-   * Rough token estimation for a string.
-   * 1 token ≈ 3.5 characters (blended average for mixed Chinese/English).
-   * Errs slightly high for safety.
-   */
-  private _estimateTokens(text: string): number {
-    if (!text) return 0;
-    return Math.ceil(text.length / 3.5);
-  }
-
-  /** Estimate tokens consumed by a single message (content + metadata overhead). */
-  private _estimateMessageTokens(msg: ChatMessage): number {
-    let total = 0;
-    if (typeof msg.content === 'string') {
-      total += this._estimateTokens(msg.content);
-    }
-    total += 1; // role label overhead
-    if (msg.tool_calls) {
-      total += msg.tool_calls.length * 20; // overhead per tool call
-      for (const tc of msg.tool_calls) {
-        total += this._estimateTokens(tc.function.name + tc.function.arguments);
-      }
-    }
-    if (msg.tool_call_id) {
-      total += 2;
-    }
-    return total;
-  }
-
-  /**
-   * Scan from the end of the message list to find where the reserve window begins.
-   * Messages from this index onward are kept intact; everything before is compressed.
+   * Find where to start the reserve window using actual API prompt_tokens.
+   * Scans snapshots from the end: the difference between consecutive snapshots'
+   * totalPromptTokens reveals how many tokens the messages between them consumed.
+   * Messages from the cutoff index onward are kept intact; everything before is compressed.
    * Returns 0 when no compaction is needed (all messages fit within the reserve window).
    */
   private _findReserveWindowStart(messages: ChatMessage[]): number {
-    let tokenCount = 0;
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const msg = messages[i];
-      if (msg.hiddenFromLlm || msg.role === 'event') continue;
-      tokenCount += this._estimateMessageTokens(msg);
-      if (tokenCount > COMPACT_RESERVE_TOKENS) {
-        return i + 1;
+    const snapshots = this._usageSnapshots;
+    if (snapshots.length === 0) return 0;
+
+    const last = snapshots[snapshots.length - 1];
+    // Scan snapshots from the end to find where 20k tokens ago was
+    for (let i = snapshots.length - 2; i >= 0; i--) {
+      const diff = last.totalPromptTokens - snapshots[i].totalPromptTokens;
+      if (diff >= COMPACT_RESERVE_TOKENS) {
+        // Messages from snapshots[i+1].msgCount onward are the ones that
+        // push cumulative tokens past the reserve threshold.
+        return snapshots[i + 1].msgCount;
       }
     }
+    // All snapshots combined still fit within COMPACT_RESERVE_TOKENS
     return 0;
   }
 
@@ -476,6 +474,10 @@ export class ConversationService {
       };
 
       this._session.setLlmMessages([summaryMessage, ...toKeep]);
+      // Reset usage snapshots: after compact, the message structure has changed,
+      // so old snapshots are no longer valid. The next main LLM call will
+      // push a fresh first snapshot for the new (smaller) context.
+      this.resetUsageSnapshots();
 
       return JSON.stringify({
         success: true,
