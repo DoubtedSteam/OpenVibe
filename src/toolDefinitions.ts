@@ -458,7 +458,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
           },
           maxLength: {
             type: 'number',
-            description: 'Maximum characters to return from the extracted content (default 16000, max 50000).',
+            description: 'Maximum characters to return from the extracted content (default 16000, max 1000000).',
           },
           cookie: {
             type: 'string',

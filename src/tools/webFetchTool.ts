@@ -16,7 +16,7 @@ import {
  * from the HTML response. Supports optional cookies and custom headers.
  *
  * @param params.url         Full URL to fetch (e.g. "https://example.com").
- * @param params.maxLength   Maximum characters in the extracted content (default 16000, max 50000).
+ * @param params.maxLength   Maximum characters in the extracted content (default 16000, max 1000000).
  * @param params.cookie      Optional cookie string (e.g. "session=abc123").
  * @param params.headers     Optional JSON object of custom HTTP headers.
  * @param params.timeoutMs   Request timeout in milliseconds (default 15000, max 30000).
@@ -56,7 +56,7 @@ export async function webFetchTool(params: WebFetchParams): Promise<string> {
       Object.assign(reqHeaders, customHeaders);
     }
 
-    const maxLen = Math.min(Math.max(params.maxLength ?? 16000, 100), 50000);
+    const maxLen = Math.min(Math.max(params.maxLength ?? 16000, 100), 1000000);
     const timeout = Math.min(Math.max(params.timeoutMs ?? 15000, 1000), 30000);
 
     const response = await axios.get(params.url, {
