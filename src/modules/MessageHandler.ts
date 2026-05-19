@@ -16,12 +16,6 @@ export class MessageHandler {
   private _originSessionId: string | null = null;
   /** Cumulative token usage across all LLM calls in this session. */
   private _accumulatedUsage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
-  /**
-   * Snapshot of _accumulatedUsage.total_tokens at the last compact.
-   * Auto-compact triggers when delta since last compact exceeds AUTO_COMPACT_TOKEN_THRESHOLD (1M),
-   * ensuring compact only fires once per million tokens accumulated, not continuously.
-   */
-  private _lastCompactTotal = 0;
 
 
 
@@ -457,7 +451,7 @@ export class MessageHandler {
   /**
    * Accumulate token usage from API response, send to webview.
    * Records a usage snapshot (for reserve window calculation) and
-   * triggers auto-compact when the delta since last compact exceeds threshold.
+   * triggers auto-compact when the current response's total_tokens exceeds threshold.
    */
   private _accumulateAndSendUsage(
     usage: { prompt_tokens: number; completion_tokens: number; total_tokens: number } | undefined,
@@ -477,16 +471,14 @@ export class MessageHandler {
     // This is used by compactHistory to determine the 20k-token reserve window.
     this._context.addUsageSnapshot(usage.prompt_tokens);
 
-    // Auto-compact when the delta since last compact exceeds threshold.
-    // This ensures compact fires at most once per ~1M accumulated tokens,
-    // preventing continuous re-triggering after the first compact.
+    // Auto-compact when the current response's total_tokens exceeds threshold.
+    // usage.total_tokens is the exact token count for this request (prompt + completion),
+    // which directly reflects the current conversation context size.
     // Skip if there are pending tool_calls not yet responded to:
     // otherwise the fire-and-forget compact may run between the assistant(tool_calls)
     // message being added and its tool results being added, creating orphaned
     // tool messages that cause API 400 "role 'tool' must follow tool_calls".
-    if (!hasPendingToolCalls &&
-        (this._accumulatedUsage.total_tokens - this._lastCompactTotal) >= AUTO_COMPACT_TOKEN_THRESHOLD) {
-      this._lastCompactTotal = this._accumulatedUsage.total_tokens;
+    if (!hasPendingToolCalls && usage.total_tokens >= AUTO_COMPACT_TOKEN_THRESHOLD) {
       // Fire-and-forget compact
       this._context.compactHistory(true).catch(() => {});
     }
