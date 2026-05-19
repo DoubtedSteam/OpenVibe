@@ -9,7 +9,6 @@ import { sendChatMessage } from '../api';
 import { gitSnapshotTool } from '../tools';
 import { AUTO_COMPACT_TOKEN_THRESHOLD } from '../constants';
 import type { OperationController } from '../operationController';
-import { extractXmlPlaceholders, applyXmlPlaceholders } from '../mmOutput';
 
 export class MessageHandler {
   private _isRunning = false;
@@ -225,12 +224,9 @@ export class MessageHandler {
 
             const name = toolCall.function.name;
             const rawArgs = toolCall.function.arguments;
-
-            // Parse arguments and inject <edit-content> blocks into empty newContent
-            const { sanitizedArgs, placeholderMap } = extractXmlPlaceholders(rawArgs);
+            // 路线B: args 直解析，实际内容通过 response.content 中 <edit-content> 标签注入
             let args: Record<string, unknown> = {};
-            try { args = JSON.parse(sanitizedArgs); } catch { try { args = JSON.parse(rawArgs); } catch { /* keep empty */ } }
-            if (placeholderMap.size > 0) { applyXmlPlaceholders(args, placeholderMap); }
+            try { args = JSON.parse(rawArgs); } catch { /* keep empty */ }
             if (editContentBlocks.length > 0 &&
                 (name === 'edit' || name === 'run_shell_command')) {
               if (name === 'edit' && (!args['newContent'] || args['newContent'] === '')) {

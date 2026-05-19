@@ -14,58 +14,21 @@ export interface XmlPlaceholderResult {
 }
 
 /**
- * Process a raw JSON tool-call arguments string BEFORE JSON.parse.
- *
- * Scans for {@code "newContent":"<edit-content>...payload...</edit-content>"} and
- * {@code "command":"<shell-content>...payload...</shell-content>"} patterns,
- * extracts the raw payload between tags (still JSON-encoded at this point),
- * replaces the whole tagged region with a safe placeholder, and decodes the
- * payload back to its original text.
- *
- * The caller JSON.parses the sanitized args, then swaps placeholders back to
- * the decoded payloads before writing to disk.
+ * 路线B：AI 在 visible response 中使用 <edit-content> / <shell-content> 标签，
+ * 实际内容由 MessageHandler 从 response.content 提取后直接注入 args。
+ * 因此 arguments JSON 字符串中不再包含 XML 标签，无需占位符替换。
+ * 此函数保留接口签名以兼容调用方，但直接返回输入原串和空 Map。
  */
 export function extractXmlPlaceholders(rawArgs: string): XmlPlaceholderResult {
-  const placeholderMap = new Map<string, string>();
-
-  // Match "newContent" or "command" field whose value starts with <edit-content> / <shell-content>
-  const re = /"(newContent|command)"\s*:\s*"<(edit-content|shell-content)>([\s\S]*?)<\/(edit-content|shell-content)>"/gi;
-
-  let idx = 0;
-  const sanitizedArgs = rawArgs.replace(re, (full, fieldName, openTag, rawPayload, closeTag) => {
-    if (openTag.toLowerCase() !== closeTag.toLowerCase()) return full;
-
-    // Decode JSON string escaping (\\n → newline, \\\\ → \\, etc.)
-    let decoded = '';
-    try {
-      decoded = JSON.parse('"' + rawPayload + '"');
-    } catch {
-      decoded = rawPayload;
-    }
-
-    const placeholder = `__XML_PH_${idx}__`;
-    placeholderMap.set(placeholder, decoded);
-    idx++;
-    return '"' + fieldName + '":"' + placeholder + '"';
-  });
-
-  return { sanitizedArgs, placeholderMap };
+  return { sanitizedArgs: rawArgs, placeholderMap: new Map() };
 }
 
 /**
- * Apply placeholder replacements inside a JSON-parsed args object.
- * Walks the object shallowly and replaces known placeholders in string values.
- * Returns the same object (mutated in place).
+ * 路线B 不再需要占位符替换，此函数保留仅为兼容性。
  */
 export function applyXmlPlaceholders(
   args: Record<string, unknown>,
-  placeholderMap: Map<string, string>
+  _placeholderMap: Map<string, string>
 ): Record<string, unknown> {
-  for (const key of Object.keys(args)) {
-    const val = args[key];
-    if (typeof val === 'string' && placeholderMap.has(val)) {
-      args[key] = placeholderMap.get(val);
-    }
-  }
   return args;
 }
