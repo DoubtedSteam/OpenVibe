@@ -101,6 +101,19 @@ export class MessageHandler {
     }
 
 
+    // ── BTW (Break The Wall) 检测 ───────────────────────────────────────
+    // 以 \btw 开头的消息启动一个临时子对话。
+    // 连续的 \btw 消息累计在子对话中，一旦遇到非 \btw 消息则子对话结束。
+    let isBtw = false;
+    let displayText = text;
+    if (text && text.trimStart().startsWith('\\btw')) {
+      isBtw = true;
+      // 剥离 \btw 前缀及后续空格
+      const stripped = text.trimStart().slice(4).trimStart();
+      displayText = stripped;
+      text = stripped;
+    }
+
     // Empty message = "continue" signal; add placeholder to conversation history for LLM context.
     if (text) {
       // Resolve @ references before storing the message
@@ -136,8 +149,13 @@ export class MessageHandler {
       const ctxBlock = `─── Context ───\n${ctxLines.join('\n')}\n────────────────\n\n`;
       const enrichedText = ctxBlock + text;
 
-      this._postIfSameSession({ type: 'addMessage', message: { role: 'user', content: text } });
-      this._context.addMessageToSession(this._originSessionId!, { role: 'user', content: enrichedText });
+      // 显示时剥离 \btw 前缀
+      this._postIfSameSession({ type: 'addMessage', message: { role: 'user', content: displayText } });
+      this._context.addMessageToSession(this._originSessionId!, {
+        role: 'user',
+        content: enrichedText,
+        btwBranch: isBtw || undefined,
+      });
       // Fire-and-forget: auto-name the session from the first user message.
       this._context.autoNameSession?.();
     } else {

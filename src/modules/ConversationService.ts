@@ -156,6 +156,22 @@ export class ConversationService {
   buildMessagesForLlm(systemPrompt: string): ChatMessage[] {
     const visible = this.getLlmMessages().filter((m) => !m.hiddenFromLlm && m.role !== 'event');
 
+    // ── BTW (Break The Wall) 上下文过滤 ──────────────────────────────────
+    // 找到 visible 中最后一条 user 消息
+    let lastUserIdx = -1;
+    for (let i = visible.length - 1; i >= 0; i--) {
+      if (visible[i].role === 'user') {
+        lastUserIdx = i;
+        break;
+      }
+    }
+    // 如果最后一条 user 消息是 btwBranch，则上下文 = [历史][btw 对话]（全部保留）
+    // 否则过滤掉所有 btwBranch 消息，上下文 = [历史][新对话]
+    const isBtwActive = lastUserIdx >= 0 && visible[lastUserIdx].btwBranch === true;
+    const filtered = isBtwActive
+      ? visible
+      : visible.filter((m) => !m.btwBranch);
+
     // msg[0]: System prompt (caller has merged static host environment inside)
     const messages: ChatMessage[] = [{ role: 'system', content: systemPrompt }];
 
@@ -183,7 +199,7 @@ export class ConversationService {
       }
     }
 
-    messages.push(...visible);
+    messages.push(...filtered);
     return messages;
   }
 

@@ -19,6 +19,13 @@ export interface ChatMessage {
    * so tool-injected bubbles (e.g. todo list display) do not break the assistant/tool message sequence.
    */
   hiddenFromLlm?: boolean;
+  /**
+   * Marked as `true` when the user message starts with `\btw`.
+   * BTW (Break The Wall) messages form a temporary sub-conversation.
+   * During BTW mode, LLM context = [history] + [btw messages].
+   * After BTW ends, btw messages are excluded from LLM context.
+   */
+  btwBranch?: boolean;
 }
 
 export interface AgentLogEntry {
