@@ -36,6 +36,7 @@
 
 | 日期 | 内容 |
 |------|------|
+| 2026-05-20 | 新增 **BTW（Break The Wall）临时子对话**：用 `\btw` 前缀启动旁支对话，上下文仅在该子对话期间包含历史+btw 内容；结束后 btw 消息自动从 LLM 上下文中移除，不影响主对话流。 |
 | 2026-04-11 | 增加 **Git** 支持：编码过程中可自动创建快照，并在 UI 中回滚与管理版本。 |
 | 2026-04-14 | 增加**独立审查**：任务清单审查与代码编辑审查，由独立 LLM 代理提升修改质量。 |
 | 2026-04-16 | **强化 shell 审查与执行**：1) 严格禁止使用 shell 进行任何文件读写操作（强制使用专用工具） 2) 结构化返回 + 关键错误摘要 3) 注入 todo 与最近执行历史到审查流程 4) 多级审查流程：主智能体→shell 编辑代理→独立安全审查→用户确认 |
@@ -64,6 +65,9 @@
 > **2026-05-02:** **Knowledge base generalization**: Split the single `.OpenVibe/memory.md` into a **3-level directory** `.OpenVibe/memory/` (`README.md` meta-definition + `L1-purpose.md` + `L2-inventory.md` + `L3-roles.md`), enabling on-demand reading and independent cache layers. The architecture is generalized as a universal knowledge base system applicable to any project. System prompt updated to a minimal reminder version.
 
 > **2026-05-09:** **Browser Sub-Agent** — Added `browser_sub_agent` tool: AI can delegate complex browsing tasks to a sub-agent that autonomously handles page navigation, form filling, element clicking, and text extraction. The sub-agent uses its own LLM loop (same API provider) to plan and execute steps, powered by Playwright headless browser automation with SSRF protection. Returns structured JSON results (status summary + action log + page state).
+
+> **2026-05-20:** **BTW (Break The Wall) sub-conversation** — Start a side conversation with the `\btw` prefix. During the sub-conversation, LLM context = [history] + [btw messages]; when the sub-conversation ends, btw messages are automatically excluded from LLM context, keeping the main chat flow clean.
+
 
 <h2 id="project-overview">项目概述 / Project overview</h2>
 
@@ -166,16 +170,19 @@ edit(filePath, startLine, endLine, newContent)
 
 ### LLM 消息过滤规则
 
-`buildMessagesForLlm()` 中过滤掉两类消息：
+`buildMessagesForLlm()` 中过滤消息：
 
-| `role` | `hiddenFromLlm` | 发给 LLM？ | 用途 |
-|--------|----------------|-----------|------|
-| `system` | — | ✅ | 系统提示 |
-| `user` | — | ✅ | 用户输入 |
-| `assistant` | `false` / `undefined` | ✅ | AI 回复 + `tool_calls` |
-| `assistant` | `true` | ❌ **过滤** | UI 气泡（如 todo 创建提示） |
-| `tool` | — | ✅ | 工具执行结果 |
-| `event` | — | ❌ **过滤** | 仅 UI 事件通知 |
+| `role` | `hiddenFromLlm` | `btwBranch` | 发给 LLM？ | 用途 |
+|--------|----------------|-------------|-----------|------|
+| `system` | — | — | ✅ | 系统提示 |
+| `user` | — | `false` / `undefined` | ✅ | 主对话用户输入 |
+| `user` | — | `true` | ⚠️ **仅 BTW 活动时发送** | BTW 临时子对话输入 |
+| `assistant` | `false` / `undefined` | — | ✅ | AI 回复 + `tool_calls` |
+| `assistant` | `true` | — | ❌ **过滤** | UI 气泡（如 todo 创建提示） |
+| `tool` | — | — | ✅ | 工具执行结果 |
+| `event` | — | — | ❌ **过滤** | 仅 UI 事件通知 |
+
+**BTW（Break The Wall）过滤逻辑：** 当最后一条用户消息的 `btwBranch === true`（BTW 活动期间），全部消息保留 → LLM 上下文 = `[历史][btw 对话]`；否则过滤掉所有 `btwBranch` 消息 → LLM 上下文 = `[历史][新对话]`。UI 前端始终显示完整历史，BTW 过滤只影响 LLM 上下文。
 
 ### 典型消息序列
 
@@ -268,28 +275,32 @@ MessageHandler.handleUserMessage()
     │
     ├─ 1. sanitizeIncompleteToolCalls()    ← 清理未完成的 tool call 序列
     │
-    ├─ 2. 构建用户消息上下文
+    ├─ 2. BTW 检测
+    │   └─ 消息以 `\btw` 开头 → 剥离前缀并标记 `btwBranch: true`
+    │
+    ├─ 3. 构建用户消息上下文
     │   ├─ 读取 Edit Permission 状态
     │   ├─ getTodoControlInfo()            ← 检查 todo 状态
     │   └─ 嵌入 ─── Context ─── 块到用户消息正文开头
     │
-    ├─ 3. buildMessagesForLlm()
+    ├─ 4. buildMessagesForLlm()
     │   ├─ system = SYSTEM_PROMPT + hostContext + langInstr
     │   ├─ 过滤 hiddenFromLlm 和 role==='event'
+    │   ├─ BTW 过滤：最后一条 user 是 btwBranch → 全部保留；否则排除 btwBranch 消息
     │   └─ 返回 [system, user1, assistant1, tool1, ...]
     │
-    ├─ 4. sendChatMessage(messages, tools)  ← API 调用
+    ├─ 5. sendChatMessage(messages, tools)  ← API 调用
     │
-    ├─ 5. 循环处理工具调用（最多 20 轮）
+    ├─ 6. 循环处理工具调用（最多 20 轮）
     │   ├─ 解析 AI 回复中的 tool_calls
     │   ├─ 逐一执行工具
     │   ├─ 将 tool 结果加入消息列表
     │   └─ 新一轮 LLM 调用
     │
-    ├─ 6. 检查是否需要自动 compact
+    ├─ 7. 检查是否需要自动 compact
     │   └─ 累计 total_tokens ≥ 1,000,000 → 自动触发 compact
     │
-    └─ 7. 循环结束 → 等待下一条用户输入
+    └─ 8. 循环结束 → 等待下一条用户输入
 ```
 
 <h2 id="other-available-tools">其它辅助工具 / Other tools</h2>
@@ -463,8 +474,8 @@ load_skill(name="paper-revision-router")
 |------|------|
 | `src/systemPrompt.ts` | 固定系统提示模板（~75 行） |
 | `src/agentRuntimeContext.ts` | 动态生成 Host environment + Active Editor |
-| `src/modules/ConversationService.ts` | 消息组装（`buildMessagesForLlm`）、历史压缩（`compactHistory`） |
-| `src/modules/MessageHandler.ts` | 主循环：用户消息上下文注入、tool call 循环、compact 触发 |
+| `src/modules/ConversationService.ts` | 消息组装（`buildMessagesForLlm`：含 BTW 过滤 + 历史压缩`compactHistory`） |
+| `src/modules/MessageHandler.ts` | 主循环：BTW 检测、用户消息上下文注入、tool call 循环、compact 触发 |
 | `src/modules/ToolExecutor.ts` | Todo 状态管理、工具调度、shell review |
 | `src/modules/ChatViewProvider.ts` | Webview 通信、UI 消息持久化 |
 | `src/modules/UIManager.ts` | UI 状态管理（Edit Permission、Webview 通信） |
@@ -485,7 +496,7 @@ load_skill(name="paper-revision-router")
 | `src/tools/grepSearchTool.ts` | `grep_search` 工具实现 |
 | `src/tools/helpers.ts` | 全局技能池变量 + 激活回调设置 |
 | `src/api.ts` | API 调用封装（`sendChatMessage`） |
-| `src/types.ts` | `ChatMessage`、`ToolCall`、`ChatSession` 等类型定义 |
+| `src/types.ts` | `ChatMessage`、`ToolCall`、`ChatSession` 等类型定义（含 `btwBranch` 字段） |
 | `src/constants.ts` | 配置常量（`COMPACT_RESERVE_TOKENS`、`AUTO_COMPACT_TOKEN_THRESHOLD`） |
 | `src/toolDefinitions.ts` | 工具的 JSON Schema 定义 |
 | `src/mmOutput.ts` | `<edit-content>` / `<shell-content>` XML 标签提取与占位符替换 |
