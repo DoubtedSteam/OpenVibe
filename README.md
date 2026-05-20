@@ -443,6 +443,54 @@ load_skill(name="paper-revision-router")
 | `vibe-coding.shellCommandReview.reviewTimeoutMs` | `number` | `120000` | Shell 安全审查超时（毫秒，≥5000） |
 | `vibe-coding.shellCommandReview.editorTimeoutMs` | `number` | `120000` | Shell 编辑代理超时（毫秒，≥5000） |
 
+### 完整配置示例 / Full configuration example
+
+将以下内容放入 VS Code `settings.json`（修改 `apiKey` 即可使用）：
+
+```jsonc
+{
+  // ── 必需：API 配置 ──────────────────────────────────────────
+  "vibe-coding.apiKey": "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",  // ← 改成你的 Key
+  "vibe-coding.apiBaseUrl": "https://api.deepseek.com",
+  "vibe-coding.model": "deepseek-reasoner",
+
+  // ── 多模型切换（可选）─────────────────────────────────────────
+  "vibe-coding.models": [
+    {
+      "name": "DeepSeek R1",
+      "model": "deepseek-reasoner"
+    },
+    {
+      "name": "DeepSeek Chat",
+      "model": "deepseek-chat",
+      "apiBaseUrl": "https://api.deepseek.com",
+      "apiKey": "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"   // ← 可覆写 Key
+    },
+    {
+      "name": "Claude 3.5 Sonnet",
+      "model": "claude-3-5-sonnet-latest",
+      "apiBaseUrl": "https://api.anthropic.com",
+      "apiKey": "sk-ant-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    }
+  ],
+
+  // ── 交互控制 ─────────────────────────────────────────────────
+  "vibe-coding.language": "auto",         // auto / en / zh-CN
+  "vibe-coding.confirmChanges": true,      // edit 前确认
+  "vibe-coding.confirmShellCommand": true, // shell 命令确认
+  "vibe-coding.maxInteractions": -1,       // -1 = 不限
+  "vibe-coding.maxSequenceLength": 800000,
+
+  // ── 独立审查（默认开启，可单独关闭）─────────────────────────
+  "vibe-coding.editReview.enabled": true,
+  "vibe-coding.todolistReview.enabled": true,
+  "vibe-coding.shellCommandReview.enabled": true,
+
+  // ── 代理 / VPN（可选）────────────────────────────────────────
+  "vibe-coding.vpnEnabled": false,
+  "vibe-coding.vpnProxyUrl": "http://127.0.0.1:7890"
+}
+```
 > All keys are under **`vibe-coding.*`** in Settings.
 
 <h2 id="memory-management-system">内存管理 / Memory</h2>
