@@ -304,25 +304,30 @@ export class MessageHandler {
               if (name === 'compact') {
                 result = await this._context.compactHistory(false);
               } else if (name === 'ask_human') {
-                // ask_human: user's response is injected as a user message (like main dialog),
-                // not as a tool result. Break out of the for loop so the while loop continues
-                // and the LLM responds to the user's input.
-                result = await this._context.executeTool(name, args);
+                // ask_human: wait for user response, then:
+                // 1. Post toolResult to UI to update the tool card from "waiting" to completed
+                // 2. Add tool message to session (maintains message structure integrity,
+                //    prevents sanitizeIncompleteToolCalls from deleting this block)
+                // 3. Add user message so LLM sees the user's input in the next while-loop turn
+                try {
+                  result = await this._context.executeTool(name, args);
+                } catch (e: any) {
+                  result = JSON.stringify({ error: e.message });
+                }
                 const parsed = JSON.parse(result);
+                // Always update tool card UI + maintain session message structure integrity
+                this._postIfSameSession({ type: 'toolResult', name, result });
+                this._context.addMessageToSession(this._originSessionId!, { role: 'tool', content: result, tool_call_id: toolCall.id });
                 if (parsed.success) {
-                  // Add the user's response as a user message
+                  // Add the user's response as a new user message (drives next LLM turn)
                   const userText = parsed.cancelled
                     ? `[User cancelled: ${parsed.question}]`
                     : parsed.message || '[User responded]';
                   this._postIfSameSession({ type: 'addMessage', message: { role: 'user', content: userText } });
                   this._context.addMessageToSession(this._originSessionId!, { role: 'user', content: userText });
-                } else {
-                  // Fallback: add as tool result
-                  this._postIfSameSession({ type: 'toolResult', name, result });
-                  this._context.addMessageToSession(this._originSessionId!, { role: 'tool', content: result, tool_call_id: toolCall.id });
                 }
                 // Skip remaining tool_calls in this turn (user input interrupts the flow)
-                break; // break out of for loop, while loop will continue
+                break;
               } else {
                 result = await this._context.executeTool(name, args);
               }
