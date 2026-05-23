@@ -572,18 +572,18 @@
   }
 
   function getRefFilter() {
-    if (!input) return '';
+    if (!input) return null;
     var val = input.value;
     var pos = input.selectionStart;
     var before = val.slice(0, pos);
     var atIdx = before.lastIndexOf('@');
-    if (atIdx === -1) return '';
+    if (atIdx === -1) return null;
     var after = before.slice(atIdx + 1);
     // If there's a space or newline after @, it's just an @ symbol
-    if (after.length === 0) return '';
-    if (after.indexOf(' ') !== -1 || after.indexOf('\n') !== -1) return '';
+    if (after.indexOf(' ') !== -1 || after.indexOf('\n') !== -1) return null;
     // If it's @file:path, don't show autocomplete
-    if (after.indexOf(':') !== -1) return '';
+    if (after.indexOf(':') !== -1) return null;
+    // Return '' when @ found but empty (show all items), or filter text
     return after;
   }
 
@@ -1170,7 +1170,7 @@
       input.style.height = Math.min(input.scrollHeight, 120) + 'px';
       // @ autocomplete
       var filter = getRefFilter();
-      if (filter !== null && filter !== undefined && filter !== '') {
+      if (filter !== null) {
         openRefAutocomplete(filter);
       } else {
         closeRefAutocomplete();
