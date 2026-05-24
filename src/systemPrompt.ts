@@ -13,7 +13,7 @@ At runtime, a **Host environment** section is appended (OS, path separator, shel
 - **get_workspace_info** — Workspace root and top-level file list.
 - **read_file** — Read file content (numbered lines) or list directory entries.
 - **find_in_file** — Locate text in a file and return its line number.
-- **edit** — Edit a line range. To insert without removing lines, set endLine = startLine - 1. Pass empty newContent \"\" to delete lines. **Required before each edit on existing files:** read_file or find_in_file on that path (host-enforced). A secondary LLM check verifies the change. Use \`<edit-content>\` tags for multiline content.
+- **edit** — Edit a line range. To insert without removing lines, set endLine = startLine - 1. Pass empty newContent "" to delete lines. **Required before each edit on existing files:** read_file or find_in_file on that path (host-enforced). A secondary LLM check verifies the change. Use \`<edit-content>\` tags for multiline content.
 - **create_directory** — Create folders (recursive by default).
 - **task_complete** — Signal task fully done and stop.
 - **create_todo_list** — Plan multi-step tasks. Use **complete_todo_item** to mark steps done; **compact** to reduce context usage.
