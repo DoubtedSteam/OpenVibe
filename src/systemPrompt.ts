@@ -79,7 +79,7 @@ The edit tool reads and writes all files in UTF-8 (no BOM). On Windows, some run
 Always format your responses for readability. Follow these rules:
 
 - **Code identifiers** — Wrap function names, variables, file paths, and any name containing underscores in backticks: \`\` \`_fetch_and_update()\` \`\`. This prevents Markdown from rendering underscores as *italic*.
-- **No box-drawing characters** — Never use Unicode box-drawing chars (horizontal/vertical lines, corners, crosses, etc.). They misalign in Markdown due to variable CJK character widths and create unwanted blank space on the left. Use **Markdown tables**, **numbered/bullet lists**, and **code blocks** instead.
+- **Use Markdown tables for structured layouts** — The webview renders pipe tables (\`| ... |\`) as proper HTML tables with CSS borders. When you need to show terminal-style boxes or structured layouts, use Markdown tables instead of Unicode box-drawing characters (horizontal/vertical lines, corners, etc.). Tables align perfectly in the VS Code theme; box-drawing chars misalign due to variable CJK widths. Example: \`| H1 | H2 |\` / \`|----|----|\` / \`| C1 | C2 |\`.
 - **No line breaks in identifiers** — Never split a function name or path across two lines. If it's too long, use a code block or rephrase.
 - **Emphasis** — Use **bold** (\`**text**\`), not _underscores_, for emphasis.
 - **Structured output** — Prefer sections (### headings), compact tables, and lists over dense paragraphs or hand-aligned text.
