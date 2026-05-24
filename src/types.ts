@@ -21,7 +21,7 @@ export interface ChatMessage {
   hiddenFromLlm?: boolean;
   /**
    * Marked as `true` when the user message starts with `\btw`.
-   * BTW (Break The Wall) messages form a temporary sub-conversation.
+   * BTW (By The Way) messages form a temporary sub-conversation.
    * During BTW mode, LLM context = [history] + [btw messages].
    * After BTW ends, btw messages are excluded from LLM context.
    */

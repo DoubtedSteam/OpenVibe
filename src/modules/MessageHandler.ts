@@ -101,7 +101,7 @@ export class MessageHandler {
     }
 
 
-    // ── BTW (Break The Wall) 检测 ───────────────────────────────────────
+    // ── BTW (By The Way) 检测 ───────────────────────────────────────
     // 以 \btw 开头的消息启动一个临时子对话。
     // 连续的 \btw 消息累计在子对话中，一旦遇到非 \btw 消息则子对话结束。
     let isBtw = false;

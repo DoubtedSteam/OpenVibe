@@ -36,7 +36,7 @@
 
 | 日期 | 内容 |
 |------|------|
-| 2026-05-20 | 新增 **BTW（Break The Wall）临时子对话**：用 `\btw` 前缀启动旁支对话，上下文仅在该子对话期间包含历史+btw 内容；结束后 btw 消息自动从 LLM 上下文中移除，不影响主对话流。 |
+| 2026-05-20 | 新增 **BTW（By The Way）临时子对话**：用 `\btw` 前缀启动旁支对话，上下文仅在该子对话期间包含历史+btw 内容；结束后 btw 消息自动从 LLM 上下文中移除，不影响主对话流。 |
 | 2026-04-11 | 增加 **Git** 支持：编码过程中可自动创建快照，并在 UI 中回滚与管理版本。 |
 | 2026-04-14 | 增加**独立审查**：任务清单审查与代码编辑审查，由独立 LLM 代理提升修改质量。 |
 | 2026-04-16 | **强化 shell 审查与执行**：1) 严格禁止使用 shell 进行任何文件读写操作（强制使用专用工具） 2) 结构化返回 + 关键错误摘要 3) 注入 todo 与最近执行历史到审查流程 4) 多级审查流程：主智能体→shell 编辑代理→独立安全审查→用户确认 |
@@ -69,7 +69,7 @@
 
 > **2026-05-09:** **Browser Sub-Agent** — Added `browser_sub_agent` tool: AI can delegate complex browsing tasks to a sub-agent that autonomously handles page navigation, form filling, element clicking, and text extraction. The sub-agent uses its own LLM loop (same API provider) to plan and execute steps, powered by Playwright headless browser automation with SSRF protection. Returns structured JSON results (status summary + action log + page state).
 
-> **2026-05-20:** **BTW (Break The Wall) sub-conversation** — Start a side conversation with the `\btw` prefix. During the sub-conversation, LLM context = [history] + [btw messages]; when the sub-conversation ends, btw messages are automatically excluded from LLM context, keeping the main chat flow clean.
+> **2026-05-20:** **BTW (By The Way) sub-conversation** — Start a side conversation with the `\btw` prefix. During the sub-conversation, LLM context = [history] + [btw messages]; when the sub-conversation ends, btw messages are automatically excluded from LLM context, keeping the main chat flow clean.
 
 
 <h2 id="project-overview">项目概述 / Project overview</h2>
@@ -185,7 +185,7 @@ edit(filePath, startLine, endLine, newContent)
 | `tool` | — | — | ✅ | 工具执行结果 |
 | `event` | — | — | ❌ **过滤** | 仅 UI 事件通知 |
 
-**BTW（Break The Wall）过滤逻辑：** 当最后一条用户消息的 `btwBranch === true`（BTW 活动期间），全部消息保留 → LLM 上下文 = `[历史][btw 对话]`；否则过滤掉所有 `btwBranch` 消息 → LLM 上下文 = `[历史][新对话]`。UI 前端始终显示完整历史，BTW 过滤只影响 LLM 上下文。
+**BTW（By The Way）过滤逻辑：** 当最后一条用户消息的 `btwBranch === true`（BTW 活动期间），全部消息保留 → LLM 上下文 = `[历史][btw 对话]`；否则过滤掉所有 `btwBranch` 消息 → LLM 上下文 = `[历史][新对话]`。UI 前端始终显示完整历史，BTW 过滤只影响 LLM 上下文。
 
 ### 典型消息序列
 

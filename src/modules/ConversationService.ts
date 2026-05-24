@@ -156,7 +156,7 @@ export class ConversationService {
   buildMessagesForLlm(systemPrompt: string): ChatMessage[] {
     const visible = this.getLlmMessages().filter((m) => !m.hiddenFromLlm && m.role !== 'event');
 
-    // ── BTW (Break The Wall) 上下文过滤 ──────────────────────────────────
+    // ── BTW (By The Way) 上下文过滤 ──────────────────────────────────
     // 找到 visible 中最后一条 user 消息
     let lastUserIdx = -1;
     for (let i = visible.length - 1; i >= 0; i--) {
