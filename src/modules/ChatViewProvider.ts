@@ -557,23 +557,41 @@ Uncommitted changes will be lost.`,
   
   .bubble ul, .bubble ol { padding-left: 24px; margin: 8px 0; }
   .bubble li { margin: 4px 0; }
-  .bubble h1, .bubble h2, .bubble h3, .bubble h4, .bubble h5, .bubble h6 { margin: 16px 0 8px 0; font-weight: 600; }
-  .bubble h1 { font-size: 1.5em; }
-  .bubble h2 { font-size: 1.3em; }
-  .bubble h3 { font-size: 1.2em; }
-  .bubble h4 { font-size: 1.1em; }
-  .bubble h5, .bubble h6 { font-size: 1em; }
+  .bubble h1, .bubble h2, .bubble h3, .bubble h4, .bubble h5, .bubble h6 { margin: 16px 0 8px 0; font-weight: 600; line-height: 1.3; }
+  .bubble h1 { font-size: 1.5em; border-bottom: 1px solid var(--vscode-input-border); padding-bottom: 6px; }
+  .bubble h2 { font-size: 1.3em; border-bottom: 1px solid var(--vscode-input-border); padding-bottom: 4px; }
+  .bubble h3 { font-size: 1.2em; color: var(--vscode-textLink-foreground); }
+  .bubble h4 { font-size: 1.1em; color: var(--vscode-descriptionForeground); }
+  .bubble h5, .bubble h6 { font-size: 1em; color: var(--vscode-descriptionForeground); }
   .bubble blockquote {
-    border-left: 3px solid var(--vscode-input-border);
-    margin: 8px 0; padding-left: 12px;
-    color: var(--vscode-descriptionForeground); font-style: italic;
+    border-left: 3px solid var(--vscode-textLink-foreground);
+    margin: 10px 0; padding: 6px 14px;
+    color: var(--vscode-descriptionForeground);
+    background: var(--vscode-textBlockQuote-background, rgba(128,128,128,0.06));
+    border-radius: 0 4px 4px 0;
   }
-  .bubble table { border-collapse: collapse; margin: 8px 0; width: 100%; table-layout: fixed; overflow-wrap: break-word; }
-  .bubble th, .bubble td { border: 1px solid var(--vscode-input-border); padding: 6px 8px; text-align: left; word-break: break-word; }
+  .bubble blockquote p { margin: 4px 0; }
+  /* ── Table enhancements ─────────────────────────────────────────── */
+  .bubble table { border-collapse: collapse; margin: 10px 0; width: 100%; table-layout: auto; overflow-wrap: break-word; font-size: 0.95em; }
+  .bubble th, .bubble td { border: 1px solid var(--vscode-input-border); padding: 6px 10px; text-align: left; word-break: break-word; }
   .bubble th { background-color: var(--vscode-list-hoverBackground); font-weight: 600; }
+  .bubble tbody tr:nth-child(even) { background-color: var(--vscode-list-hoverBackground, rgba(128,128,128,0.05)); }
+  .bubble tbody tr:hover { background-color: var(--vscode-list-activeSelectionBackground, rgba(128,128,128,0.1)); }
   .bubble td code { background: none; padding: 0; color: inherit; }
   .bubble a { color: var(--vscode-textLink-foreground); text-decoration: none; }
   .bubble a:hover { text-decoration: underline; }
+  /* ── Strikethrough ──────────────────────────────────────────────── */
+  .bubble del, .bubble s { text-decoration: line-through; color: var(--vscode-descriptionForeground); opacity: 0.7; }
+  /* ── Task list checkboxes ────────────────────────────────────────── */
+  .bubble input[type="checkbox"] { margin-right: 6px; accent-color: var(--vscode-textLink-foreground); pointer-events: none; }
+  .bubble ul:has(input[type="checkbox"]) { list-style: none; padding-left: 8px; }
+  /* ── Image placeholder ──────────────────────────────────────────── */
+  .bubble .img-placeholder {
+    display: inline-block; padding: 2px 8px;
+    background: var(--vscode-badge-background);
+    border-radius: 4px; font-size: 0.9em;
+    color: var(--vscode-descriptionForeground);
+  }
 
   /* ── KaTeX formula rendering ────────────────────────────────────── */
   .bubble .katex { font-size: 1.1em; }

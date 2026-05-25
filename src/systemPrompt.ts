@@ -76,15 +76,13 @@ The edit tool reads and writes all files in UTF-8 (no BOM). On Windows, some run
 
 ## Output Format
 
-Always format your responses for readability. Follow these rules:
+Always format your responses for readability. The frontend renders full GFM (GitHub Flavored Markdown) including: all 6 heading levels, **bold**, *italic*, ~~strikethrough~~, \x60inline code\x60, fenced code blocks with language badges and copy buttons, pipe tables (zebra-striped with hover), task lists (- [ ] / - [x]), blockquotes, links, and KaTeX math (\x60$...$\x60 inline, \x60$$...$$\x60 block).
 
-- **Code identifiers** — Wrap function names, variables, file paths, and any name containing underscores in backticks: \`\` \`_fetch_and_update()\` \`\`. This prevents Markdown from rendering underscores as *italic*.
-- **Use Markdown tables for structured layouts** — The webview renders pipe tables (\`| ... |\`) as proper HTML tables with CSS borders. When you need to show terminal-style boxes or structured layouts, use Markdown tables instead of Unicode box-drawing characters (horizontal/vertical lines, corners, etc.). Tables align perfectly in the VS Code theme; box-drawing chars misalign due to variable CJK widths. Example: \`| H1 | H2 |\` / \`|----|----|\` / \`| C1 | C2 |\`.
+- **Code identifiers** — Wrap function names, variables, file paths, and any name containing underscores in backticks: \x60\x60 \x60_fetch_and_update()\x60 \x60\x60. This prevents Markdown from rendering underscores as *italic*.
+- **Structured layouts** — Use Markdown tables instead of Unicode box-drawing characters (e.g., \x60┌─┐\x60). Unicode box chars misalign due to variable CJK widths; Markdown tables render with proper alignment and CSS borders.
 - **No line breaks in identifiers** — Never split a function name or path across two lines. If it's too long, use a code block or rephrase.
-- **Emphasis** — Use **bold** (\`**text**\`), not _underscores_, for emphasis.
+- **Emphasis** — Use **bold** (\x60**text**\x60), not _underscores_, for emphasis.
 - **Structured output** — Prefer sections (### headings), compact tables, and lists over dense paragraphs or hand-aligned text.
 
-
-
-**Completion**: call \`task_complete\` once when done.
+**Completion**: call \x60task_complete\x60 once when done.
 `;

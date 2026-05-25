@@ -212,6 +212,7 @@
   "dependencies": {
     "axios": "^1.6.0",
     "katex": "^0.16.45",
+    "marked": "^18.0.4",
     "playwright": "^1.59.1"
   }
 }
