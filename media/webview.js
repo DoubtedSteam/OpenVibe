@@ -392,13 +392,13 @@
     result = result.replace(/\u202D\u202ECODEINLINE(\d+)\u202D\u202E/g, function(match, idStr) {
       var entry = codeBlocks[parseInt(idStr)];
       if (!entry) return match;
-      return '<code>' + entry.code + '</code>';
+      return '<code>' + escHtml(entry.code) + '</code>';
     });
     result = result.replace(/\u202D\u202ECODEBLOCK(\d+)\u202D\u202E/g, function(match, idStr) {
       var entry = codeBlocks[parseInt(idStr)];
       if (!entry) return match;
       var langAttr = entry.lang ? ' data-lang="' + entry.lang + '"' : '';
-      return '<pre class="code-block"' + langAttr + '><button class="copy-code-btn" title="复制代码">📋</button><code>' + entry.code + '</code></pre>';
+      return '<pre class=\"code-block\"' + langAttr + '><button class=\"copy-code-btn\" title=\"复制代码\">📋</button><code>' + escHtml(entry.code) + '</code></pre>';
     });
     
     // ── Render math placeholders with KaTeX ────────────────────────
