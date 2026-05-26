@@ -497,6 +497,8 @@ Uncommitted changes will be lost.`,
     margin: 8px 0;
     font-family: var(--vscode-editor-font-family, 'Courier New', monospace);
     font-size: 0.9em;
+    text-align: left;
+    white-space: pre;
   }
   .bubble pre code { background-color: transparent; padding: 0; border-radius: 0; font-size: 1em; }
   /* ── Code block language badge ────────────────────────────────── */
