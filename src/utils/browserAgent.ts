@@ -280,7 +280,7 @@ async function callAgentLlm(
   signal?: AbortSignal
 ): Promise<string> {
   const res = await sendChatMessage(messages, apiConfig, undefined, signal, {
-    timeoutMs: 60000,
+    timeoutMs: 120000,
   });
   return res.content?.trim() || '';
 }
@@ -329,8 +329,8 @@ export async function runBrowserTask(
   signal?: AbortSignal
 ): Promise<BrowserTaskResult> {
   const startTime = Date.now();
-  const timeout = params.timeoutMs ?? 120_000;
-  const maxSteps = params.maxSteps ?? 20;
+  const timeout = params.timeoutMs ?? 600_000;
+  const maxSteps = params.maxSteps ?? 50;
   const actionLog: BrowserTaskResult['actionLog'] = [];
 
   // Build initial user message

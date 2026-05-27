@@ -550,12 +550,12 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
           timeoutMs: {
             type: 'number',
             description:
-              'Max total execution time in milliseconds (default 120000 = 2 minutes).',
+              'Max total execution time in milliseconds (default 600000 = 10 minutes).',
           },
           maxSteps: {
             type: 'number',
             description:
-              'Max action steps before the agent returns even if not done (default 15).',
+              'Max action steps before the agent returns even if not done (default 50).',
           },
         },
         required: ['task'],

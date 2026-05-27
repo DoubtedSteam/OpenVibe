@@ -19,8 +19,8 @@ export async function browserSubAgentTool(
       {
         task: params.task,
         url: params.url,
-        timeoutMs: params.timeoutMs ?? 120000,
-        maxSteps: params.maxSteps ?? 15,
+        timeoutMs: params.timeoutMs ?? 600000,
+        maxSteps: params.maxSteps ?? 50,
       },
       apiConfig,
       signal

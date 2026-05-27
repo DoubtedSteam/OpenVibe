@@ -65,7 +65,6 @@ export async function runShellCommandTool(params: RunShellCommandParams): Promis
     try {
       const { stdout, stderr } = await execAsync(command, {
         cwd: root,
-        timeout: 120_000,
         maxBuffer: 2 * 1024 * 1024,
         windowsHide: true,
       });
