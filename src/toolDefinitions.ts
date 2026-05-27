@@ -563,5 +563,35 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
     },
   },
 
+  {
+    type: 'function',
+    function: {
+      name: 'get_terminal_content',
+      description:
+        'Read the recent output of the user\'s VS Code terminal(s). ' +
+        'Uses VS Code\'s Shell Integration API to capture command output as it runs. ' +
+        'Returns a list of open terminals with their name, whether they are the active terminal, ' +
+        'command count, total buffered lines, and the last N lines of output. ' +
+        'Use this to see what the user has been running in their terminal, check the status of ' +
+        'long-running processes (dev servers, builds), or debug errors from manual commands.',
+      parameters: {
+        type: 'object',
+        properties: {
+          terminalName: {
+            type: 'string',
+            description:
+              'Optional: filter by terminal name (e.g. "Terminal 1", "npm dev"). ' +
+              'If omitted, returns ALL open terminals.',
+          },
+          lines: {
+            type: 'number',
+            description:
+              'Number of recent lines to return per terminal (default: 100, max: 500).',
+          },
+        },
+        required: [],
+      },
+    },
+  },
 
 ];

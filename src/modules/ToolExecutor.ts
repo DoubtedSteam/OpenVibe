@@ -23,6 +23,7 @@ import {
   webFetchTool,
   grepSearchTool,
   browserSubAgentTool,
+  getTerminalContentTool,
 } from '../tools';
 import type { ReplaceCheckContext, ReplaceCheckResult } from '../tools';
 import type { ApiConfig, AgentLogEntry, AssistantTodoPersistedState } from '../types';
@@ -431,6 +432,13 @@ ${list}
           undefined
         );
       }
+      case 'get_terminal_content': {
+        return getTerminalContentTool({
+          terminalName: args.terminalName as string | undefined,
+          lines: args.lines as number | undefined,
+        });
+      }
+
 
 
       default:

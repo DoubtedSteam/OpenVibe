@@ -7,7 +7,7 @@ import { UIManager } from './UIManager';
 import { ConversationService } from './ConversationService';
 import type { TodolistReviewSettings } from './todolistReview';
 import type { ShellCommandReviewSettings } from './shellCommandReview';
-import { gitRollbackTool, listGitSnapshotsTool, setGlobalSkillsDir } from '../tools';
+import { gitRollbackTool, listGitSnapshotsTool, setGlobalSkillsDir, activateTerminalTracking } from '../tools';
 import { OperationController } from '../operationController';
 
 export class ChatViewProvider implements vscode.WebviewViewProvider {
@@ -121,6 +121,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       onStopSideEffects: () => this._uiManager.cancelPendingConfirms(),
       autoNameSession: () => { void this._conversation.autoNameSession(); },
     });
+    
+    // ── Activate terminal output tracking ────────────────────────────────
+    activateTerminalTracking(this._context);
   }
   public setOutputChannel(channel: vscode.OutputChannel): void {
     this._uiManager.setOutputChannel(channel);

@@ -26,8 +26,13 @@ export type { ShowNotificationParams, AskHumanParams } from './notificationTools
 export { showNotificationTool, askHumanTool } from './notificationTools';
 
 // run_shell_command
+// run_shell_command
 export type { RunShellCommandParams } from './shellTool';
 export { runShellCommandTool } from './shellTool';
+
+// get_terminal_content — read output from user's VS Code terminals
+export type { GetTerminalContentParams } from './terminalTool';
+export { getTerminalContentTool, activateTerminalTracking } from './terminalTool';
 
 // Git snapshot / rollback
 export type { GitSnapshotParams, GitRollbackParams } from './gitTools';
