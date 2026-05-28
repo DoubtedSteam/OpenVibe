@@ -1,3 +1,6 @@
+import * as fs from 'fs';
+import { resolveWorkspacePath } from '../utils/pathHelpers';
+
 import * as path from 'path';
 import {
   readFileTool,
@@ -230,7 +233,9 @@ export class ToolExecutor {
         const newContent = args.newContent as string;
         const fp = args.filePath as string;
         const existedBefore = workspaceFileExistsRelative(fp);
-        if (existedBefore && !this._isLineQueryFresh(fp)) {
+        // 空文件（0 字节）不要求先查询行号
+        const isEmpty = existedBefore && fs.statSync(resolveWorkspacePath(fp)).size === 0;
+        if (existedBefore && !isEmpty && !this._isLineQueryFresh(fp)) {
           return JSON.stringify({
             error:
               'edit blocked: you must call read_file or find_in_file (successful match) on this file first to obtain current line numbers. ' +
