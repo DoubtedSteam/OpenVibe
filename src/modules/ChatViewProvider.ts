@@ -739,15 +739,124 @@ Uncommitted changes will be lost.`,
     box-shadow: 0 4px 16px rgba(0,0,0,0.25);
   }
   #replace-confirm.show { display: block; }
+  /* Human assistance modal overlay */
   #human-assistance-confirm {
     display: none;
+    position: absolute;
+    inset: 0;
+    z-index: 50;
+    background: rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(2px);
+    animation: humanAssistFadeIn 0.2s ease;
+  }
+  #human-assistance-confirm.show {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  @keyframes humanAssistFadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  .human-assist-card {
+    background: var(--vscode-editor-background, #1e1e1e);
+    border: 1px solid var(--vscode-input-border, #555);
+    border-radius: 12px;
+    padding: 20px 24px;
+    max-width: 440px;
+    width: 90%;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.35);
+    animation: humanAssistSlideUp 0.25s ease;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  @keyframes humanAssistSlideUp {
+    from { transform: translateY(24px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+  .human-assist-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .human-assist-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--vscode-foreground);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .human-assist-title-icon {
+    font-size: 18px;
+  }
+  .human-assist-header-actions {
+    display: flex;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+  .human-assist-btn {
+    padding: 7px 16px;
+    border-radius: 8px;
+    border: 1px solid var(--vscode-input-border, transparent);
+    cursor: pointer;
+    font-size: 12px;
+    font-family: inherit;
+    font-weight: 500;
+    transition: background 0.15s, opacity 0.15s;
+    white-space: nowrap;
+  }
+  .human-assist-btn.primary {
+    background: var(--vscode-testing-runAction, #388a34);
+    color: #fff;
+    border-color: transparent;
+  }
+  .human-assist-btn.primary:hover { background: var(--vscode-testing-runAction, #4aa844); }
+  .human-assist-btn.secondary {
+    background: transparent;
+    color: var(--vscode-foreground);
+    opacity: 0.7;
+  }
+  .human-assist-btn.secondary:hover {
+    opacity: 1;
+    background: var(--vscode-toolbar-hoverBackground);
+  }
+  .human-assist-question {
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--vscode-descriptionForeground);
+    background: var(--vscode-textCodeBlock-background, rgba(128,128,128,0.08));
+    padding: 10px 14px;
+    border-radius: 8px;
+    border-left: 3px solid var(--vscode-textLink-foreground, #3794ff);
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .human-assist-input-row {
+    display: flex;
+    gap: 8px;
+    align-items: flex-end;
+  }
+  .human-assist-input {
+    flex: 1;
+    padding: 8px 12px;
     border: 1px solid var(--vscode-input-border, #555);
     border-radius: 8px;
-    padding: 8px 10px;
-    background: var(--vscode-editor-background);
-    box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+    background: var(--vscode-input-background);
+    color: var(--vscode-input-foreground);
+    font-family: inherit;
+    font-size: 13px;
+    resize: none;
+    max-height: 120px;
+    line-height: 1.4;
+    min-height: 36px;
   }
-  #human-assistance-confirm.show { display: block; }
+  .human-assist-input:focus {
+    outline: 1px solid var(--vscode-focusBorder);
+    border-color: transparent;
+  }
   .confirm-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
   .confirm-title { font-size: 12px; font-weight: 600; }
   .confirm-actions { display: flex; gap: 8px; }
@@ -1190,17 +1299,22 @@ Uncommitted changes will be lost.`,
     </div>
 
     <div id="human-assistance-confirm">
-      <div class="confirm-row">
-        <div class="confirm-title">Human Assistance Requested</div>
-        <div class="confirm-actions">
-          <button id="human-assistance-done" class="confirm-btn apply" type="button">Done</button>
-          <button id="human-assistance-cancel" class="confirm-btn cancel" type="button">Cancel</button>
+      <div class="human-assist-card">
+        <div class="human-assist-header">
+          <div class="human-assist-title">
+            <span class="human-assist-title-icon">🤝</span>
+            <span>Human Assistance</span>
+          </div>
+          <div class="human-assist-header-actions">
+            <button id="human-assistance-done" class="human-assist-btn primary" type="button">✓ Done</button>
+            <button id="human-assistance-cancel" class="human-assist-btn secondary" type="button" title="Cancel">✕</button>
+          </div>
         </div>
-      </div>
-      <div id="human-assistance-question" class="confirm-meta"></div>
-      <div class="confirm-row" style="margin-top: 8px;">
-        <textarea id="human-assistance-input" placeholder="Type a response (optional)... Enter to send, Ctrl+Enter for newline" rows="2" style="flex: 1; padding: 6px 8px; border: 1px solid var(--vscode-input-border); border-radius: 4px; background: var(--vscode-input-background); color: var(--vscode-input-foreground); font-family: inherit; font-size: 13px; resize: none; max-height: 120px; line-height: 1.4;"></textarea>
-        <button id="human-assistance-send" class="confirm-btn apply" type="button">Send</button>
+        <div id="human-assistance-question" class="human-assist-question"></div>
+        <div class="human-assist-input-row">
+          <textarea id="human-assistance-input" class="human-assist-input" placeholder="Type a response (optional)… Enter to send, Ctrl+Enter for newline" rows="2"></textarea>
+          <button id="human-assistance-send" class="human-assist-btn primary" type="button">Send →</button>
+        </div>
       </div>
     </div>
 
