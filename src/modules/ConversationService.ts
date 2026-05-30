@@ -635,7 +635,7 @@ export class ConversationService {
   truncateBeforeUserMessage(userContent: string): void {
     const msgs = this._session.getCurrentMessages();
     const cutIndex = msgs.findIndex(
-      u => u.role === 'user' && (typeof u.content === 'string' ? u.content : '') === userContent
+      u => u.role === 'user' && typeof u.content === 'string' && u.content.includes(userContent)
     );
     if (cutIndex !== -1) {
       this._session.setCurrentMessages(msgs.slice(0, cutIndex));
