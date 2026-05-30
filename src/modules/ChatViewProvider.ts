@@ -318,7 +318,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
   private async _showGitSnapshots(): Promise<void> {
     try {
-      const result = listGitSnapshotsTool();
+      const result = listGitSnapshotsTool(this._sessionManager.getCurrentSessionId());
       const parsed = JSON.parse(result);
 
       if (parsed.error) {

@@ -207,7 +207,7 @@ export function gitRollbackTool(params: GitRollbackParams): string {
   }
 }
 
-export function listGitSnapshotsTool(): string {
+export function listGitSnapshotsTool(sessionId?: string): string {
   try {
     const root = getWorkspaceRoot();
     ensureGitRepository();
@@ -238,12 +238,15 @@ export function listGitSnapshotsTool(): string {
         const withoutPrefix = tag.slice('vibe-snapshot-'.length);
         const snapshotKeyword = '-snapshot-';
         const snapshotIdx = withoutPrefix.indexOf(snapshotKeyword);
-        const sessionId   = snapshotIdx >= 0 ? withoutPrefix.slice(0, snapshotIdx) : withoutPrefix;
+        const tagSessionId   = snapshotIdx >= 0 ? withoutPrefix.slice(0, snapshotIdx) : withoutPrefix;
         const snapshotId  = snapshotIdx >= 0 ? withoutPrefix.slice(snapshotIdx + 1) : '';
+
+        // Filter by session if provided
+        if (sessionId !== undefined && sessionId !== tagSessionId) continue;
 
         snapshots.push({
           tag,
-          sessionId,
+          sessionId: tagSessionId,
           snapshotId,
           commitHash: hash,
           timestamp: parseInt(timestamp, 10) * 1000,
