@@ -833,6 +833,8 @@ Uncommitted changes will be lost.`,
     border-left: 3px solid var(--vscode-textLink-foreground, #3794ff);
     white-space: pre-wrap;
     word-break: break-word;
+    max-height: 240px;
+    overflow-y: auto;
   }
   .human-assist-input-row {
     display: flex;
