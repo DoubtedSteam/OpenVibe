@@ -633,6 +633,7 @@ export class ConversationService {
 
   /** Drop the user message matching `userContent` and everything after (e.g. Git rollback). */
   truncateBeforeUserMessage(userContent: string): void {
+    // Truncate full messages (webview display)
     const msgs = this._session.getCurrentMessages();
     const cutIndex = msgs.findIndex(
       u => u.role === 'user' && typeof u.content === 'string' && u.content.includes(userContent)
@@ -640,6 +641,20 @@ export class ConversationService {
     if (cutIndex !== -1) {
       this._session.setCurrentMessages(msgs.slice(0, cutIndex));
     }
+
+    // Also truncate llmMessages (LLM context) by the same userContent.
+    // If llmMessages exists separately (after compact), keep it in sync;
+    // otherwise getLlmMessages() already falls back to messages.
+    const llmMsgs = this._session.getLlmMessages();
+    const llmCutIndex = llmMsgs.findIndex(
+      u => u.role === 'user' && typeof u.content === 'string' && u.content.includes(userContent)
+    );
+    if (llmCutIndex !== -1) {
+      this._session.setLlmMessages(llmMsgs.slice(0, llmCutIndex));
+    }
+
+    // Reset usage snapshots since the message structure changed
+    this.resetUsageSnapshots();
   }
 
   /**
