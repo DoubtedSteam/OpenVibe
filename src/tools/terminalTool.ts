@@ -154,6 +154,15 @@ export function getTerminalContentTool(params: GetTerminalContentParams): string
   }
 }
 
+
+// ─── Cleanup ─────────────────────────────────────────────────────────────────
+
+/** 清除所有终端输出缓冲区。扩展停用时调用。 */
+export function clearTerminalBuffers(): void {
+  _buffers.clear();
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 /** Trim buffer lines to 2× default max (headroom), keeping at least maxLines. */

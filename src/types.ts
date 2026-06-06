@@ -26,6 +26,14 @@ export interface ChatMessage {
    * After BTW ends, btw messages are excluded from LLM context.
    */
   btwBranch?: boolean;
+  /**
+   * Identifies which sub-agent scope this message belongs to.
+   * - `'free'`: free-running mode (before todo list or after all items complete)
+   * - `'executor:N'`: executor agent for todo item at index N
+   * - `'evaluator:N'`: evaluator agent after todo item N completes
+   * Used by the scheduler to scope compaction to sub-task boundaries.
+   */
+  subAgentTag?: string;
 }
 
 export interface AgentLogEntry {

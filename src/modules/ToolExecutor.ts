@@ -22,7 +22,6 @@ import {
   activateSkillTool,
   deactivateSkillTool,
   listActivatedSkillsTool,
-  setActivatedSkillsCallbacks,
   webFetchTool,
   grepSearchTool,
   browserSubAgentTool,
@@ -47,10 +46,12 @@ import {
   detectShellContextHarvest,
   shouldEarlyStopOnShellReviewFail,
 } from './shellSecurity';
+import { ActivatedSkillsManager } from './activatedSkillsManager';
+import { TodoListManager } from './todoListManager';
 
 
 export class ToolExecutor {
-  private _todoList: { goal: string; items: { text: string; done: boolean }[] } | null = null;
+  private _todoListManager = new TodoListManager();
   private _lastShellExecutions: { command: string; at: number; summary: string; success: boolean }[] = [];
 
   /** Edit permission state - controls whether edit tools can be used */
@@ -67,6 +68,16 @@ export class ToolExecutor {
 
   /** Tracks file paths modified via the `edit` tool in the current user-turn session. */
   private _sessionEditedFiles = new Set<string>();
+
+  private _activatedSkillsManager = new ActivatedSkillsManager();
+
+  /** Tools blocked in the current sub-agent scope. Empty = all tools allowed. */
+  private _blockedTools: Set<string> = new Set();
+
+  /** Configure which tools are forbidden in the current sub-agent scope. */
+  public setBlockedTools(tools: string[]): void {
+    this._blockedTools = new Set(tools);
+  }
 
   constructor(
      private readonly _context: {
@@ -93,7 +104,12 @@ export class ToolExecutor {
        signal?: () => AbortSignal;
        log?: (entry: AgentLogEntry) => void;
      }
-   ) {}
+   ) {
+    this._todoListManager.wireCallbacks(
+      (state) => this._context.persistAssistantTodoState(state),
+      (content) => this._context.persistAssistantUiEcho(content),
+    );
+  }
 
   private _stopped(): boolean {
     return this._context.isStopped?.() ?? false;
@@ -120,19 +136,12 @@ export class ToolExecutor {
   }
 
   private _notifyTodoPersisted(): void {
-    this._context.persistAssistantTodoState(this._cloneTodoState());
+    this._todoListManager._notifyPersisted();
   }
 
   /** Restore todo state from workspace session file after extension / window reload. */
   public restorePersistedTodoState(state: AssistantTodoPersistedState | null): void {
-    if (!state || typeof state.goal !== 'string' || !Array.isArray(state.items)) {
-      this._todoList = null;
-      return;
-    }
-    this._todoList = {
-      goal: state.goal,
-      items: state.items.map((i) => ({ text: String(i.text), done: !!i.done })),
-    };
+    this._todoListManager.restorePersistedTodoState(state);
   }
 
   /**
@@ -179,6 +188,11 @@ export class ToolExecutor {
 
 
    public async executeTool(name: string, args: Record<string, unknown>): Promise<string> {
+     // Check if the tool is blocked in the current sub-agent scope
+     if (this._blockedTools.size > 0 && this._blockedTools.has(name)) {
+       return JSON.stringify({ error: `Tool "${name}" is not available in the current sub-agent scope.` });
+     }
+
      // Check if the tool requires edit permission
      const editTools = ['edit', 'create_directory'];
      if (editTools.includes(name) && !this._context.getEditPermissionEnabled()) {
@@ -186,7 +200,7 @@ export class ToolExecutor {
        this._postUiEcho(message);
        return JSON.stringify({ error: message });
      }
-     
+
      switch (name) {
       case 'get_workspace_info':
         return getWorkspaceInfoTool();
@@ -288,32 +302,22 @@ export class ToolExecutor {
       case 'complete_todo_item': {
         const idx = args['index'] as number;
         const summary = (args['summary'] as string) || '';
-        if (!this._todoList) {
+        if (!this._todoListManager.hasList()) {
           return JSON.stringify({ error: 'No todo list exists. Call create_todo_list first.' });
         }
-        if (idx < 0 || idx >= this._todoList.items.length) {
-          return JSON.stringify({ error: `Index ${idx} is out of range (0–${this._todoList.items.length - 1}).` });
+        const theList = this._todoListManager.getList()!;
+        if (idx < 0 || idx >= theList.items.length) {
+          return JSON.stringify({ error: `Index ${idx} is out of range (0–${theList.items.length - 1}).` });
         }
-        this._todoList.items[idx].done = true;
-        const list = this._todoList.items
-          .map((item, i) => `${i + 1}. [${item.done ? 'x' : ' '}] ${item.text}`)
-          .join('\n');
-        const remaining = this._todoList.items.filter(i => !i.done).length;
+        this._todoListManager.markDone(idx);
+        const list = this._todoListManager.postUpdateDisplay(this._todoListManager.getList()!.items);
+        const remaining = this._todoListManager.getList()!.items.filter(i => !i.done).length;
         const result = JSON.stringify({
           success: true,
           message: summary ? `Item ${idx + 1} complete: ${summary}` : `Item ${idx + 1} marked complete.`,
           remaining,
           todoList: list,
         });
-        
-        // 向用户显示更新后的todo list
-        const todoListDisplay = `Todo list updated:
-
-**Items**:
-${list}
-
-**Remaining**: ${remaining} item(s)`;
-        this._postUiEcho(todoListDisplay);
         this._notifyTodoPersisted();
 
         return result;
@@ -452,58 +456,35 @@ ${list}
   }
 
   // ─── Activated skills management ──────────────────────────────────────────
-  private _activatedSkills: string[] = [];
+  // Delegates to ActivatedSkillsManager
 
-  /** Callback: persist activated skills to current conversation session. */
-  private _persistActivatedSkills: ((skills: string[]) => void) | null = null;
-
-  /**
-   * Register persistence callback so that activate/deactivate skill tools
-   * can propagate changes to the current conversation session.
-   */
+  /** Register persistence callback for activated skills. */
   public registerActivatedSkillsPersister(
     getter: () => string[],
     setter: (skills: string[]) => void
   ): void {
-    this._activatedSkills = getter();
-    this._persistActivatedSkills = setter;
-    // Wire up tools.ts callbacks so pure-tool calls inside tools.ts also work.
-    setActivatedSkillsCallbacks(
-      () => this._activatedSkills,
-      (skills) => {
-        this._activatedSkills = skills;
-        this._persistActivatedSkills?.(skills);
-      }
-    );
+    this._activatedSkillsManager.registerActivatedSkillsPersister(getter, setter);
   }
 
   /** Restore activated skills from session (extension reload). */
   public restoreActivatedSkills(skills: string[]): void {
-    this._activatedSkills = skills;
-    this._persistActivatedSkills?.(skills);
-    setActivatedSkillsCallbacks(
-      () => this._activatedSkills,
-      (skills) => {
-        this._activatedSkills = skills;
-        this._persistActivatedSkills?.(skills);
-      }
-    );
-  }
-
-  /** Get current activated skills. */
-  private _getActivatedSkills(): string[] {
-    return [...this._activatedSkills];
-  }
-
-  /** Set current activated skills and persist. */
-  private _setActivatedSkills(skills: string[]): void {
-    this._activatedSkills = [...skills];
-    this._persistActivatedSkills?.(this._activatedSkills);
+    this._activatedSkillsManager.restore(skills);
   }
 
   /** Public getter for activated skills (used by ConversationService). */
   public getActivatedSkills(): string[] {
-    return [...this._activatedSkills];
+    return this._activatedSkillsManager.getActivatedSkills();
+  }
+
+  /** Internal helpers used by tool case handlers. */
+  private _getActivatedSkills(): string[] {
+    return this._activatedSkillsManager.getActivatedSkills();
+  }
+  private _setActivatedSkills(skills: string[]): void {
+    // Delegate setting to the manager through registerActivatedSkillsPersister's setter
+    // Since _setActivatedSkills is called from within the class, we need direct access.
+    // We expose a package-private method on the manager.
+    this._activatedSkillsManager.setActivatedSkills(skills);
   }
 
   private async _handleRunShellCommand(args: Record<string, unknown>): Promise<string> {
@@ -654,45 +635,30 @@ ${list}
   /** `compact` is handled in MessageHandler and delegated to ConversationService.compactHistory. */
 
   public clearTodoList(): void {
-    this._todoList = null;
-    this._notifyTodoPersisted();
+    this._todoListManager.clearTodoList();
   }
 
   /**
    * Lightweight todo state for the main loop to decide whether to keep going.
    * Returns null when no todo list exists.
    */
-  public getTodoControlInfo(): { goal: string; list: string; remaining: number } | null {
-    if (!this._todoList) {
-      return null;
-    }
-    const { list, remaining } = this._todoMarkdown(this._todoList.goal, this._todoList.items);
-    return { goal: this._todoList.goal, list, remaining };
+  public getTodoControlInfo(): { goal: string; list: string; remaining: number; firstPendingIndex: number } | null {
+    return this._todoListManager.getControlInfo();
   }
 
   private _cloneTodoState(): TodoState | null {
-    if (!this._todoList) {
-      return null;
-    }
-    return {
-      goal: this._todoList.goal,
-      items: this._todoList.items.map((i) => ({ ...i })),
-    };
+    return this._todoListManager.cloneState();
   }
 
   private _todoMarkdown(goal: string, items: { text: string; done: boolean }[]): { list: string; remaining: number } {
-    const list = items.map((item, i) => `${i + 1}. [${item.done ? 'x' : ' '}] ${item.text}`).join('\n');
-    const remaining = items.filter((i) => !i.done).length;
-    return { list, remaining };
+    return TodoListManager.formatMarkdown(goal, items);
   }
 
-  private _postTodoDisplay(kind: 'created' | 'expanded', goal: string, list: string, remaining: number): void {
-    if (kind === 'expanded') {
-      this._postUiEcho(
-        `Todo list expanded:\n\n**Goal**: ${goal}\n\n**Items**:\n${list}\n\n**Remaining**: ${remaining} item(s)`
-      );
-    } else {
-      this._postUiEcho(`Todo list created:\n\n**Goal**: ${goal}\n\n**Items**:\n${list}`);
+  private _postTodoDisplay(kind: 'created' | 'expanded', goal: string, _list: string, _remaining: number, items?: { text: string; done: boolean }[]): void {
+    // Use the items parameter if available, otherwise fall back to what's in the manager
+    const list = items || this._todoListManager.getList()?.items;
+    if (list) {
+      this._todoListManager.postDisplay(kind, goal, list);
     }
   }
 
@@ -702,38 +668,7 @@ ${list}
     items: string[],
     expandIndex: number | undefined
   ): string {
-    if (this._todoList && expandIndex !== undefined) {
-      if (expandIndex < 0 || expandIndex >= this._todoList.items.length) {
-        return JSON.stringify({
-          error: `Expand index ${expandIndex} is out of range (0–${this._todoList.items.length - 1}).`,
-        });
-      }
-      const newItems = items.map((text) => ({ text, done: false }));
-      this._todoList.items.splice(expandIndex, 1, ...newItems);
-      const { list, remaining } = this._todoMarkdown(this._todoList.goal, this._todoList.items);
-      const result = JSON.stringify({
-        success: true,
-        message: `Todo list expanded at index ${expandIndex} with ${items.length} items.`,
-        goal: this._todoList.goal,
-        items: list,
-        remaining,
-      });
-      this._postTodoDisplay('expanded', this._todoList.goal, list, remaining);
-      this._notifyTodoPersisted();
-      return result;
-    }
-
-    this._todoList = { goal, items: items.map((text) => ({ text, done: false })) };
-    const { list } = this._todoMarkdown(goal, this._todoList.items);
-    const result = JSON.stringify({
-      success: true,
-      message: `Todo list created with ${items.length} items.`,
-      goal,
-      items: list,
-    });
-    this._postTodoDisplay('created', goal, list, this._todoList.items.filter((i) => !i.done).length);
-    this._notifyTodoPersisted();
-    return result;
+    return this._todoListManager.createWithoutReview(goal, items, expandIndex);
   }
 
   private async _handleCreateTodoList(args: Record<string, unknown>): Promise<string> {
@@ -754,10 +689,10 @@ ${list}
     const relatedContext = this._context.getRelatedContextForTodolistReview();
     const memoryExcerpt = loadMemoryExcerpt();
 
-    if (this._todoList && expandIndex !== undefined) {
-      if (expandIndex < 0 || expandIndex >= this._todoList.items.length) {
+    if (this._todoListManager.hasList() && expandIndex !== undefined) {
+      if (expandIndex < 0 || expandIndex >= this._todoListManager.getList()!.items.length) {
         return JSON.stringify({
-          error: `Expand index ${expandIndex} is out of range (0–${this._todoList.items.length - 1}).`,
+          error: `Expand index ${expandIndex} is out of range (0–${this._todoListManager.getList()!.items.length - 1}).`,
         });
       }
       if (!items.length) {
@@ -809,21 +744,21 @@ ${list}
         this._log('todolistReview', 'response', { operation: 'edit', attempt, decision: review.decision, summary: review.summary, notes: review.notes });
 
         if (review.decision === 'PASS') {
-          this._todoList = {
-            goal: modified.goal,
-            items: modified.items.map((x) => ({ ...x })),
-          };
-          const { list, remaining } = this._todoMarkdown(this._todoList.goal, this._todoList.items);
+          this._todoListManager.setList(
+            modified.goal,
+            modified.items.map((x) => ({ ...x })),
+          );
+          const { list, remaining } = this._todoMarkdown(this._todoListManager.getList()!.goal, this._todoListManager.getList()!.items);
           const result = JSON.stringify({
             success: true,
             operation: 'todolist.edit',
             message: `Todo list expanded at index ${expandIndex} with ${replacementSlice.length} items.`,
-            goal: this._todoList.goal,
+            goal: this._todoListManager.getList()!.goal,
             items: list,
             remaining,
             reviewAttempts: attempt,
           });
-          this._postTodoDisplay('expanded', this._todoList.goal, list, remaining);
+          this._postTodoDisplay('expanded', this._todoListManager.getList()!.goal, list, remaining);
           this._notifyTodoPersisted();
           if (attempt > 1) {
             this._postUiEcho(`✅ **Todo list (expand) review** · passed on round **${attempt}/${cfg.maxAttempts}**.`);
@@ -911,8 +846,8 @@ ${list}
       this._log('todolistReview', 'response', { operation: 'generate', attempt, decision: review.decision, summary: review.summary, notes: review.notes });
 
       if (review.decision === 'PASS') {
-        this._todoList = { goal: cg, items: ci.map((text) => ({ text, done: false })) };
-        const { list, remaining } = this._todoMarkdown(cg, this._todoList.items);
+        this._todoListManager.setList(cg, ci.map((text) => ({ text, done: false })));
+        const { list, remaining } = this._todoMarkdown(cg, this._todoListManager.getList()!.items);
         const result = JSON.stringify({
           success: true,
           operation: 'todolist.generate',

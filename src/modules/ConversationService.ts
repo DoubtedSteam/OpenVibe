@@ -6,6 +6,9 @@ import { sendChatMessage } from '../api';
 import { SessionManager } from './SessionManager';
 import { loadActivatedSkillInstruction } from '../tools';
 import { COMPACT_RESERVE_TOKENS } from '../constants';
+import { replaySessionToWebview } from './webviewReplay';
+import { sanitizeMessageList } from './messageSanitizer';
+import { compactHistoryFn, findReserveWindowStart, adjustReserveBoundary } from './historyCompactor';
 
 
 /**
@@ -100,6 +103,88 @@ export class ConversationService {
 
   saveCurrentSession(): void {
     this._session.saveCurrentSession();
+  }
+
+  /**
+   * Compact all messages tagged with `tag` into a single summary message.
+   * - Executor tags: extract last assistant response as summary + modified files + tool count
+   * - Evaluator tags: check if todo was modified, keep minimal marker
+   */
+  compactAgentMessages(tag: string): void {
+    const messages = this._session.getCurrentMessages();
+    const llmMessages = this._session.getLlmMessages();
+
+    const compactFn = (list: ChatMessage[]): ChatMessage[] => {
+      const taggedIndices: number[] = [];
+      for (let i = 0; i < list.length; i++) {
+        if (list[i].subAgentTag === tag) taggedIndices.push(i);
+      }
+      if (taggedIndices.length === 0) return list;
+
+      const first = taggedIndices[0];
+      const last = taggedIndices[taggedIndices.length - 1];
+      const taggedMsgs = list.slice(first, last + 1);
+
+      const compactMsg = ConversationService._buildCompactMessage(tag, taggedMsgs);
+
+      return [...list.slice(0, first), compactMsg, ...list.slice(last + 1)];
+    };
+
+    this._session.setCurrentMessages(compactFn(messages));
+    if (llmMessages !== messages) {
+      this._session.setLlmMessages(compactFn(llmMessages));
+    }
+    this._session.saveCurrentSession();
+  }
+
+  /** Build a compact summary for a set of messages sharing the same subAgentTag. */
+  private static _buildCompactMessage(tag: string, messages: ChatMessage[]): ChatMessage {
+    const isEvaluator = tag.startsWith('evaluator:');
+
+    if (isEvaluator) {
+      const hadTodoMod = messages.some(m =>
+        m.role === 'assistant' && m.tool_calls?.some(tc => tc.function.name === 'create_todo_list')
+      );
+      return {
+        role: 'system',
+        content: hadTodoMod
+          ? `## 🔄 Review (${tag}): todo list was modified`
+          : `## ✅ Review (${tag}): plan unchanged`,
+        subAgentTag: tag,
+      };
+    }
+
+    // Executor: extract summary from the last meaningful assistant response
+    const assistants = messages.filter(m => m.role === 'assistant' && m.content && !m.hiddenFromLlm);
+    const lastAssistant = assistants[assistants.length - 1];
+    const summary = lastAssistant?.content?.trim() || '(no summary)';
+    const truncated = summary.length > 400 ? summary.slice(0, 400) + '…' : summary;
+
+    // Count tool calls
+    const toolCount = messages
+      .filter(m => m.role === 'assistant' && m.tool_calls)
+      .reduce((sum, m) => sum + (m.tool_calls?.length || 0), 0);
+
+    // Extract modified file paths from tool results
+    const modifiedFiles = new Set<string>();
+    for (const m of messages) {
+      if (m.role === 'tool' && m.content) {
+        try {
+          const p = JSON.parse(m.content);
+          if (typeof p.filePath === 'string') modifiedFiles.add(p.filePath);
+        } catch { /* ignore */ }
+      }
+    }
+
+    const fileList = modifiedFiles.size > 0
+      ? '\n- Modified: ' + Array.from(modifiedFiles).map(f => `\`${f}\``).join(', ')
+      : '';
+
+    return {
+      role: 'system',
+      content: `## ✅ Completed (${tag})\n${fileList}\n- Tool calls: ${toolCount}\n- Summary: ${truncated}`,
+      subAgentTag: tag,
+    };
   }
 
   /**
@@ -209,31 +294,8 @@ export class ConversationService {
    */
   sanitizeIncompleteToolCalls(): void {
     const sanitizeList = (list: ChatMessage[]): ChatMessage[] | null => {
-      let changed = false;
-      const clean: ChatMessage[] = [];
-      for (let i = 0; i < list.length; i++) {
-        const msg = list[i];
-        if (msg.role === 'assistant' && msg.tool_calls && msg.tool_calls.length > 0) {
-          const requiredIds = new Set(msg.tool_calls.map((tc: ToolCall) => tc.id));
-          const rest = list.slice(i + 1);
-          const respondedIds = new Set(
-            rest
-              .filter((m: ChatMessage) => m.role === 'tool' && m.tool_call_id)
-              .map((m: ChatMessage) => m.tool_call_id!)
-          );
-          if (!Array.from(requiredIds).every(id => respondedIds.has(id))) {
-            changed = true;
-            let j = i + 1;
-            while (j < list.length && list[j].role === 'tool') {
-              j++;
-            }
-            i = j - 1;
-            continue;
-          }
-        }
-        clean.push(msg);
-      }
-      return changed ? clean : null;
+      const result = sanitizeMessageList(list);
+      return result.length !== list.length ? result : null;
     };
 
     const frontend = this._session.getCurrentMessages();
@@ -263,46 +325,7 @@ export class ConversationService {
    *   completes. This prevents the tool responses from becoming orphaned `tool` messages.
    */
   private _sanitizeMessageList(messages: ChatMessage[], preservePendingAssistant = false): ChatMessage[] {
-    const clean: ChatMessage[] = [];
-    let i = 0;
-    while (i < messages.length) {
-      const msg = messages[i];
-      if (msg.role === 'assistant' && msg.tool_calls && msg.tool_calls.length > 0) {
-        const requiredIds = new Set(msg.tool_calls.map((tc: ToolCall) => tc.id));
-        // Collect all consecutive tool messages following this assistant turn
-        let j = i + 1;
-        while (j < messages.length && messages[j].role === 'tool') {
-          j++;
-        }
-        const toolMessages = messages.slice(i + 1, j);
-        const respondedIds = new Set(
-          toolMessages
-            .filter((m: ChatMessage) => m.tool_call_id)
-            .map((m: ChatMessage) => m.tool_call_id!)
-        );
-        // Only keep this assistant+tool block if every tool_call has a matching response
-        if (Array.from(requiredIds).every(id => respondedIds.has(id))) {
-          // All tool_calls responded → keep the block
-          clean.push(msg);
-          clean.push(...toolMessages);
-        } else if (preservePendingAssistant && j >= messages.length) {
-          // Reached end of array: this is the current turn awaiting tool responses.
-          // Keep the assistant (and any partial tool results) so its future tool
-          // responses (added by MessageHandler after compact) are not orphaned.
-          clean.push(msg);
-          clean.push(...toolMessages);
-        }
-        // Otherwise: incomplete block not at end → remove it (responses will never come)
-        i = j;
-      } else if (msg.role === 'tool') {
-        // Orphaned tool message (no preceding assistant) — skip it
-        i++;
-      } else {
-        clean.push(msg);
-        i++;
-      }
-    }
-    return clean;
+    return sanitizeMessageList(messages, preservePendingAssistant);
   }
 
   // ─── Reserve window (based on API prompt_tokens snapshots) ───────────────
@@ -315,21 +338,7 @@ export class ConversationService {
    * Returns 0 when no compaction is needed (all messages fit within the reserve window).
    */
   private _findReserveWindowStart(messages: ChatMessage[]): number {
-    const snapshots = this._usageSnapshots;
-    if (snapshots.length === 0) return 0;
-
-    const last = snapshots[snapshots.length - 1];
-    // Scan snapshots from the end to find where 20k tokens ago was
-    for (let i = snapshots.length - 2; i >= 0; i--) {
-      const diff = last.totalPromptTokens - snapshots[i].totalPromptTokens;
-      if (diff >= COMPACT_RESERVE_TOKENS) {
-        // Messages from snapshots[i+1].msgCount onward are the ones that
-        // push cumulative tokens past the reserve threshold.
-        return snapshots[i + 1].msgCount;
-      }
-    }
-    // All snapshots combined still fit within COMPACT_RESERVE_TOKENS
-    return 0;
+    return findReserveWindowStart(messages, this._usageSnapshots);
   }
 
   /**
@@ -343,44 +352,7 @@ export class ConversationService {
    *      results are in the keep zone. Move the boundary forward to include them.
    */
   private _adjustReserveBoundary(messages: ChatMessage[], reserveStart: number): number {
-    if (reserveStart <= 0 || reserveStart >= messages.length) return reserveStart;
-
-    // Case A: first kept message is a 'tool' — find its parent assistant in compress zone
-    if (messages[reserveStart].role === 'tool') {
-      let i = reserveStart - 1;
-      while (i >= 0 && (messages[i].role === 'tool' || messages[i].hiddenFromLlm || messages[i].role === 'event')) {
-        i--;
-      }
-      if (i >= 0 && messages[i].role === 'assistant' && messages[i].tool_calls) {
-        return i;
-      }
-      return reserveStart;
-    }
-
-    // Case B: last compressed message is an 'assistant' with tool_calls
-    // and its tool results are the first messages in the keep zone
-    const lastCompressed = messages[reserveStart - 1];
-    if (lastCompressed.role === 'assistant' && lastCompressed.tool_calls && lastCompressed.tool_calls.length > 0) {
-      const requiredIds = new Set(lastCompressed.tool_calls.map((tc: ToolCall) => tc.id));
-      let j = reserveStart;
-      const respondedIds = new Set<string>();
-      while (j < messages.length && messages[j].role === 'tool') {
-        if (messages[j].tool_call_id) {
-          respondedIds.add(messages[j].tool_call_id!);
-        }
-        j++;
-      }
-      if (Array.from(requiredIds).some(id => respondedIds.has(id))) {
-        return j;
-      }
-    }
-
-    return reserveStart;
-  }
-
-  /** @deprecated Use imported {@link buildLanguageInstruction} instead. */
-  private _buildLanguageInstruction(lang: string | undefined): string {
-    return buildLanguageInstruction(lang);
+    return adjustReserveBoundary(messages, reserveStart);
   }
 
   // ─── Compact implementation ──────────────────────────────────────────────
@@ -392,243 +364,25 @@ export class ConversationService {
    * Recent messages are preserved intact. Frontend is NOT updated.
    */
   async compactHistory(triggeredByTokenLimit = false): Promise<string> {
-    // Only compact the LLM message list; frontend (full messages) is untouched.
-    const messages = this._session.getLlmMessages();
-    if (messages.length === 0) {
-      return JSON.stringify({ success: false, message: 'Nothing to compact: conversation is empty.' });
-    }
-
-    // ── Find reserve window ──────────────────────────────────────────────
-    const rawReserveStart = this._findReserveWindowStart(messages);
-    if (rawReserveStart === 0) {
-      return JSON.stringify({ success: false, message: 'Nothing to compact: conversation fits within the reserve window.' });
-    }
-
-    // Adjust boundary so assistant(tool_calls)+tool blocks stay intact
-    const reserveStart = this._adjustReserveBoundary(messages, rawReserveStart);
-    if (reserveStart === 0) {
-      return JSON.stringify({ success: false, message: 'Nothing to compact: conversation fits within the reserve window.' });
-    }
-
-    const toCompress = messages.slice(0, reserveStart);
-    const toKeep = this._sanitizeMessageList(messages.slice(reserveStart), true);
-
-      // ── Build compact request ────────────────────────────────────────────
-      // msg[0] = system prompt + host env
-      // msg[1] = (optional) activated skills — same position as buildMessagesForLlm
-      //           so the prefix cache is identical between compact and main flow
-      // msg[2..] = conversation turns to compress + [COMPACT_REQUEST]
-      const abortController = new AbortController();
-      try {
-        const apiConfig = this._getApiConfig();
-        const langInstr = buildLanguageInstruction(apiConfig.language);
-
-        // Sanitize toCompress before sending: remove any incomplete assistant+tool sequences
-        // (e.g. assistant with tool_calls but no matching tool results) to prevent API 400 errors
-        // caused by violating the "assistant tool_calls must be followed by tool responses" constraint.
-        const sanitizedToCompress = this._sanitizeMessageList(toCompress);
-
-        const compactMessages: ChatMessage[] = [
-          { role: 'system', content: SYSTEM_PROMPT + langInstr + '\n\n' + getStaticHostEnvironmentBlock() },
-        ];
-
-        // msg[1]: Activated skills — mirrors buildMessagesForLlm for KV cache alignment
-        const skillNames = this._getActivatedSkills?.() ?? [];
-        if (skillNames.length > 0) {
-          const blocks: string[] = [];
-          for (const name of skillNames) {
-            const instruction = loadActivatedSkillInstruction(name);
-            if (instruction) {
-              blocks.push(
-                `## Activated skill: ${name}\n${instruction}`
-              );
-            }
-          }
-          if (blocks.length > 0) {
-            compactMessages.push({
-              role: 'system',
-              content:
-                `## Activated Skills\n` +
-                `The following skills are currently active in this conversation. Follow their instructions carefully.\n\n` +
-                blocks.join('\n\n')
-            });
-          }
-        }
-
-        compactMessages.push(
-          ...sanitizedToCompress,
-          {
-            role: 'system',
-            content:
-              `[COMPACT_REQUEST]\n` +
-              `Please generate a concise but complete summary of the conversation history above. This summary will replace the archived portion.\n\n` +
-              `Requirements:\n` +
-              `- Keep: all files created/modified (with key changes), decisions made, goals, current task state, and any open questions.\n` +
-              `- Omit: verbose tool output, repetitive reasoning, step-by-step narration already reflected in outcomes.\n` +
-              `- Write in third-person present tense ("The user is building…", "The assistant has modified…").\n` +
-              `- End with a short "## Current State" section describing the overall status.\n` +
-              `- Use the same language as the conversation history.\n` +
-              `[/COMPACT_REQUEST]`,
-          },
-        );
-
-      const summaryResponse = await sendChatMessage(
-        compactMessages,
-        apiConfig,
-        TOOL_DEFINITIONS,
-        abortController.signal
-      );
-
-      const summary = summaryResponse.content?.trim() ?? '(summary unavailable)';
-
-      // ── Replace LLM message list = [summary, ...toKeep] ─────────────────
-      // Frontend (full messages) is NOT updated.
-      const summaryMessage: ChatMessage = {
-        role: 'user',
-        content:
-          `📋 **[Conversation history compacted]**\n\n${summary}\n\n> 💡 *${toKeep.length} recent messages preserved; ${toCompress.length} older messages archived.*`,
-      };
-
-      this._session.setLlmMessages([summaryMessage, ...toKeep]);
-      // Reset usage snapshots: after compact, the message structure has changed,
-      // so old snapshots are no longer valid. The next main LLM call will
-      // push a fresh first snapshot for the new (smaller) context.
-      this.resetUsageSnapshots();
-
-      return JSON.stringify({
-        success: true,
-        message: `Conversation history compacted. Preserved ${toKeep.length} messages, summarised ${toCompress.length}.`,
-        summary: summaryMessage.content,
-        preserved: toKeep.length,
-        summarised: toCompress.length,
-      });
-    } catch (error: any) {
-      if (error.name === 'AbortError') {
-        return JSON.stringify({ success: false, message: 'Compact cancelled.' });
-      }
-      return JSON.stringify({ success: false, message: `Failed to compact history: ${error.message}` });
-    }
+    return compactHistoryFn(
+      {
+        getLlmMessages: () => this._session.getLlmMessages(),
+        setLlmMessages: (msgs) => this._session.setLlmMessages(msgs),
+        getApiConfig: () => this._getApiConfig(),
+        getActivatedSkills: this._getActivatedSkills ? () => this._getActivatedSkills!() : undefined,
+        getUsageSnapshots: () => this._usageSnapshots,
+        resetUsageSnapshots: () => this.resetUsageSnapshots(),
+      },
+      triggeredByTokenLimit,
+    );
   }
 
   /**
-   /**
-    * Replays persisted messages to the webview (bubbles + tool cards).
+   * Replays persisted messages to the webview (bubbles + tool cards).
     * Strips any remaining <edit-content> tags from stored content as a safety net.
     */
   replaySessionToWebview(post: (msg: any) => void): void {
-    const messages = this._session.getCurrentMessages();
-    // Strip <edit-content> tags from content for display safety
-    const stripTags = (text: string): string => {
-      let cleaned = text.replace(/<edit-content>[\s\S]*?<\/edit-content>/gi, '').trim();
-      // Clean up empty code fences that may result from tag stripping
-      cleaned = cleaned.replace(/```\s*```/g, '');
-      return cleaned;
-    };
-    // Strip the ─── Context ─── block (runtime LLM metadata) from user messages
-    // to prevent it from leaking to the user on window reload.
-    const stripContextBlock = (text: string): string => {
-      return text.replace(/─── Context ───\n[\s\S]*?\n────────────────\n\n/, '');
-    };
-    let i = 0;
-    while (i < messages.length) {
-      const m = messages[i];
-      if (m.role === 'user' && m.content) {
-        post({ type: 'addMessage', message: { role: 'user', content: stripContextBlock(stripTags(m.content)) } });
-        i++;
-        continue;
-      }
-      if (m.role === 'assistant' && m.tool_calls && m.tool_calls.length > 0) {
-        if (m.content) {
-          post({ type: 'addMessage', message: { role: 'assistant', content: stripTags(m.content) } });
-        }
-        i++;
-        for (const tc of m.tool_calls) {
-          let args: Record<string, unknown> = {};
-          try {
-            args = JSON.parse(tc.function.arguments);
-          } catch {
-            /* keep empty */
-          }
-          post({ type: 'toolCall', name: tc.function.name, args });
-          // Tool execution may append UI-only assistant bubbles (hiddenFromLlm) before the tool row.
-          while (i < messages.length && messages[i].role === 'assistant' && messages[i].hiddenFromLlm && messages[i].content) {
-            post({ type: 'addMessage', message: { role: 'assistant', content: stripTags(messages[i].content!) } });
-            i++;
-          }
-          const tm = messages[i];
-          if (tm?.role === 'tool' && tm.tool_call_id === tc.id) {
-            post({ type: 'toolResult', name: tc.function.name, result: tm.content ?? '{}', fromReplay: true });
-            i++;
-            // ── task_complete: 从 tool 结果中重建修改文件列表显示 ─────────
-            if (tc.function.name === 'task_complete') {
-              try {
-                const parsed = JSON.parse(tm.content ?? '{}') as {
-                  modifiedFiles?: string[];
-                  summary?: string;
-                };
-                if (parsed.modifiedFiles && Array.isArray(parsed.modifiedFiles)) {
-                  const fileListStr = parsed.modifiedFiles.length > 0
-                    ? parsed.modifiedFiles.map((f: string) => `- \`${f}\``).join('\n')
-                    : '(无文件修改)';
-                  const fileSummary = parsed.modifiedFiles.length > 0
-                    ? `\n\n**📄 本次修改了 ${parsed.modifiedFiles.length} 个文件**:\n${fileListStr}`
-                    : '';
-                  // 将 summary 中 "xxx；1) yyy；2) zzz" 格式自动变为换行列表
-                  const fmtSummary = parsed.summary
-                    ? parsed.summary.replace(/[；;]\s*(?=\d+[)\.])/g, '\n')
-                    : '';
-                  const summaryBlock = fmtSummary ? `\n\n${fmtSummary}` : '';
-                  const displayContent = `✅ **任务完成**${summaryBlock}${fileSummary}`;
-                  post({ type: 'addMessage', message: { role: 'assistant', content: displayContent } });
-                }
-              } catch {
-                /* ignore parse errors */
-              }
-            }
-          } else {
-            // Tool call with no matching result (e.g. interrupted by reload).
-            // For ask_human, show a clear system message instead of a cryptic error.
-            if (tc.function.name === 'ask_human') {
-              const question = (args && typeof args.question === 'string') ? args.question : '';
-              post({
-                type: 'addMessage',
-                message: {
-                  role: 'system',
-                  content: `⏸️ **之前的对话已中断**\n\nAI 正在等待你的回复：\n> ${question || '(问题内容不可用)'}\n\n💡 _请发送新消息继续对话。_\n\n> _提示：之前未完成的请求已自动取消。_`,
-                },
-              });
-            } else {
-              post({
-                type: 'toolResult',
-                name: tc.function.name,
-                result: JSON.stringify({ error: 'Missing tool result in saved session' }),
-                fromReplay: true,
-              });
-            }
-          }
-        }
-        continue;
-      }
-      if (m.role === 'assistant' && m.content && !m.hiddenFromLlm) {
-        post({ type: 'addMessage', message: { role: 'assistant', content: stripTags(m.content) } });
-        i++;
-        continue;
-      }
-      if (m.role === 'assistant' && m.hiddenFromLlm) {
-        i++;
-        continue;
-      }
-      if (m.role === 'tool') {
-        i++;
-        continue;
-      }
-      if (m.role === 'event' && m.content) {
-        post({ type: 'addMessage', message: { role: 'event', content: m.content } });
-        i++;
-        continue;
-      }
-      i++;
-    }
+    replaySessionToWebview(this._session.getCurrentMessages(), post);
   }
 
   /** Drop the user message matching `userContent` and everything after (e.g. Git rollback). */

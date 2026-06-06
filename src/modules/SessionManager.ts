@@ -45,7 +45,8 @@ export class SessionManager {
 
   private _setupWorkspaceChangeListeners(): void {
     // 监听工作区文件夹变化
-    vscode.workspace.onDidChangeWorkspaceFolders(() => {
+    this._context.subscriptions.push(
+      vscode.workspace.onDidChangeWorkspaceFolders(() => {
       const newRoot = this._getWorkspaceRoot();
       const changed = newRoot !== this._currentWorkspacePath;
 
@@ -73,7 +74,8 @@ export class SessionManager {
           });
         }
       }
-    });
+    })
+    );
   }
 
   private _createDefaultSession(): void {
@@ -170,10 +172,14 @@ export class SessionManager {
     if (!Array.isArray(session.agentLogs)) {
       session.agentLogs = [];
     }
+    // 限制 data payload 大小，防止巨型 payload 撑大存储
+    if (typeof entry.data === 'string' && entry.data.length > 5000) {
+      entry.data = entry.data.slice(0, 5000) + '…[truncated]';
+    }
     session.agentLogs.push(entry);
     // Keep logs bounded to avoid huge index.json growth.
-    if (session.agentLogs.length > 500) {
-      session.agentLogs = session.agentLogs.slice(session.agentLogs.length - 500);
+    if (session.agentLogs.length > 200) {
+      session.agentLogs = session.agentLogs.slice(session.agentLogs.length - 200);
     }
     session.updated = Date.now();
     this._saveSessions();

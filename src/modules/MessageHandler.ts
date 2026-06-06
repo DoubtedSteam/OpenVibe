@@ -33,7 +33,7 @@ export class MessageHandler {
       saveCurrentSession: () => void;
       sanitizeIncompleteToolCalls: () => void;
       executeTool: (name: string, args: Record<string, unknown>) => Promise<string>;
-      getTodoControlInfo: () => { goal: string; list: string; remaining: number } | null;
+      getTodoControlInfo: () => { goal: string; list: string; remaining: number; firstPendingIndex: number } | null;
       getSessionEditedFiles: () => string[];
       getEditPermissionEnabled: () => boolean;
       compactHistory: (triggeredByTokenLimit?: boolean) => Promise<string>;
@@ -48,8 +48,15 @@ export class MessageHandler {
       onStopSideEffects?: () => void;
       /** Fire-and-forget: auto-name the session after the first user message. */
       autoNameSession?: () => void;
+      /** Configure which tools are blocked in the current sub-agent scope. */
+      setBlockedTools?: (tools: string[]) => void;
+      /** Compact all messages with the given subAgentTag into a summary message. */
+      compactAgentMessages?: (tag: string) => void;
     }
   ) {}
+
+  /** Current sub-agent tag stamped on new messages. */
+  private _currentTag: string = 'free';
   /**
    * Only posts content-bearing messages (addMessage, toolCall, toolResult) to the webview
    * if the active session hasn't changed since the operation started.
@@ -65,6 +72,14 @@ export class MessageHandler {
       }
     }
     this._context.post(msg);
+  }
+
+  /** Add a message to the session, auto-stamping subAgentTag from current scope. */
+  private _addTaggedMessage(msg: ChatMessage): void {
+    this._addTaggedMessage( {
+      ...msg,
+      subAgentTag: msg.subAgentTag ?? this._currentTag,
+    });
   }
 
 
@@ -151,7 +166,7 @@ export class MessageHandler {
 
       // 显示时剥离 \btw 前缀
       this._postIfSameSession({ type: 'addMessage', message: { role: 'user', content: displayText } });
-      this._context.addMessageToSession(this._originSessionId!, {
+      this._addTaggedMessage( {
         role: 'user',
         content: enrichedText,
         btwBranch: isBtw || undefined,
@@ -162,203 +177,25 @@ export class MessageHandler {
       // 空消息：添加占位消息，让LLM知道用户想继续
       const placeholder = "[继续]";
       this._postIfSameSession({ type: 'addMessage', message: { role: 'user', content: placeholder } });
-      this._context.addMessageToSession(this._originSessionId!, { role: 'user', content: placeholder });
+      this._addTaggedMessage( { role: 'user', content: placeholder });
     }
     
     this._context.post({ type: 'loading', loading: true });
     
     try {
-      const apiConfig = this._context.getApiConfig();
-      while (!this._context.operation.isStopped()) {
+      // ── Phase 1: Free mode ───────────────────────────────────────────
+      // LLM explores, plans, may create todo list. All tools available.
+      await this._agentPhase('free', []);
 
-        // Check if user requested stop before each iteration
-        if (this._context.operation.isStopped()) {
-          this._context.post({ type: 'info', message: 'Operation stopped by user.' });
-          break;
-        }
-        // Build language instruction based on user's setting
-        const langInstr = buildLanguageInstruction(apiConfig.language);
+      // ── Phase 2: Scheduling mode ─────────────────────────────────────
+      // If a todo list was created, dispatch executor + evaluator agents
+      await this._schedulingLoop();
 
-        const allMessages = this._context.buildMessagesForLlm(SYSTEM_PROMPT + langInstr + '\n\n' + getStaticHostEnvironmentBlock());
-
-        const response = await sendChatMessage(allMessages, apiConfig, TOOL_DEFINITIONS, this._context.operation.signal());
-        // Accumulate and report token usage after every LLM call
-        // Skip auto-compact when there are pending tool_calls not yet responded to,
-        // preventing a race between compact (async) and tool result insertion.
-        const hasPendingToolCalls = !!(response.toolCalls && response.toolCalls.length > 0);
-        this._accumulateAndSendUsage(response.tokenUsage, hasPendingToolCalls);
-
-
-
-        // Check for stop request before processing response
-        if (this._context.operation.isStopped()) {
-          this._context.post({ type: 'info', message: 'Operation stopped by user.' });
-          break;
-        }
-
-        if (response.toolCalls && response.toolCalls.length > 0) {
-          // ── Extract <edit-content> blocks from visible response ──────────
-          // ── Extract <edit-content> blocks from visible response ──────────
-          // The AI can place raw multi-line content inside <edit-content> tags
-          // in the visible response instead of JSON-escaping it in newContent.
-          // These blocks are extracted here, filtered from UI display,
-          // and injected into corresponding tool calls with empty newContent.
-          const editContentBlocks: string[] = [];
-          let displayContent = response.content || '';
-          if (response.content) {
-            const tagRe = /<edit-content>([\s\S]*?)<\/edit-content>/gi;
-            let match: RegExpExecArray | null;
-            while ((match = tagRe.exec(response.content)) !== null) {
-              editContentBlocks.push(match[1]);
-            }
-            if (editContentBlocks.length > 0) {
-              displayContent = response.content.replace(tagRe, '').trim();
-              // Clean up empty code fences that may result from tag stripping
-              // (prevents rendering as empty black-background <pre> boxes in the webview)
-              displayContent = displayContent.replace(/```\s*```/g, '');
-            }
-          }
-
-          // Push assistant turn with filtered content (no <edit-content> blocks)
-          // Push assistant turn with filtered content (tags stripped)
-          this._context.addMessageToSession(this._originSessionId!, {
-            role: 'assistant',
-            content: displayContent,
-            reasoning_content: response.reasoningContent,
-            tool_calls: response.toolCalls,
-          });
-
-          // Show assistant text with <edit-content> blocks filtered out
-          if (displayContent) {
-            this._postIfSameSession({ type: 'addMessage', message: { role: 'assistant', content: displayContent } });
-          }
-
-
-          let stopAfterTools = false;
-          for (const toolCall of response.toolCalls) {
-            // Check for stop request before each tool call
-            if (this._context.operation.isStopped()) {
-              this._context.post({ type: 'info', message: 'Operation stopped by user.' });
-              break;
-            }
-
-            const name = toolCall.function.name;
-            const rawArgs = toolCall.function.arguments;
-            // 路线B: args 直解析，实际内容通过 response.content 中 <edit-content> 标签注入
-            let args: Record<string, unknown> = {};
-            try { args = JSON.parse(rawArgs); } catch { /* keep empty */ }
-            if (editContentBlocks.length > 0 &&
-                (name === 'edit' || name === 'run_shell_command')) {
-              if (name === 'edit' && (!args['newContent'] || args['newContent'] === '')) {
-                args['newContent'] = editContentBlocks.shift()!;
-              } else if (name === 'run_shell_command' && (!args['command'] || args['command'] === '')) {
-                args['command'] = editContentBlocks.shift()!;
-              }
-            }
-
-
-
-
-            // task_complete：提示 AI 更新 .OpenVibe/memory.md 后结束
-            if (name === 'task_complete') {
-              // ── 获取本次任务修改的文件列表 ──────────────────────────────
-              const modifiedFiles = this._context.getSessionEditedFiles();
-              const fileListStr = modifiedFiles.length > 0
-                ? modifiedFiles.map(f => `- \`${f}\``).join('\n')
-                : '(无文件修改)';
-              const fileSummary = modifiedFiles.length > 0
-                ? `\n\n**📄 本次修改了 ${modifiedFiles.length} 个文件**:\n${fileListStr}`
-                : '';
-
-              const memoryHint = 'Task complete. Remember to update .OpenVibe/memory/ if you modified any files during this task — update L3-roles.md per-file immediately, then L1-purpose.md and L2-inventory.md after all files are done.';
-              const summary = (args['summary'] as string) || '';
-              const result = JSON.stringify({
-                success: true,
-                operation: 'task_complete',
-                message: 'Task marked complete. ' + memoryHint,
-                summary,
-                modifiedFiles,
-              });
-              this._postIfSameSession({ type: 'toolResult', name, result });
-              this._context.addMessageToSession(this._originSessionId!, { role: 'tool', content: result, tool_call_id: toolCall.id });
-
-              // ── 在聊天中显示修改文件列表（hiddenFromLlm 不占用 LLM 上下文）────
-              // 将 summary 中 "xxx；1) yyy；2) zzz" 格式自动变为换行分段
-              const fmtSummary = summary
-                ? summary.replace(/[；;]\s*(?=\d+[)\.])/g, '\n')
-                : '';
-              const summaryBlock = fmtSummary ? `\n\n${fmtSummary}` : '';
-              const displayContent = `✅ **任务完成**${summaryBlock}${fileSummary}`;
-              this._postIfSameSession({ type: 'addMessage', message: { role: 'assistant', content: displayContent } });
-              this._context.addMessageToSession(this._originSessionId!, { role: 'assistant', content: displayContent, hiddenFromLlm: true });
-
-              stopAfterTools = true;
-              break;
-            }
-
-            // 其他工具正常处理
-            this._postIfSameSession({ type: 'toolCall', name, args });
-
-            let result: string;
-            try {
-              if (name === 'compact') {
-                result = await this._context.compactHistory(false);
-              } else if (name === 'ask_human') {
-                // ask_human: wait for user response, then:
-                // 1. Post toolResult to UI to update the tool card from "waiting" to completed
-                // 2. Add tool message to session (maintains message structure integrity,
-                //    prevents sanitizeIncompleteToolCalls from deleting this block)
-                // 3. Add user message so LLM sees the user's input in the next while-loop turn
-                try {
-                  result = await this._context.executeTool(name, args);
-                } catch (e: any) {
-                  result = JSON.stringify({ error: e.message });
-                }
-                const parsed = JSON.parse(result);
-                // Always update tool card UI + maintain session message structure integrity
-                this._postIfSameSession({ type: 'toolResult', name, result });
-                this._context.addMessageToSession(this._originSessionId!, { role: 'tool', content: result, tool_call_id: toolCall.id });
-                if (parsed.success) {
-                  // Add the user's response as a new user message (drives next LLM turn)
-                  const userText = parsed.cancelled
-                    ? `[User cancelled: ${parsed.question}]`
-                    : parsed.message || '[User responded]';
-                  this._postIfSameSession({ type: 'addMessage', message: { role: 'user', content: userText } });
-                  this._context.addMessageToSession(this._originSessionId!, { role: 'user', content: userText });
-                }
-                // Skip remaining tool_calls in this turn (user input interrupts the flow)
-                break;
-              } else {
-                result = await this._context.executeTool(name, args);
-              }
-            } catch (e: any) {
-              result = JSON.stringify({ error: e.message });
-            }
-
-            // For non-ask_human tools, post tool result normally
-            if (name !== 'ask_human') {
-              this._postIfSameSession({ type: 'toolResult', name, result });
-              this._context.addMessageToSession(this._originSessionId!, { role: 'tool', content: result, tool_call_id: toolCall.id });
-            }
-          } // End of for (const toolCall of response.toolCalls)
-          if (stopAfterTools) {
-            break;
-          }
-          // Go back to the top of the loop to continue the conversation
-        } else {
-          // Text response (no tool calls)
-          let content = response.content ?? '(no response)';
-
-          this._context.addMessageToSession(this._originSessionId!, { role: 'assistant', content, reasoning_content: response.reasoningContent });
-          this._postIfSameSession({ type: 'addMessage', message: { role: 'assistant', content } });
-
-          // Plan A: 模型输出纯文本（无 tool_calls）时始终结束循环，
-          // 把控制权交还给用户。模型主动选择输出文本而不是调用工具，
-          // 说明它在等待用户的下一步指示——无论 todo list 是否还有未完成项。
-          // 用户可以通过发送新消息来继续未完成的工作。
-          break;
-        }
-      } // end while
+      // ── Phase 3: Final free mode ─────────────────────────────────────
+      // All todo items complete or no todo was created. LLM wraps up.
+      if (!this._context.operation.isStopped()) {
+        await this._agentPhase('free', []);
+      }
     } catch (error: any) {
       if (error.name === 'AbortError') {
         this._context.post({ type: 'info', message: 'Operation stopped by user.' });
@@ -369,6 +206,220 @@ export class MessageHandler {
       this._context.post({ type: 'loading', loading: false });
       this._context.post({ type: 'setRunning', running: false });
       this._isRunning = false;
+    }
+  }
+
+  /**
+   * Run the core LLM → tools loop until no-tool-calls or stop.
+   * Messages are tagged with the given subAgentTag.
+   * Blocked tools are configured on ToolExecutor before the loop starts.
+   */
+  private async _agentPhase(tag: string, blockedTools: string[]): Promise<void> {
+    this._currentTag = tag;
+    this._context.setBlockedTools?.(blockedTools);
+
+    const apiConfig = this._context.getApiConfig();
+    while (!this._context.operation.isStopped()) {
+
+      if (this._context.operation.isStopped()) {
+        this._context.post({ type: 'info', message: 'Operation stopped by user.' });
+        break;
+      }
+
+      const langInstr = buildLanguageInstruction(apiConfig.language);
+      const allMessages = this._context.buildMessagesForLlm(SYSTEM_PROMPT + langInstr + '\n\n' + getStaticHostEnvironmentBlock());
+
+      const response = await sendChatMessage(allMessages, apiConfig, TOOL_DEFINITIONS, this._context.operation.signal());
+      const hasPendingToolCalls = !!(response.toolCalls && response.toolCalls.length > 0);
+      this._accumulateAndSendUsage(response.tokenUsage, hasPendingToolCalls);
+
+      if (this._context.operation.isStopped()) {
+        this._context.post({ type: 'info', message: 'Operation stopped by user.' });
+        break;
+      }
+
+      if (response.toolCalls && response.toolCalls.length > 0) {
+        // ── Extract <edit-content> blocks ──────────────────────────────
+        const editContentBlocks: string[] = [];
+        let displayContent = response.content || '';
+        if (response.content) {
+          const tagRe = /<edit-content>([\s\S]*?)<\/edit-content>/gi;
+          let match: RegExpExecArray | null;
+          while ((match = tagRe.exec(response.content)) !== null) {
+            editContentBlocks.push(match[1]);
+          }
+          if (editContentBlocks.length > 0) {
+            displayContent = response.content.replace(tagRe, '').trim();
+            displayContent = displayContent.replace(/```\s*```/g, '');
+          }
+        }
+
+        this._addTaggedMessage({
+          role: 'assistant',
+          content: displayContent,
+          reasoning_content: response.reasoningContent,
+          tool_calls: response.toolCalls,
+        });
+
+        if (displayContent) {
+          this._postIfSameSession({ type: 'addMessage', message: { role: 'assistant', content: displayContent } });
+        }
+
+        let stopAfterTools = false;
+        for (const toolCall of response.toolCalls) {
+          if (this._context.operation.isStopped()) {
+            this._context.post({ type: 'info', message: 'Operation stopped by user.' });
+            break;
+          }
+
+          const name = toolCall.function.name;
+          const rawArgs = toolCall.function.arguments;
+          let args: Record<string, unknown> = {};
+          try { args = JSON.parse(rawArgs); } catch { /* keep empty */ }
+          if (editContentBlocks.length > 0 && (name === 'edit' || name === 'run_shell_command')) {
+            if (name === 'edit' && (!args['newContent'] || args['newContent'] === '')) {
+              args['newContent'] = editContentBlocks.shift()!;
+            } else if (name === 'run_shell_command' && (!args['command'] || args['command'] === '')) {
+              args['command'] = editContentBlocks.shift()!;
+            }
+          }
+
+          // task_complete
+          if (name === 'task_complete') {
+            const modifiedFiles = this._context.getSessionEditedFiles();
+            const fileListStr = modifiedFiles.length > 0
+              ? modifiedFiles.map(f => `- \`${f}\``).join('\n')
+              : '(无文件修改)';
+            const fileSummary = modifiedFiles.length > 0
+              ? `\n\n**📄 本次修改了 ${modifiedFiles.length} 个文件**:\n${fileListStr}`
+              : '';
+            const memoryHint = 'Task complete. Remember to update .OpenVibe/memory/ if you modified any files during this task — update L3-roles.md per-file immediately, then L1-purpose.md and L2-inventory.md after all files are done.';
+            const summary = (args['summary'] as string) || '';
+            const result = JSON.stringify({
+              success: true, operation: 'task_complete',
+              message: 'Task marked complete. ' + memoryHint, summary, modifiedFiles,
+            });
+            this._postIfSameSession({ type: 'toolResult', name, result });
+            this._addTaggedMessage({ role: 'tool', content: result, tool_call_id: toolCall.id });
+            const fmtSummary = summary ? summary.replace(/[；;]\s*(?=\d+[)\.])/g, '\n') : '';
+            const summaryBlock = fmtSummary ? `\n\n${fmtSummary}` : '';
+            const displayTaskComplete = `✅ **任务完成**${summaryBlock}${fileSummary}`;
+            this._postIfSameSession({ type: 'addMessage', message: { role: 'assistant', content: displayTaskComplete } });
+            this._addTaggedMessage({ role: 'assistant', content: displayTaskComplete, hiddenFromLlm: true });
+            stopAfterTools = true;
+            break;
+          }
+
+          this._postIfSameSession({ type: 'toolCall', name, args });
+
+          let result: string;
+          try {
+            if (name === 'compact') {
+              if (this._currentTag !== 'free') {
+                result = JSON.stringify({
+                  success: false,
+                  message: 'Compact is only available in free mode, not during sub-agent execution.',
+                });
+              } else {
+                result = await this._context.compactHistory(false);
+              }
+            } else if (name === 'ask_human') {
+              try { result = await this._context.executeTool(name, args); }
+              catch (e: any) { result = JSON.stringify({ error: e.message }); }
+              const parsed = JSON.parse(result);
+              this._postIfSameSession({ type: 'toolResult', name, result });
+              this._addTaggedMessage({ role: 'tool', content: result, tool_call_id: toolCall.id });
+              if (parsed.success) {
+                const userText = parsed.cancelled
+                  ? `[User cancelled: ${parsed.question}]`
+                  : parsed.message || '[User responded]';
+                this._postIfSameSession({ type: 'addMessage', message: { role: 'user', content: userText } });
+                this._addTaggedMessage({ role: 'user', content: userText });
+              }
+              break;
+            } else {
+              result = await this._context.executeTool(name, args);
+            }
+          } catch (e: any) {
+            result = JSON.stringify({ error: e.message });
+          }
+
+          if (name !== 'ask_human') {
+            this._postIfSameSession({ type: 'toolResult', name, result });
+            this._addTaggedMessage({ role: 'tool', content: result, tool_call_id: toolCall.id });
+          }
+        }
+        if (stopAfterTools) break;
+      } else {
+        let content = response.content ?? '(no response)';
+        this._addTaggedMessage({ role: 'assistant', content, reasoning_content: response.reasoningContent });
+        this._postIfSameSession({ type: 'addMessage', message: { role: 'assistant', content } });
+        break;
+      }
+    }
+  }
+
+  /**
+   * Scheduling mode: iterate through todo items, running an executor agent
+   * (blocked from modifying the todo), then an evaluator agent (read-only,
+   * except for todo modifications). Evaluator may add/remove/reorder items.
+   */
+  private async _schedulingLoop(): Promise<void> {
+    while (!this._context.operation.isStopped()) {
+      const todoInfo = this._context.getTodoControlInfo();
+      if (!todoInfo || todoInfo.remaining === 0) break;
+
+      const itemIndex = todoInfo.firstPendingIndex;
+      if (itemIndex < 0) break; // all done (shouldn't happen since remaining > 0)
+
+      // ── Executor Agent ──────────────────────────────────────────
+      const execTag = `executor:${itemIndex}`;
+      this._addTaggedMessage({
+        role: 'system',
+        content: `## Sub-task\n\nComplete this specific task. The conversation above contains all context you need.\nFocus only on this task. Do NOT modify the todo list.`,
+        subAgentTag: execTag,
+      });
+      this._postIfSameSession({
+        type: 'addMessage',
+        message: { role: 'system', content: `📋 **Working on next task...**` },
+      });
+
+      await this._agentPhase(execTag, ['create_todo_list']);
+
+      if (this._context.operation.isStopped()) break;
+
+      // ── Compact executor ───────────────────────────────────────
+      this._context.compactAgentMessages?.(execTag);
+
+      // ── Evaluator Agent ─────────────────────────────────────────
+      const evalTag = `evaluator:${itemIndex}`;
+      const remainingCount = todoInfo.remaining;
+      this._addTaggedMessage({
+        role: 'system',
+        content: `## Review\n\nCheck if the todo list needs revision after completing the sub-task.\n\n- Read files to verify results if needed\n- Do NOT edit code or run commands\n- If the plan needs changes, use create_todo_list to update items\n- If the plan is fine, simply respond "Plan is correct, continue."\n\nRemaining items: ${remainingCount}`,
+        subAgentTag: evalTag,
+      });
+      this._postIfSameSession({
+        type: 'addMessage',
+        message: { role: 'system', content: `🔍 **Reviewing**` },
+      });
+
+      await this._agentPhase(evalTag, ['edit', 'run_shell_command', 'create_directory', 'git_snapshot']);
+
+      if (this._context.operation.isStopped()) break;
+
+      // ── Compact evaluator ──────────────────────────────────────
+      this._context.compactAgentMessages?.(evalTag);
+
+      // Mark the item as done (evaluator may have modified todo, so re-check)
+      try {
+        await this._context.executeTool('complete_todo_item', {
+          index: itemIndex,
+          summary: `Completed`,
+        });
+      } catch {
+        // Non-fatal
+      }
     }
   }
 
@@ -501,8 +552,13 @@ export class MessageHandler {
     // otherwise the fire-and-forget compact may run between the assistant(tool_calls)
     // message being added and its tool results being added, creating orphaned
     // tool messages that cause API 400 "role 'tool' must follow tool_calls".
-    if (!hasPendingToolCalls && usage.total_tokens >= AUTO_COMPACT_TOKEN_THRESHOLD) {
-      // Fire-and-forget compact
+    // Auto-compact only in free mode — sub-agents (executor/evaluator) must not
+    // trigger global compaction, which would cut across agent boundaries.
+    if (
+      this._currentTag === 'free' &&
+      !hasPendingToolCalls &&
+      usage.total_tokens >= AUTO_COMPACT_TOKEN_THRESHOLD
+    ) {
       this._context.compactHistory(true).catch(() => {});
     }
   }

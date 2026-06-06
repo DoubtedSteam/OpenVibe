@@ -36,6 +36,7 @@
 
 | 日期 | 内容 |
 |------|------|
+| 2026-06-06 | **多智能体调度架构 (Scheduling Architecture)**：1) 主循环拆分为三个 Phase（自由模式→调度模式→自由模式） 2) `create_todo_list` 触发调度模式：每个 todo 项自动派遣执行 Agent（封锁 todo 修改）+ 评估 Agent（只读+可改计划） 3) 子 Agent 消息自动打标签（`subAgentTag`）并按边界压缩（执行者提取最后一轮回复作为摘要，评估者只保留 todo 修改痕迹，零 LLM 成本） 4) 全局 compact 仅在自由模式触发，子 Agent 内禁止。 |
 | 2026-05-20 | 新增 **BTW（By The Way）临时子对话**：用 `\btw` 前缀启动旁支对话，上下文仅在该子对话期间包含历史+btw 内容；结束后 btw 消息自动从 LLM 上下文中移除，不影响主对话流。 |
 | 2026-04-11 | 增加 **Git** 支持：编码过程中可自动创建快照，并在 UI 中回滚与管理版本。 |
 | 2026-04-14 | 增加**独立审查**：任务清单审查与代码编辑审查，由独立 LLM 代理提升修改质量。 |
@@ -68,6 +69,8 @@
 > **2026-05-02:** **Knowledge base generalization**: Split the single `.OpenVibe/memory.md` into a **3-level directory** `.OpenVibe/memory/` (`README.md` meta-definition + `L1-purpose.md` + `L2-inventory.md` + `L3-roles.md`), enabling on-demand reading and independent cache layers. The architecture is generalized as a universal knowledge base system applicable to any project. System prompt updated to a minimal reminder version.
 
 > **2026-05-09:** **Browser Sub-Agent** — Added `browser_sub_agent` tool: AI can delegate complex browsing tasks to a sub-agent that autonomously handles page navigation, form filling, element clicking, and text extraction. The sub-agent uses its own LLM loop (same API provider) to plan and execute steps, powered by Playwright headless browser automation with SSRF protection. Returns structured JSON results (status summary + action log + page state).
+
+> **2026-06-06:** **Multi-agent scheduling architecture** — 1) Main loop split into 3 phases (free → scheduling → free) 2) `create_todo_list` triggers scheduling mode: each todo item dispatches an Executor Agent (todo-modification blocked) + Evaluator Agent (read-only, can modify plan) 3) Sub-agent messages auto-tagged (`subAgentTag`) and scoped-compacted (executor: extract last response as summary; evaluator: keep only todo modification traces — zero LLM cost) 4) Global compact only allowed in free mode; blocked inside sub-agents.
 
 > **2026-05-20:** **BTW (By The Way) sub-conversation** — Start a side conversation with the `\btw` prefix. During the sub-conversation, LLM context = [history] + [btw messages]; when the sub-conversation ends, btw messages are automatically excluded from LLM context, keeping the main chat flow clean.
 
@@ -235,26 +238,81 @@ system + u1 + a1 + t1 + ... + u8 + a8 + t8 + u9 + a9 + t9 + u10
 3. **调用主 LLM** — 使用与主对话相同的 `apiConfig` 和 `TOOL_DEFINITIONS`，最大程度复用 KV cache
 4. **替换 llmMessages** — `[摘要消息, ...保留消息]`，前端完全无感知
 
+### 子 Agent 压缩 (Scoped Compaction)
+
+调度模式中，每个子 Agent 完成后**立即在其自身边界内压缩**，不跨 agent 边界：
+
+| Agent 类型 | 压缩方式 | 成本 | 产出 |
+|-----------|---------|------|------|
+| **执行 Agent** (`executor:N`) | 提取最后一条 assistant 回复作为摘要 + 统计修改文件 + 工具调用次数 | 零 LLM 调用 | 1 条 system 消息 |
+| **评估 Agent** (`evaluator:N`) | 扫描是否调用了 `create_todo_list` 修改计划 | 零 LLM 调用 | 1 条 system 消息（"计划不变" / "计划已修改"） |
+
+压缩后的消息替换原始子 Agent 消息流（通常 10-30 条），使上下文保持紧凑。
+
+### 全局压缩 (Global Compaction)
+
+全局 compact 只能由**主 Agent（自由模式）**触发，子 Agent 内部禁止：
+
+| 模式 | 自动 compact | 手动 compact 工具 | `/compact` 命令 |
+|------|------------|------------------|----------------|
+| 自由模式 | ✅ | ✅ | ✅ |
+| 执行 Agent | ❌ | ❌ 返回错误 | ❌ |
+| 评估 Agent | ❌ | ❌ 返回错误 | ❌ |
+
 ### 触发方式
 
 | 方式 | 触发点 | 说明 |
 |------|--------|------|
-| **手动** | 用户输入 `/compact` | 立即触发 |
-| **手动** | AI 调用 `compact` 工具 | Tool call 循环中触发 |
-| **自动** | 累计 `total_tokens` ≥ 1,000,000 | Fire-and-forget |
+| **手动** | 用户输入 `/compact` | 立即触发（仅自由模式） |
+| **手动** | AI 调用 `compact` 工具 | Tool call 循环中触发（仅自由模式） |
+| **自动** | 累计 `total_tokens` ≥ 1,000,000 | Fire-and-forget（仅自由模式） |
 
 > **自动 compact** 基于整个会话所有 API 调用返回的 `total_tokens` 之和。每次 API 调用后累加并检查，超过阈值则异步触发。
 
 <h2 id="multi-agent-architecture">多智能体架构 / Multi-agent architecture</h2>
 
-系统包含两个核心角色，形成「执行 ↔ 验证」分离：
+### 调度架构 (Scheduling Architecture)
+
+系统通过三阶段循环实现「探索 → 执行 → 验证」分离：
+
+```
+用户输入
+  ↓
+自由模式 (Free mode)           ← 全工具可用，探索/规划/简单任务
+  ├─ no-tool-calls → 完成
+  └─ create_todo_list → 进入调度模式
+        ↓
+调度模式 (Scheduling mode)     ← 按 todo list 逐项派遣子 Agent
+  for each todo item:
+    执行 Agent (Executor)       ← 封锁 todo 修改，专注完成任务
+    评估 Agent (Evaluator)      ← 只读 + 可修改计划，不能写代码
+  todo 清空 → 回到自由模式
+        ↓
+自由模式 (Final)               ← 最终总结，LLM 自然结束
+```
+
+三种 Agent 共享同一条消息流，通过 `subAgentTag` 标签区分归属：
+
+| 阶段 | 标签 | 可用工具 | 压缩规则 |
+|------|------|---------|---------|
+| **自由模式** | `free` | 全部 | 全局 compact（token 阈值触发） |
+| **执行 Agent** | `executor:N` | 除 `create_todo_list` 外的全部 | 完成后压缩为摘要（末轮回复 + 文件列表） |
+| **评估 Agent** | `evaluator:N` | 只读工具 + `create_todo_list` | 完成后压缩为标记（计划是否被修改） |
+
+> **核心原则**：代码控制调度（何时 dispatch 下一个 item），LLM 只负责执行。子 Agent 完成检测基于 `no-tool-calls` 信号，无需 LLM 显式标记。
+
+### 审查智能体 (Review Agents)
+
+系统包含多个独立审查角色，形成「执行 ↔ 验证」分离：
 
 | 智能体 | 职责 |
 |--------|------|
-| **主智能体** (Primary) | 需求分析、任务规划、工具调用协调与执行、与用户沟通 |
+| **调度器** (Scheduler) | 按 todo list 顺序派遣执行/评估 Agent，控制压缩边界 |
+| **执行 Agent** (Executor) | 完成单个子任务，无权修改 todo list |
+| **评估 Agent** (Evaluator) | 检查执行结果，评估是否需要修改计划，无权写代码 |
 | **审查智能体** (Review) | 独立校验 todo 合理性、编辑正确性、shell 命令安全性 |
 
-> 工具的调用由主智能体直接完成——不存在独立的"编辑智能体"。
+> 工具的调用由执行 Agent 直接完成——不存在独立的"编辑智能体"。
 
 ### Shell 命令强化审查流程
 
@@ -286,24 +344,24 @@ MessageHandler.handleUserMessage()
     │   ├─ getTodoControlInfo()            ← 检查 todo 状态
     │   └─ 嵌入 ─── Context ─── 块到用户消息正文开头
     │
-    ├─ 4. buildMessagesForLlm()
-    │   ├─ system = SYSTEM_PROMPT + hostContext + langInstr
-    │   ├─ 过滤 hiddenFromLlm 和 role==='event'
-    │   ├─ BTW 过滤：最后一条 user 是 btwBranch → 全部保留；否则排除 btwBranch 消息
-    │   └─ 返回 [system, user1, assistant1, tool1, ...]
+    ├─ 4. Phase 1: _agentPhase('free', [])  ← 自由模式
+    │   ├─ buildMessagesForLlm()
+    │   ├─ sendChatMessage()
+    │   ├─ 循环处理工具调用
+    │   └─ no-tool-calls → 结束
     │
-    ├─ 5. sendChatMessage(messages, tools)  ← API 调用
+    ├─ 5. Phase 2: _schedulingLoop()        ← 调度模式（若有 todo）
+    │   for each pending item:
+    │     ├─ _agentPhase('executor:N', blocked=['create_todo_list'])
+    │     ├─ compactAgentMessages('executor:N')  ← 机械压缩执行者消息
+    │     ├─ _agentPhase('evaluator:N', blocked=['edit','run_shell_command',...])
+    │     └─ compactAgentMessages('evaluator:N') ← 机械压缩评估者消息
     │
-    ├─ 6. 循环处理工具调用（最多 20 轮）
-    │   ├─ 解析 AI 回复中的 tool_calls
-    │   ├─ 逐一执行工具
-    │   ├─ 将 tool 结果加入消息列表
-    │   └─ 新一轮 LLM 调用
+    ├─ 6. Phase 3: _agentPhase('free', [])  ← 最终自由模式
     │
-    ├─ 7. 检查是否需要自动 compact
-    │   └─ 累计 total_tokens ≥ 1,000,000 → 自动触发 compact
-    │
-    └─ 8. 循环结束 → 等待下一条用户输入
+    └─ 7. 循环结束 → 等待下一条用户输入
+
+注：全局 compact（自动+手动）仅在自由模式（_currentTag === 'free'）触发
 ```
 
 <h2 id="other-available-tools">其它辅助工具 / Other tools</h2>
@@ -525,12 +583,18 @@ load_skill(name="paper-revision-router")
 |------|------|
 | `src/systemPrompt.ts` | 固定系统提示模板（~75 行） |
 | `src/agentRuntimeContext.ts` | 动态生成 Host environment + Active Editor |
-| `src/modules/ConversationService.ts` | 消息组装（`buildMessagesForLlm`：含 BTW 过滤 + 历史压缩`compactHistory`） |
-| `src/modules/MessageHandler.ts` | 主循环：BTW 检测、用户消息上下文注入、tool call 循环、compact 触发 |
-| `src/modules/ToolExecutor.ts` | Todo 状态管理、工具调度、shell review |
-| `src/modules/ChatViewProvider.ts` | Webview 通信、UI 消息持久化 |
+| `src/modules/ConversationService.ts` | 消息组装（`buildMessagesForLlm`：含 BTW 过滤 + 历史压缩`compactHistory` + 子 Agent 消息压缩`compactAgentMessages`） |
+| `src/modules/MessageHandler.ts` | 主循环：三阶段调度（自由→调度→自由）、BTW 检测、tool call 循环、compact 权限控制 |
+| `src/modules/ToolExecutor.ts` | Todo 状态管理、工具调度与阻断（`setBlockedTools`）、shell review |
+| `src/modules/ChatViewProvider.ts` | Webview 通信、UI 消息持久化、模块连线 |
 | `src/modules/UIManager.ts` | UI 状态管理（Edit Permission、Webview 通信） |
 | `src/modules/SessionManager.ts` | 会话持久化（消息、快照、技能、压缩档案） |
+| `src/modules/todoListManager.ts` | Todo 清单状态管理（创建、展开、标记完成、状态查询） |
+| `src/modules/activatedSkillsManager.ts` | 激活技能持久化管理（注册回调、恢复状态） |
+| `src/modules/webviewReplay.ts` | 会话回放逻辑（消息重放到前端 UI） |
+| `src/modules/messageSanitizer.ts` | 消息清理（去除不完整 tool_call 序列） |
+| `src/modules/historyCompactor.ts` | 历史压缩核心（保留窗口计算 + 边界调整 + 压缩请求构建） |
+| `src/modules/chatViewHtml.ts` | Webview HTML/CSS 模板（约 960 行纯模板代码） |
 | `src/modules/todolistReview.ts` | Todo 清单独立审查（LLM 代理） |
 | `src/modules/codeEditReview.ts` | 代码编辑独立审查（LLM 代理） |
 | `src/modules/shellCommandReview.ts` | Shell 命令编辑代理 + 安全审查 |

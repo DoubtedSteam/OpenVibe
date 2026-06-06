@@ -178,6 +178,8 @@ export class UIManager {
   }
 
   public async llmCheckReplace(ctx: ReplaceCheckContext): Promise<ReplaceCheckResult> {
+    // 每次调用前重建，避免前次 abort 影响后续请求
+    this._abortController = new AbortController();
     const apiConfig = this.getApiConfig();
 
     const prompt =

@@ -1,5 +1,7 @@
 import * as vscode from 'vscode';
 import { ChatViewProvider } from './modules/ChatViewProvider';
+import { BrowserManager } from './utils/browserManager';
+import { clearTerminalBuffers } from './tools/terminalTool';
 
 export function activate(context: vscode.ExtensionContext) {
   // 创建输出通道
@@ -33,4 +35,8 @@ export function activate(context: vscode.ExtensionContext) {
   );
 }
 
-export function deactivate() {}
+export function deactivate() {
+  // 关闭 Playwright 浏览器实例，释放内存和进程
+  BrowserManager.forceClose();
+  clearTerminalBuffers();
+}
