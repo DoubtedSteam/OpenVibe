@@ -76,7 +76,7 @@ export class MessageHandler {
 
   /** Add a message to the session, auto-stamping subAgentTag from current scope. */
   private _addTaggedMessage(msg: ChatMessage): void {
-    this._addTaggedMessage( {
+    this._context.addMessageToSession(this._originSessionId!, {
       ...msg,
       subAgentTag: msg.subAgentTag ?? this._currentTag,
     });
