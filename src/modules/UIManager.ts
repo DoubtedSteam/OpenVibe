@@ -123,11 +123,10 @@ export class UIManager {
    * Falls back to the legacy vibe-coding.model setting when no multi-model entry is selected.
    */
   public getSelectedModelDisplayName(): string {
-    if (this._selectedModelIndex >= 0) {
-      const models = this.getModels();
-      if (this._selectedModelIndex < models.length) {
-        return models[this._selectedModelIndex].name;
-      }
+    const models = this.getModels();
+    const idx = this._selectedModelIndex >= 0 ? this._selectedModelIndex : (models.length > 0 ? 0 : -1);
+    if (idx >= 0 && idx < models.length) {
+      return models[idx].name;
     }
     const cfg = vscode.workspace.getConfiguration('vibe-coding');
     return cfg.get<string>('model', 'gpt-4o');
@@ -144,8 +143,14 @@ export class UIManager {
     let activeMaxInteractions: number | undefined;
     let activeMaxSequenceLength: number | undefined;
 
-    if (this._selectedModelIndex >= 0 && this._selectedModelIndex < models.length) {
-      const entry = models[this._selectedModelIndex];
+    // Default to first model if none selected but models are configured
+    let effectiveIndex = this._selectedModelIndex;
+    if (effectiveIndex < 0 && models.length > 0) {
+      effectiveIndex = 0;
+    }
+
+    if (effectiveIndex >= 0 && effectiveIndex < models.length) {
+      const entry = models[effectiveIndex];
       if (entry.apiBaseUrl) { activeBaseUrl = entry.apiBaseUrl; }
       if (entry.apiKey) { activeApiKey = entry.apiKey; }
       activeModelName = entry.model;
