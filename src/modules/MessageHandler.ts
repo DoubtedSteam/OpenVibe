@@ -188,12 +188,14 @@ export class MessageHandler {
       await this._agentPhase('free', []);
 
       // ── Phase 2: Scheduling mode ─────────────────────────────────────
-      // If a todo list was created, dispatch executor + evaluator agents
-      await this._schedulingLoop();
+      // If a todo list was created, dispatch executor + evaluator agents.
+      // Returns true if any sub-agents were actually dispatched.
+      const didSchedule = await this._schedulingLoop();
 
       // ── Phase 3: Final free mode ─────────────────────────────────────
-      // All todo items complete or no todo was created. LLM wraps up.
-      if (!this._context.operation.isStopped()) {
+      // Only run if scheduling actually happened — the evaluator may have
+      // modified the todo list, and the LLM needs to wrap up.
+      if (didSchedule && !this._context.operation.isStopped()) {
         await this._agentPhase('free', []);
       }
     } catch (error: any) {
@@ -364,13 +366,17 @@ export class MessageHandler {
    * (blocked from modifying the todo), then an evaluator agent (read-only,
    * except for todo modifications). Evaluator may add/remove/reorder items.
    */
-  private async _schedulingLoop(): Promise<void> {
+  /** Returns true if any sub-agents were actually dispatched. */
+  private async _schedulingLoop(): Promise<boolean> {
+    let dispatched = false;
     while (!this._context.operation.isStopped()) {
       const todoInfo = this._context.getTodoControlInfo();
       if (!todoInfo || todoInfo.remaining === 0) break;
 
       const itemIndex = todoInfo.firstPendingIndex;
       if (itemIndex < 0) break; // all done (shouldn't happen since remaining > 0)
+
+      dispatched = true;
 
       // ── Executor Agent ──────────────────────────────────────────
       const execTag = `executor:${itemIndex}`;
@@ -421,6 +427,7 @@ export class MessageHandler {
         // Non-fatal
       }
     }
+    return dispatched;
   }
 
   public stopCurrentOperation(): void {
