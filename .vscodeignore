@@ -43,3 +43,19 @@ logo.png
 # 依赖锁定与构建脚本
 package-lock.json
 esbuild.mjs
+
+# 开发计划与笔记
+PLAN-*.md
+REFACTOR_PLAN.md
+prompt.md
+*.plan.md
+
+# 测试文件
+test-browser-agent.js
+test.txt
+**/test/
+**/*.test.*
+**/*.spec.*
+
+# Claude Code 配置
+.claude/
