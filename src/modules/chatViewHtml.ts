@@ -93,7 +93,9 @@ export function getChatViewHtml(webview: vscode.Webview, extensionUri: vscode.Ur
     padding: 8px 12px;
     border-radius: 12px;
     line-height: 1.55;
-     white-space: normal;
+    white-space: normal;
+    word-break: break-word;
+    overflow-wrap: break-word;
   }
   .bubble p { margin: 8px 0; }
   .bubble p:first-child { margin-top: 0; }
@@ -350,6 +352,8 @@ export function getChatViewHtml(webview: vscode.Webview, extensionUri: vscode.Ur
     border: 1px solid var(--vscode-input-border, #555);
     border-radius: 8px;
     padding: 8px 10px;
+    max-height: 35vh;
+    overflow-y: auto;
     background: var(--vscode-editor-background);
     box-shadow: 0 4px 16px rgba(0,0,0,0.25);
   }
@@ -379,9 +383,11 @@ export function getChatViewHtml(webview: vscode.Webview, extensionUri: vscode.Ur
     border-radius: 12px;
     padding: 20px 24px;
     max-width: 440px;
+    max-height: 80vh;
     width: 90%;
     box-shadow: 0 8px 32px rgba(0,0,0,0.35);
     animation: humanAssistSlideUp 0.25s ease;
+    overflow-y: auto;
     display: flex;
     flex-direction: column;
     gap: 14px;
@@ -448,8 +454,9 @@ export function getChatViewHtml(webview: vscode.Webview, extensionUri: vscode.Ur
     border-left: 3px solid var(--vscode-textLink-foreground, #3794ff);
     white-space: pre-wrap;
     word-break: break-word;
-    max-height: 240px;
+    max-height: 30vh;
     overflow-y: auto;
+    flex-shrink: 1;
   }
   .human-assist-input-row {
     display: flex;
