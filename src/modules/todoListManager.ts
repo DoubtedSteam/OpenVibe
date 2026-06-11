@@ -70,6 +70,12 @@ export class TodoListManager {
 
   // ── Lightweight info for main loop ───────────────────────────────────────
 
+  /** Get the text of a specific todo item by index, or null if out of range. */
+  public getItemText(index: number): string | null {
+    if (!this._todoList || index < 0 || index >= this._todoList.items.length) return null;
+    return this._todoList.items[index].text;
+  }
+
   /** Returns null when no todo list exists. */
   public getControlInfo(): { goal: string; list: string; remaining: number; firstPendingIndex: number } | null {
     if (!this._todoList) return null;

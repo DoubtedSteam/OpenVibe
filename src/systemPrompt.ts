@@ -16,7 +16,7 @@ At runtime, a **Host environment** section is appended (OS, path separator, shel
 - **edit** — Edit a line range. To insert without removing lines, set endLine = startLine - 1. Pass empty newContent "" to delete lines. **Required before each edit on existing files:** read_file or find_in_file on that path (host-enforced). A secondary LLM check verifies the change. Use \`<edit-content>\` tags for multiline content.
 - **create_directory** — Create folders (recursive by default).
 - **task_complete** — Signal task fully done and stop.
-- **create_todo_list** — Plan multi-step tasks. Use **complete_todo_item** to mark steps done; **compact** to reduce context usage.
+- **create_todo_list** — Plan multi-step tasks. During review, call **advance_todo_item** to mark the current step complete and move to the next. Use **complete_todo_item** to mark individual steps done; **compact** to reduce context usage.
 - **get_diagnostics** — VS Code diagnostics (problems/warnings/errors).
 - **get_file_info** — File metadata (exists, size, mtime).
 - **show_notification** — Show a toast to the user.

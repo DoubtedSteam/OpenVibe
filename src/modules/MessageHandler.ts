@@ -34,6 +34,7 @@ export class MessageHandler {
       sanitizeIncompleteToolCalls: () => void;
       executeTool: (name: string, args: Record<string, unknown>) => Promise<string>;
       getTodoControlInfo: () => { goal: string; list: string; remaining: number; firstPendingIndex: number } | null;
+      getTodoItemText: (index: number) => string | null;
       getSessionEditedFiles: () => string[];
       getEditPermissionEnabled: () => boolean;
       compactHistory: (triggeredByTokenLimit?: boolean) => Promise<string>;
@@ -312,6 +313,24 @@ export class MessageHandler {
             break;
           }
 
+          // advance_todo_item — marks current item done and signals to advance
+          if (name === 'advance_todo_item') {
+            const result = await this._context.executeTool(name, args);
+            this._postIfSameSession({ type: 'toolResult', name, result });
+            this._addTaggedMessage({ role: 'tool', content: result, tool_call_id: toolCall.id });
+            try {
+              const parsed = JSON.parse(result);
+              if (parsed.success && parsed._advance) {
+                const itemSummary = (args['summary'] as string) || 'Completed';
+                const displayText = `✅ **${itemSummary}**`;
+                this._postIfSameSession({ type: 'addMessage', message: { role: 'assistant', content: displayText } });
+                this._addTaggedMessage({ role: 'assistant', content: displayText, hiddenFromLlm: true });
+                stopAfterTools = true;
+                break;
+              }
+            } catch { /* fall through */ }
+          }
+
           this._postIfSameSession({ type: 'toolCall', name, args });
 
           let result: string;
@@ -363,8 +382,8 @@ export class MessageHandler {
 
   /**
    * Scheduling mode: iterate through todo items, running an executor agent
-   * (blocked from modifying the todo), then an evaluator agent (read-only,
-   * except for todo modifications). Evaluator may add/remove/reorder items.
+   * (blocked from modifying the todo), then a free-mode review where the LLM
+   * naturally verifies results and calls advance_todo_item to proceed.
    */
   /** Returns true if any sub-agents were actually dispatched. */
   private async _schedulingLoop(): Promise<boolean> {
@@ -374,20 +393,21 @@ export class MessageHandler {
       if (!todoInfo || todoInfo.remaining === 0) break;
 
       const itemIndex = todoInfo.firstPendingIndex;
-      if (itemIndex < 0) break; // all done (shouldn't happen since remaining > 0)
+      if (itemIndex < 0) break;
 
+      const itemText = this._context.getTodoItemText(itemIndex) || `Item ${itemIndex + 1}`;
       dispatched = true;
 
       // ── Executor Agent ──────────────────────────────────────────
       const execTag = `executor:${itemIndex}`;
       this._addTaggedMessage({
         role: 'system',
-        content: `## Sub-task\n\nComplete this specific task. The conversation above contains all context you need.\nFocus only on this task. Do NOT modify the todo list.`,
+        content: `## Sub-task\n\n${itemText}`,
         subAgentTag: execTag,
       });
       this._postIfSameSession({
         type: 'addMessage',
-        message: { role: 'system', content: `📋 **Working on next task...**` },
+        message: { role: 'system', content: `📋 **Working on: ${itemText}**` },
       });
 
       await this._agentPhase(execTag, ['create_todo_list']);
@@ -397,35 +417,26 @@ export class MessageHandler {
       // ── Compact executor ───────────────────────────────────────
       this._context.compactAgentMessages?.(execTag);
 
-      // ── Evaluator Agent ─────────────────────────────────────────
-      const evalTag = `evaluator:${itemIndex}`;
+      // ── Free Review (replaces evaluator) ───────────────────────
+      // All tools available; LLM follows its natural workflow (including
+      // any activated skill instructions) to verify and call advance_todo_item.
       const remainingCount = todoInfo.remaining;
       this._addTaggedMessage({
         role: 'system',
-        content: `## Review\n\nCheck if the todo list needs revision after completing the sub-task.\n\n- Read files to verify results if needed\n- Do NOT edit code or run commands\n- If the plan needs changes, use create_todo_list to update items\n- If the plan is fine, simply respond "Plan is correct, continue."\n\nRemaining items: ${remainingCount}`,
-        subAgentTag: evalTag,
+        content: `## Review\n\nVerify that "${itemText}" is complete. ` +
+          `Call \`advance_todo_item\` with a brief summary when satisfied, ` +
+          `or continue working if fixes are needed.\n\nRemaining items: ${remainingCount}`,
+        subAgentTag: 'free',
       });
       this._postIfSameSession({
         type: 'addMessage',
-        message: { role: 'system', content: `🔍 **Reviewing**` },
+        message: { role: 'system', content: `🔍 **Reviewing: ${itemText}**` },
       });
 
-      await this._agentPhase(evalTag, ['edit', 'run_shell_command', 'create_directory', 'git_snapshot']);
+      await this._agentPhase('free', []);
 
-      if (this._context.operation.isStopped()) break;
-
-      // ── Compact evaluator ──────────────────────────────────────
-      this._context.compactAgentMessages?.(evalTag);
-
-      // Mark the item as done (evaluator may have modified todo, so re-check)
-      try {
-        await this._context.executeTool('complete_todo_item', {
-          index: itemIndex,
-          summary: `Completed`,
-        });
-      } catch {
-        // Non-fatal
-      }
+      // If advance_todo_item was NOT called (LLM stopped without advancing),
+      // the item remains pending and we'll loop around to it again.
     }
     return dispatched;
   }

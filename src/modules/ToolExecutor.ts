@@ -323,6 +323,31 @@ export class ToolExecutor {
         return result;
       }
 
+      case 'advance_todo_item': {
+        const info = this.getTodoControlInfo();
+        if (!info) {
+          return JSON.stringify({ error: 'No todo list exists. Call create_todo_list first.' });
+        }
+        if (info.remaining === 0) {
+          return JSON.stringify({ error: 'All items are already complete.' });
+        }
+        const idx = info.firstPendingIndex;
+        const summary = (args['summary'] as string) || '';
+        this._todoListManager.markDone(idx);
+        const updatedList = this._todoListManager.getList()!.items;
+        this._todoListManager.postUpdateDisplay(updatedList);
+        const remaining = updatedList.filter(i => !i.done).length;
+        this._notifyTodoPersisted();
+        return JSON.stringify({
+          success: true,
+          _advance: true,
+          message: summary
+            ? `Item ${idx + 1} complete: ${summary}. ${remaining} remaining.`
+            : `Item ${idx + 1} marked complete. ${remaining} remaining.`,
+          remaining,
+        });
+      }
+
       case 'get_diagnostics': {
         return getDiagnosticsTool({
           uri: args.uri as string | undefined,
@@ -644,6 +669,11 @@ export class ToolExecutor {
    */
   public getTodoControlInfo(): { goal: string; list: string; remaining: number; firstPendingIndex: number } | null {
     return this._todoListManager.getControlInfo();
+  }
+
+  /** Get the text of a specific todo item by index. */
+  public getTodoItemText(index: number): string | null {
+    return this._todoListManager.getItemText(index);
   }
 
   private _cloneTodoState(): TodoState | null {

@@ -593,5 +593,25 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'advance_todo_item',
+      description:
+        'Mark the current pending todo item as complete and proceed to the next one. ' +
+        'Call this during the review phase (between executor runs) when you have verified ' +
+        'the current step is done correctly. The next pending item will be dispatched automatically.',
+      parameters: {
+        type: 'object',
+        properties: {
+          summary: {
+            type: 'string',
+            description: 'Brief one-sentence summary of what was actually done in this step.',
+          },
+        },
+        required: [],
+      },
+    },
+  },
 
 ];
