@@ -80,24 +80,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       log: (e) => this._conversation.addAgentLog(e),
     });
 
-    // ── Wire up activated skills persistence ──────────────────────────────
-    // ToolExecutor <-> SessionManager: activate/deactivate skills propagate
-    this._toolExecutor.registerActivatedSkillsPersister(
-      () => this._sessionManager.getCurrentSessionActivatedSkills(),
-      (skills) => { this._sessionManager.setCurrentSessionActivatedSkills(skills); }
-    );
-
-    // Restore activated skills from persisted session
-    const persistedSkills = this._sessionManager.getCurrentSessionActivatedSkills();
-    if (persistedSkills.length > 0) {
-      this._toolExecutor.restoreActivatedSkills(persistedSkills);
-    }
-
-    // Wire up ConversationService so buildMessagesForLlm can read activated skills
-    this._conversation.setActivatedSkillsGetter(
-      () => this._toolExecutor.getActivatedSkills()
-    );
-
     // ── Restore todo state ────────────────────────────────────────────────
     this._toolExecutor.restorePersistedTodoState(this._sessionManager.getCurrentSessionAssistantTodoState());
 
@@ -204,9 +186,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       if (msg.type === 'switchSession') {
         await this._sessionManager.switchSession(msg.sessionId);
         this._toolExecutor.restorePersistedTodoState(this._sessionManager.getCurrentSessionAssistantTodoState());
-        // Restore activated skills for the switched-to conversation
-        const switchedSkills = this._sessionManager.getCurrentSessionActivatedSkills();
-        this._toolExecutor.restoreActivatedSkills(switchedSkills);
         // Restore model selection for the switched-to conversation
         this._restoreModelFromSession();
         this._sendModelListToWebview();

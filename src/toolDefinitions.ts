@@ -362,59 +362,6 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     type: 'function',
     function: {
-      name: 'activate_skill',
-      description:
-        'Activate a skill for the current conversation. The activated skill instructions will be injected into the system prompt for all subsequent AI responses in this conversation. ' +
-        'The skill must exist in either workspace-local (.OpenVibe/skills/) or the global skills pool. ' +
-        'Use deactivate_skill to remove it, and list_activated_skills to see which skills are active. ' +
-        'Skill activation is persisted per conversation so it survives window reloads.',
-      parameters: {
-        type: 'object',
-        properties: {
-          name: {
-            type: 'string',
-            description: 'Name of the skill to activate (e.g. "paper-revision-router")',
-          },
-        },
-        required: ['name'],
-      },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'deactivate_skill',
-      description:
-        'Deactivate a skill for the current conversation. The skill instructions will no longer be injected into the system prompt. ' +
-        'Use list_activated_skills to see which skills are currently active.',
-      parameters: {
-        type: 'object',
-        properties: {
-          name: {
-            type: 'string',
-            description: 'Name of the skill to deactivate',
-          },
-        },
-        required: ['name'],
-      },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'list_activated_skills',
-      description:
-        'List all skills currently activated in this conversation. Returns an array of skill names whose instructions are being injected into the system prompt.',
-      parameters: {
-        type: 'object',
-        properties: {},
-        required: [],
-      },
-    },
-  },
-  {
-    type: 'function',
-    function: {
       name: 'ask_human',
       description:
         'Request human assistance for a task that cannot be performed by AI alone. ' +

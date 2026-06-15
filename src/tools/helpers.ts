@@ -61,23 +61,9 @@ function _listSkillsFromDir(dir: string): string[] {
   }
 }
 
-// ─── Session-level skill activation callbacks ─────────────────────────────────
-let _getActivatedSkills: () => string[] = () => [];
-let _setActivatedSkills: (skills: string[]) => void = () => {};
-
-export function setActivatedSkillsCallbacks(
-  getter: () => string[],
-  setter: (skills: string[]) => void
-): void {
-  _getActivatedSkills = getter;
-  _setActivatedSkills = setter;
-}
-
 export {
   getOrCreateGlobalSkillsDir,
   _skillSearchPaths,
   _findSkillAcrossPools,
   _listSkillsFromDir,
-  _getActivatedSkills,
-  _setActivatedSkills,
 };

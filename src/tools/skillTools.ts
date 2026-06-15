@@ -5,8 +5,6 @@ import {
   _skillSearchPaths,
   _findSkillAcrossPools,
   _listSkillsFromDir,
-  _getActivatedSkills,
-  _setActivatedSkills,
 } from './helpers';
 
 // ─── Frontmatter parser ──────────────────────────────────────────────────────
@@ -106,82 +104,5 @@ export function loadSkillTool(params: SkillLoadParams): string {
     });
   } catch (e: any) {
     return JSON.stringify({ error: 'Failed to load skill: ' + e.message });
-  }
-}
-
-export function activateSkillTool(params: { name: string }): string {
-  try {
-    const found = _findSkillAcrossPools(params.name);
-    if (!found) {
-      return JSON.stringify({
-        error: 'Cannot activate: skill "' + params.name + '" not found in any skill pool. Use list_skills to see available skills.',
-      });
-    }
-
-    const current = _getActivatedSkills();
-    if (current.includes(params.name)) {
-      return JSON.stringify({
-        success: true,
-        message: 'Skill "' + params.name + '" is already active.',
-        activatedSkills: current,
-      });
-    }
-
-    const updated = [...current, params.name];
-    _setActivatedSkills(updated);
-    return JSON.stringify({
-      success: true,
-      message: 'Skill "' + params.name + '" activated for this conversation.',
-      activatedSkills: updated,
-    });
-  } catch (e: any) {
-    return JSON.stringify({ error: 'Failed to activate skill: ' + e.message });
-  }
-}
-
-export function deactivateSkillTool(params: { name: string }): string {
-  try {
-    const current = _getActivatedSkills();
-    if (!current.includes(params.name)) {
-      return JSON.stringify({
-        success: true,
-        message: 'Skill "' + params.name + '" is not active in this conversation.',
-        activatedSkills: current,
-      });
-    }
-
-    const updated = current.filter(s => s !== params.name);
-    _setActivatedSkills(updated);
-    return JSON.stringify({
-      success: true,
-      message: 'Skill "' + params.name + '" deactivated for this conversation.',
-      activatedSkills: updated,
-    });
-  } catch (e: any) {
-    return JSON.stringify({ error: 'Failed to deactivate skill: ' + e.message });
-  }
-}
-
-export function listActivatedSkillsTool(): string {
-  try {
-    const skills = _getActivatedSkills();
-    return JSON.stringify({
-      activatedSkills: skills,
-      total: skills.length,
-    });
-  } catch (e: any) {
-    return JSON.stringify({ error: 'Failed to list activated skills: ' + e.message });
-  }
-}
-
-export function loadActivatedSkillInstruction(name: string): string | null {
-  try {
-    const found = _findSkillAcrossPools(name);
-    if (!found) return null;
-    const raw = fs.readFileSync(found.skillPath, 'utf-8');
-    const { body } = parseFrontmatter(raw);
-    return body || null;
-  } catch {
-    return null;
   }
 }

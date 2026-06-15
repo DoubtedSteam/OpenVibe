@@ -2,8 +2,8 @@
 // Re-exports all public tool interfaces and functions previously in tools.ts.
 // Each tool category is now in its own file under src/tools/.
 
-// Helpers (skills, activation callbacks)
-export { setGlobalSkillsDir, setActivatedSkillsCallbacks } from './helpers';
+// Helpers (skills, global dir)
+export { setGlobalSkillsDir } from './helpers';
 
 // read_file
 export type { ReadFileParams } from './readFileTool';
@@ -40,7 +40,7 @@ export { gitSnapshotTool, gitRollbackTool, listGitSnapshotsTool } from './gitToo
 
 // Skill system
 export type { SkillLoadParams } from './skillTools';
-export { listSkillsTool, loadSkillTool, activateSkillTool, deactivateSkillTool, listActivatedSkillsTool, loadActivatedSkillInstruction } from './skillTools';
+export { listSkillsTool, loadSkillTool } from './skillTools';
 
 // web_fetch
 export { webFetchTool } from './webFetchTool';

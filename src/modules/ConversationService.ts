@@ -4,7 +4,6 @@ import { SYSTEM_PROMPT } from '../systemPrompt';
 import { TOOL_DEFINITIONS } from '../toolDefinitions';
 import { sendChatMessage } from '../api';
 import { SessionManager } from './SessionManager';
-import { loadActivatedSkillInstruction } from '../tools';
 import { COMPACT_RESERVE_TOKENS } from '../constants';
 import { replaySessionToWebview } from './webviewReplay';
 import { sanitizeMessageList } from './messageSanitizer';
@@ -44,15 +43,8 @@ export class ConversationService {
   constructor(
     private readonly _session: SessionManager,
     private readonly _getApiConfig: () => ApiConfig,
-    private readonly _post: (msg: any) => void,
-    /** Callback to retrieve current conversation's activated skill names. */
-    private readonly _getActivatedSkills?: () => string[]
+    private readonly _post: (msg: any) => void
   ) {}
-
-  /** Set the activated skills getter after construction (e.g. for circular dependency). */
-  public setActivatedSkillsGetter(getter: () => string[]): void {
-    (this as any)._getActivatedSkills = getter;
-  }
 
   getCurrentMessages(): ChatMessage[] {
     return this._session.getCurrentMessages();
@@ -260,30 +252,6 @@ export class ConversationService {
     // msg[0]: System prompt (caller has merged static host environment inside)
     const messages: ChatMessage[] = [{ role: 'system', content: systemPrompt }];
 
-    // msg[1]: Activated skills (optional) — after the stable prefix so
-    // skill changes don't disrupt KV cache for msg[0].
-    const skillNames = this._getActivatedSkills?.() ?? [];
-    if (skillNames.length > 0) {
-      const blocks: string[] = [];
-      for (const name of skillNames) {
-        const instruction = loadActivatedSkillInstruction(name);
-        if (instruction) {
-          blocks.push(
-            `## Activated skill: ${name}\n${instruction}`
-          );
-        }
-      }
-      if (blocks.length > 0) {
-        messages.push({
-          role: 'system',
-          content:
-            `## Activated Skills\n` +
-            `The following skills are currently active in this conversation. Follow their instructions carefully.\n\n` +
-            blocks.join('\n\n')
-        });
-      }
-    }
-
     messages.push(...filtered);
     return messages;
   }
@@ -369,7 +337,6 @@ export class ConversationService {
         getLlmMessages: () => this._session.getLlmMessages(),
         setLlmMessages: (msgs) => this._session.setLlmMessages(msgs),
         getApiConfig: () => this._getApiConfig(),
-        getActivatedSkills: this._getActivatedSkills ? () => this._getActivatedSkills!() : undefined,
         getUsageSnapshots: () => this._usageSnapshots,
         resetUsageSnapshots: () => this.resetUsageSnapshots(),
       },

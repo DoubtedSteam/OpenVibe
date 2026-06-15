@@ -328,7 +328,6 @@ export class SessionManager {
       updated: s.updated,
       isActive: s.id === this._currentSessionId,
       lastOpenedAt: s.lastOpenedAt,
-      activatedSkills: s.activatedSkills,
       selectedModelIndex: s.selectedModelIndex,
       assistantTodoState: s.assistantTodoState,
       messageCount,
@@ -346,7 +345,6 @@ export class SessionManager {
       messages: [],        // loaded lazily
       isActive: entry.isActive,
       lastOpenedAt: entry.lastOpenedAt,
-      activatedSkills: entry.activatedSkills,
       selectedModelIndex: entry.selectedModelIndex,
       assistantTodoState: entry.assistantTodoState,
       messageCount: entry.messageCount,
@@ -575,8 +573,6 @@ export class SessionManager {
       snapshots: deepCopySnapshots,
       isActive: true,
       lastOpenedAt: now,
-      // Copy skill and model configuration so the duplicate behaves identically
-      activatedSkills: sourceSession.activatedSkills ? [...sourceSession.activatedSkills] : undefined,
       selectedModelIndex: sourceSession.selectedModelIndex,
       // Intentionally NOT copying assistantTodoState — duplicate starts fresh
     };
@@ -627,32 +623,6 @@ export class SessionManager {
     this._saveSessions();
   }
   // ─── Activated skills (conversation-scoped) ───────────────────────────────
-
-  // ─── Activated skills (conversation-scoped) ───────────────────────────────
-
-  /**
-   * Get activated skill names for the current conversation.
-   */
-  public getCurrentSessionActivatedSkills(): string[] {
-    const currentSession = this._sessions.find((s) => s.id === this._currentSessionId);
-    if (!currentSession?.activatedSkills || !Array.isArray(currentSession.activatedSkills)) {
-      return [];
-    }
-    return currentSession.activatedSkills.filter((s): s is string => typeof s === 'string');
-  }
-
-  /**
-   * Set activated skill names for the current conversation and persist.
-   */
-  public setCurrentSessionActivatedSkills(skills: string[]): void {
-    const currentSession = this._sessions.find((s) => s.id === this._currentSessionId);
-    if (!currentSession) {
-      return;
-    }
-    currentSession.activatedSkills = [...skills];
-    currentSession.updated = Date.now();
-    this._saveSessions();
-  }
   // ─── Selected model index (conversation-scoped) ────────────────────────
 
   /**

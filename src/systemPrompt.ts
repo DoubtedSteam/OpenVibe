@@ -20,7 +20,7 @@ At runtime, a **Host environment** section is appended (OS, path separator, shel
 - **get_diagnostics** — VS Code diagnostics (problems/warnings/errors).
 - **get_file_info** — File metadata (exists, size, mtime).
 - **show_notification** — Show a toast to the user.
-- **list_skills** / **load_skill** / **activate_skill** / **deactivate_skill** / **list_activated_skills** — Skill system.
+- **list_skills** / **load_skill** — Skill system (load a skill to get its instruction in context).
 - **ask_human** — Request human assistance (manual testing, design decisions, info gathering). Pauses until user clicks Done/Cancel.
 - **web_fetch** — Fetch plain-text content from a URL. Supports cookies/headers. If you don't know the URL, use ask_human to get it.
 - **run_shell_command** — Run shell commands (build/test/git). **NOT for file operations** — use read_file/edit/create_directory instead. Use \`<edit-content>\` tags for multiline commands.

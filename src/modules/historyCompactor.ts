@@ -4,7 +4,6 @@ import { SYSTEM_PROMPT } from '../systemPrompt';
 import { TOOL_DEFINITIONS } from '../toolDefinitions';
 import { sendChatMessage } from '../api';
 import { buildLanguageInstruction, getStaticHostEnvironmentBlock } from '../agentRuntimeContext';
-import { loadActivatedSkillInstruction } from '../tools';
 import { sanitizeMessageList } from './messageSanitizer';
 
 /** Context needed by the history compactor. */
@@ -12,7 +11,6 @@ export interface CompactorContext {
   getLlmMessages(): ChatMessage[];
   setLlmMessages(msgs: ChatMessage[]): void;
   getApiConfig(): ApiConfig;
-  getActivatedSkills?(): string[];
   getUsageSnapshots(): Array<{ msgCount: number; totalPromptTokens: number }>;
   resetUsageSnapshots(): void;
 }
@@ -126,26 +124,6 @@ export async function compactHistoryFn(
       { role: 'system', content: SYSTEM_PROMPT + langInstr + '\n\n' + getStaticHostEnvironmentBlock() },
     ];
 
-    // msg[1]: Activated skills — mirrors buildMessagesForLlm for KV cache alignment
-    const skillNames = ctx.getActivatedSkills?.() ?? [];
-    if (skillNames.length > 0) {
-      const blocks: string[] = [];
-      for (const name of skillNames) {
-        const instruction = loadActivatedSkillInstruction(name);
-        if (instruction) {
-          blocks.push(`## Activated skill: ${name}\n${instruction}`);
-        }
-      }
-      if (blocks.length > 0) {
-        compactMessages.push({
-          role: 'system',
-          content:
-            `## Activated Skills\n` +
-            `The following skills are currently active in this conversation. Follow their instructions carefully.\n\n` +
-            blocks.join('\n\n'),
-        });
-      }
-    }
 
     compactMessages.push(
       ...sanitizedToCompress,

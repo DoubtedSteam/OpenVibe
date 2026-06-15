@@ -19,9 +19,6 @@ import {
   workspaceFileExistsRelative,
   listSkillsTool,
   loadSkillTool,
-  activateSkillTool,
-  deactivateSkillTool,
-  listActivatedSkillsTool,
   webFetchTool,
   grepSearchTool,
   browserSubAgentTool,
@@ -46,7 +43,6 @@ import {
   detectShellContextHarvest,
   shouldEarlyStopOnShellReviewFail,
 } from './shellSecurity';
-import { ActivatedSkillsManager } from './activatedSkillsManager';
 import { TodoListManager } from './todoListManager';
 
 
@@ -68,8 +64,6 @@ export class ToolExecutor {
 
   /** Tracks file paths modified via the `edit` tool in the current user-turn session. */
   private _sessionEditedFiles = new Set<string>();
-
-  private _activatedSkillsManager = new ActivatedSkillsManager();
 
   /** Tools blocked in the current sub-agent scope. Empty = all tools allowed. */
   private _blockedTools: Set<string> = new Set();
@@ -401,30 +395,6 @@ export class ToolExecutor {
         return loadSkillTool({ name: args.name as string });
       }
 
-      case 'activate_skill': {
-        const actSkills = this._getActivatedSkills();
-        const actResult = activateSkillTool({ name: args.name as string });
-        const actParsed = JSON.parse(actResult) as { activatedSkills?: string[]; error?: string };
-        if (actParsed.activatedSkills) {
-          this._setActivatedSkills(actParsed.activatedSkills);
-        }
-        return actResult;
-      }
-
-      case 'deactivate_skill': {
-        const deactSkills = this._getActivatedSkills();
-        const deactResult = deactivateSkillTool({ name: args.name as string });
-        const deactParsed = JSON.parse(deactResult) as { activatedSkills?: string[]; error?: string };
-        if (deactParsed.activatedSkills) {
-          this._setActivatedSkills(deactParsed.activatedSkills);
-        }
-        return deactResult;
-      }
-
-      case 'list_activated_skills': {
-        return listActivatedSkillsTool();
-      }
-
       case 'web_fetch': {
         return webFetchTool({
           url: args.url as string,
@@ -478,38 +448,6 @@ export class ToolExecutor {
       default:
         return JSON.stringify({ error: `Unknown tool: ${name}` });
     }
-  }
-
-  // ─── Activated skills management ──────────────────────────────────────────
-  // Delegates to ActivatedSkillsManager
-
-  /** Register persistence callback for activated skills. */
-  public registerActivatedSkillsPersister(
-    getter: () => string[],
-    setter: (skills: string[]) => void
-  ): void {
-    this._activatedSkillsManager.registerActivatedSkillsPersister(getter, setter);
-  }
-
-  /** Restore activated skills from session (extension reload). */
-  public restoreActivatedSkills(skills: string[]): void {
-    this._activatedSkillsManager.restore(skills);
-  }
-
-  /** Public getter for activated skills (used by ConversationService). */
-  public getActivatedSkills(): string[] {
-    return this._activatedSkillsManager.getActivatedSkills();
-  }
-
-  /** Internal helpers used by tool case handlers. */
-  private _getActivatedSkills(): string[] {
-    return this._activatedSkillsManager.getActivatedSkills();
-  }
-  private _setActivatedSkills(skills: string[]): void {
-    // Delegate setting to the manager through registerActivatedSkillsPersister's setter
-    // Since _setActivatedSkills is called from within the class, we need direct access.
-    // We expose a package-private method on the manager.
-    this._activatedSkillsManager.setActivatedSkills(skills);
   }
 
   private async _handleRunShellCommand(args: Record<string, unknown>): Promise<string> {
