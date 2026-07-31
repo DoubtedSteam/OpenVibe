@@ -43,7 +43,6 @@ export class MessageHandler {
       /** Reset per-turn UI counters (e.g. edit review #) when the user sends a new instruction. */
       onUserInstructionStart?: () => void;
       /** Shared operation controller used across main + sub agents. */
-      /** Shared operation controller used across main + sub agents. */
       operation: OperationController;
       /** Side-effects to run on stop (e.g. resolve confirm bars). */
       onStopSideEffects?: () => void;
@@ -89,7 +88,6 @@ export class MessageHandler {
     if (this._isRunning) { return; }
 
     this._context.sanitizeIncompleteToolCalls();
-    this._originSessionId = this._context.getCurrentSessionId();
     this._originSessionId = this._context.getCurrentSessionId();
 
     this._isRunning = true;
