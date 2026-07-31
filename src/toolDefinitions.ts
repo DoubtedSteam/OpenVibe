@@ -94,8 +94,9 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
         'HOST ENFORCEMENT (hard rule): If the file already exists in the workspace, you MUST call read_file or find_in_file (with a match) on that exact path after the latest user message and before this edit — the tool will reject edit otherwise. ' +
         'Exception: creating a brand-new file (path not yet present) does not require a prior read. ' +
         'After every successful edit on a file, line-query permission is cleared — you must read_file or find_in_file again before another edit on the same file. ' +
-        'To insert without removing any lines, set endLine = startLine - 1. ' +
+        'To insert without removing any lines, set endLine = startLine - 1 with non-empty newContent (or an <edit-content> tag written in the same response). ' +
         'To delete lines, set newContent to an empty string \"\". ' +
+        '⚠️ DANGER: empty newContent with endLine >= startLine = IRREVERSIBLE DELETION (no undo). The <edit-content> tag is extracted from your visible response text, so you MUST write it in the same response as this tool call while leaving newContent empty; if the tag is missing, the edit silently becomes a deletion instead of failing. ' +
         'After an edit, call read_file to verify the result.',
       parameters: {
         type: 'object',
@@ -117,8 +118,8 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
            newContent: {
             type: 'string',
             description:
-                'Edit text. Empty string to delete the range. ' +
-                'For multi-line content, leave newContent empty and put the text inside <edit-content> tags in your visible response (avoids JSON escaping).',
+                'Edit text. Empty string to delete the range (⚠️ irreversible). ' +
+                'For multi-line content, leave newContent empty and write the text inside <edit-content> tags in your visible response IN THE SAME RESPONSE as this tool call (avoids JSON escaping); if the tag is missing, the edit silently becomes a deletion.',
           },
 
         },
@@ -308,9 +309,10 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       description:
         'Run a shell command with the workspace folder as current working directory. ' +
         'Output is captured (stdout/stderr). The extension runs a dedicated shell editor agent on your proposed command, ' +
-        'then an independent review for safety and for avoiding ANY shell-based file operations (reading/writing workspace files); ' +
-        'if review passes, the user may confirm before execution. **DO NOT use shell commands to write or modify workspace files** — ' +
-        'use the dedicated read_file, edit, and create_directory tools for file operations. Prefer read_file for reading code. ' +
+        'then an independent review for safety and for avoiding shell-based reading/writing of workspace file CONTENT; ' +
+        'if review passes, the user may confirm before execution. **DO NOT use shell to read or write file content** — ' +
+        'use the dedicated read_file, edit, and create_directory tools for content operations. Prefer read_file for reading code. ' +
+        'File-system MANAGEMENT operations (move/rename/delete files, create folders) are normally rejected too, but may be allowed by the review agent when the user explicitly requests them and no dedicated tool exists (e.g. moving stray files into _tmp/). ' +
         'Reading a single non-code artifact (e.g. .log/.txt/.md) via shell may be acceptable when explicitly requested. Use this tool only for builds, tests, or package managers (npm install, git status, etc.). ' +
         'Avoid destructive commands unless the user explicitly asked.',
       parameters: {
@@ -434,7 +436,9 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
       name: 'grep_search',
       description:
         'Search across all workspace files for a given pattern (case-sensitive by default). Returns matching file paths and line contents. ' +
-        'The include/exclude patterns follow VS Code glob syntax (e.g. "**/*.ts", "**/*.{ts,js}"). ' +
+        '⚠️ The pattern is matched as a LITERAL substring (line.includes), NOT a regex — do not use |, *, or anchors; use a separate call per keyword. ' +
+        'The include/exclude patterns follow VS Code glob syntax (e.g. \"**/*.ts\", \"**/*.{ts,js}\"). ' +
+        'Default excludes: node_modules, .git, out, dist, .vscode, .OpenVibe. ' +
         'Use this when you need to find where something is referenced across multiple files.',
       parameters: {
         type: 'object',

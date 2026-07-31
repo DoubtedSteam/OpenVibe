@@ -13,7 +13,7 @@ At runtime, a **Host environment** section is appended (OS, path separator, shel
 - **get_workspace_info** — Workspace root and top-level file list.
 - **read_file** — Read file content (numbered lines) or list directory entries.
 - **find_in_file** — Locate text in a file and return its line number.
-- **edit** — Edit a line range. To insert without removing lines, set endLine = startLine - 1. Pass empty newContent "" to delete lines. **Required before each edit on existing files:** read_file or find_in_file on that path (host-enforced). A secondary LLM check verifies the change. Use \`<edit-content>\` tags for multiline content.
+- **edit** — Edit a line range. To insert without removing lines, set endLine = startLine - 1 with non-empty newContent. Pass empty newContent "" to delete lines — ⚠️ empty newContent with endLine >= startLine = IRREVERSIBLE DELETION (no undo). **Required before each edit on existing files:** read_file or find_in_file on that path (host-enforced). A secondary LLM check verifies the change. For multiline content, write \`<edit-content>\` tags in the SAME response as the tool call (newContent left empty); if the tag is missing, the edit silently becomes a deletion.
 - **create_directory** — Create folders (recursive by default).
 - **task_complete** — Signal task fully done and stop.
 - **create_todo_list** — Plan multi-step tasks. During review, call **advance_todo_item** to mark the current step complete and move to the next. Use **complete_todo_item** to mark individual steps done; **compact** to reduce context usage.
@@ -23,9 +23,9 @@ At runtime, a **Host environment** section is appended (OS, path separator, shel
 - **list_skills** / **load_skill** — Skill system (load a skill to get its instruction in context).
 - **ask_human** — Request human assistance (manual testing, design decisions, info gathering). Pauses until user clicks Done/Cancel.
 - **web_fetch** — Fetch plain-text content from a URL. Supports cookies/headers. If you don't know the URL, use ask_human to get it.
-- **run_shell_command** — Run shell commands (build/test/git). **NOT for file operations** — use read_file/edit/create_directory instead. Use \`<edit-content>\` tags for multiline commands.
+- **run_shell_command** — Run shell commands (build/test/git). **DO NOT read/write file content via shell** — use read_file/edit/create_directory instead. File-system management operations (move/rename/delete files) may be allowed by the review agent when the user explicitly asks and no dedicated tool exists. Use \`<edit-content>\` tags for multiline commands.
 - **get_terminal_content** — Read the recent output from the user's VS Code terminal(s). Use this to see what the user has been running, check the status of long-running processes (dev servers, builds), or debug errors from manual commands. Optionally filter by terminal name or specify the number of lines to return.
-- **grep_search** — Search text across workspace files.
+- **grep_search** — Search text across workspace files (LITERAL substring match, NOT regex; case-sensitive by default; default-excludes node_modules/.git/out/dist/.vscode/.OpenVibe).
 - **browser_sub_agent** — Execute a complex browsing task using a browser sub-agent. Provide a natural-language task description (e.g. "搜索 Node.js 下载链接"). The agent autonomously navigates pages, fills forms, clicks, and extracts information using its own LLM reasoning. Returns structured JSON with results. Requires an API key to be configured.
 
 ## Project Knowledge
