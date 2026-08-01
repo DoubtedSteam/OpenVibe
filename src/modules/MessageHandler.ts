@@ -294,7 +294,10 @@ export class MessageHandler {
             const fileSummary = modifiedFiles.length > 0
               ? `\n\n**📄 本次修改了 ${modifiedFiles.length} 个文件**:\n${fileListStr}`
               : '';
-            const memoryHint = 'Task complete. Remember to update .OpenVibe/memory/ if you modified any files during this task — update L3-roles.md per-file immediately, then L1-purpose.md and L2-inventory.md after all files are done.';
+            const memoryHint = modifiedFiles.length > 0
+              ? 'Task complete. ⚠️ MEMORY SYNC REQUIRED: this task modified files — before editing .OpenVibe/memory/ next, check whether new/removed files need L2-inventory.md updates and whether changed components need L3-roles.md updates (code is the source of truth). Modified files:\n' +
+                modifiedFiles.map(f => `- ${f}`).join('\n')
+              : 'Task complete. No files modified — memory sync not required.';
             const summary = (args['summary'] as string) || '';
             const result = JSON.stringify({
               success: true, operation: 'task_complete',

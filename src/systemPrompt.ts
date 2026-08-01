@@ -35,6 +35,13 @@ The project may store structured context in .OpenVibe/memory/
 that directory for the full definition. Read the relevant file
 when you need project context.
 
+**Consistency rule (before task_complete):** If you modified any files this session,
+check whether the changes affect the knowledge base and update it BEFORE calling task_complete:
+- New or removed files → update L2-inventory.md
+- Changed component structure, fields, or responsibilities → update L3-roles.md
+- If memory contradicts code → trust the code, then fix memory.
+Keep memory in sync with the actual code; code is the source of truth.
+
 ## Task Planning (REQUIRED for multi-step)
 
 1. Call \`create_todo_list\` with a **goal** (one sentence: WHAT + WHY) and ordered **items**.

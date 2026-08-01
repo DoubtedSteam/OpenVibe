@@ -65,6 +65,14 @@ export class ToolExecutor {
   /** Tracks file paths modified via the `edit` tool in the current user-turn session. */
   private _sessionEditedFiles = new Set<string>();
 
+  /** Cache of file content BEFORE each edit (normalized path → full text), for "Open in Diff Editor". */
+  private _editBeforeSnapshots = new Map<string, string>();
+
+  /** Return the cached pre-edit content for a file, or null if it was never edited this session. */
+  public getEditBeforeSnapshot(filePath: string): string | null {
+    return this._editBeforeSnapshots.get(this._normalizeFileKey(filePath)) ?? null;
+  }
+
   /** Tools blocked in the current sub-agent scope. Empty = all tools allowed. */
   private _blockedTools: Set<string> = new Set();
 
@@ -250,6 +258,17 @@ export class ToolExecutor {
               'This is enforced at the start of each user message and again after each successful edit that changes the file. ' +
               '新建不存在的文件时可直接 edit；若文件已存在则必须先查询行号。',
           });
+        }
+        // Cache the current file content BEFORE the edit — used by "Open in Diff Editor"
+        if (existedBefore) {
+          try {
+            const abs = resolveWorkspacePath(fp);
+            if (fs.existsSync(abs)) {
+              this._editBeforeSnapshots.set(this._normalizeFileKey(fp), fs.readFileSync(abs, 'utf-8'));
+            }
+          } catch {
+            // Snapshot failure must never block the edit itself
+          }
         }
         const result = await replaceLinesTool(
           {

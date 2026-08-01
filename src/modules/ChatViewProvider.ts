@@ -115,6 +115,58 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     this._uiManager.setOutputChannel(channel);
   }
 
+  /**
+   * Open a side-by-side diff (git-style) in the VS Code editor:
+   * left = pre-edit snapshot (or git HEAD fallback), right = current file content.
+   */
+  private async _openDiffInEditor(filePath: string): Promise<void> {
+    const root = vscode.workspace.workspaceFolders?.[0];
+    if (!root || typeof filePath !== 'string') return;
+    const rel = filePath.replace(/\\/g, '/');
+    const absPath = path.join(root.uri.fsPath, ...rel.split('/'));
+    let before = this._toolExecutor.getEditBeforeSnapshot(rel);
+    if (before == null) {
+      before = await this._gitHeadContent(rel);
+      if (before == null) {
+        vscode.window.showWarningMessage(
+          `Cannot open diff for ${rel}: no pre-edit snapshot available (was it edited in a previous session?).`
+        );
+        return;
+      }
+    }
+    try {
+      const fsMod = require('fs') as typeof import('fs');
+      const osMod = require('os') as typeof import('os');
+      const tmpFile = path.join(osMod.tmpdir(), `openvibe-before-${Date.now()}-${path.basename(rel)}`);
+      fsMod.writeFileSync(tmpFile, before, 'utf-8');
+      await vscode.commands.executeCommand(
+        'vscode.diff',
+        vscode.Uri.file(tmpFile),
+        vscode.Uri.file(absPath),
+        `OpenVibe diff: ${rel}`,
+        { preview: true }
+      );
+    } catch (e: any) {
+      vscode.window.showErrorMessage(`Failed to open diff: ${e.message}`);
+    }
+  }
+
+  /** Fallback: fetch the file's content at git HEAD. */
+  private async _gitHeadContent(relPath: string): Promise<string | null> {
+    try {
+      const { execFileSync } = require('child_process') as typeof import('child_process');
+      const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      if (!root) return null;
+      return execFileSync('git', ['show', 'HEAD:' + relPath], {
+        cwd: root,
+        encoding: 'utf-8',
+        maxBuffer: 10 * 1024 * 1024,
+      });
+    } catch {
+      return null;
+    }
+  }
+
   private static _readTodolistReviewSettings(): TodolistReviewSettings {
     const c = vscode.workspace.getConfiguration('vibe-coding');
     return {
@@ -157,6 +209,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     webviewView.webview.onDidReceiveMessage(async (msg) => {
       if (msg.type === 'sendMessage') {
         await this._messageHandler.handleUserMessage(msg.text);
+      }
+      if (msg.type === 'openDiff') {
+        await this._openDiffInEditor(msg.filePath);
+        return;
       }
       if (msg.type === 'ready') {
         this._uiManager.sendWorkspaceBanner();
