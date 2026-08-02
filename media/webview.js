@@ -1806,16 +1806,11 @@ Please report this to https://github.com/markedjs/marked.`, e) {
       return n.toLocaleString("en-US");
     }
     function showTokenUsage(msg) {
-      if (!messagesDiv) return;
-      var usage = msg.usage, accumulated = msg.accumulated;
-      var el = document.createElement("div");
-      el.className = "token-usage";
-      el.textContent = "\u2191 " + fmtTokens(usage.prompt_tokens) + "  \u2193 " + fmtTokens(usage.completion_tokens) + "  \u03A3 " + fmtTokens(usage.total_tokens) + " tokens";
-      el.title = "prompt: " + fmtTokensFull(usage.prompt_tokens) + " tokens\ncompletion: " + fmtTokensFull(usage.completion_tokens) + " tokens\ntotal: " + fmtTokensFull(usage.total_tokens) + " tokens";
-      messagesDiv.appendChild(el);
-      scrollBottom();
       var footer = byId("usage-footer");
-      if (footer && accumulated) footer.innerHTML = '<span class="usage-item"><span class="usage-label">prompt </span><span class="usage-value" title="cumulative ' + fmtTokensFull(accumulated.prompt_tokens) + '">' + fmtTokens(accumulated.prompt_tokens) + '</span></span><span class="usage-item"><span class="usage-label">completion </span><span class="usage-value" title="cumulative ' + fmtTokensFull(accumulated.completion_tokens) + '">' + fmtTokens(accumulated.completion_tokens) + '</span></span><span class="usage-item"><span class="usage-label">total </span><span class="usage-value" title="cumulative ' + fmtTokensFull(accumulated.total_tokens) + '">' + fmtTokens(accumulated.total_tokens) + "</span></span>";
+      if (!footer || !msg.usage) return;
+      var ctx = msg.usage.prompt_tokens;
+      var limit = msg.compactThreshold || 1e6;
+      footer.innerHTML = '<span class="usage-item" title="context ' + fmtTokensFull(ctx) + " tokens / compact threshold " + fmtTokensFull(limit) + ' tokens"><span class="usage-value">' + fmtTokens(ctx) + '</span><span class="usage-label">/' + fmtTokens(limit) + "</span></span>";
     }
     function formatTime(timestamp) {
       var date = new Date(timestamp), now = /* @__PURE__ */ new Date(), diff = now - date;

@@ -558,6 +558,7 @@ export class MessageHandler {
       type: 'tokenUsage',
       usage,
       accumulated: { ...this._accumulatedUsage },
+      compactThreshold: AUTO_COMPACT_TOKEN_THRESHOLD,
     });
 
     // Record a snapshot using the API's accurate prompt_tokens for this call.

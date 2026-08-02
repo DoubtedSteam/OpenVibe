@@ -607,10 +607,6 @@ export function getChatViewHtml(webview: vscode.Webview, extensionUri: vscode.Ur
     border: 1px solid var(--vscode-input-border, #555);
     padding: 7px 10px; border-radius: 6px;
   }
-  .token-usage {
-    font-size: 10px; color: var(--vscode-descriptionForeground);
-    text-align: right; padding: 0 4px 2px; opacity: 0.7;
-  }
   .retry-btn { font-size: 12px; color: #fff; background: #d32f2f; border: none; border-radius: 4px; padding: 2px 10px; margin-left: 8px; cursor: pointer; } .retry-btn:hover { background: #b71c1c; }
   .diff-open-btn { display: block; font-size: 12px; color: var(--vscode-button-foreground); background: var(--vscode-button-background); border: none; border-radius: 4px; padding: 3px 12px; margin: 6px 10px 4px; cursor: pointer; } .diff-open-btn:hover { background: var(--vscode-button-hoverBackground); }
 
