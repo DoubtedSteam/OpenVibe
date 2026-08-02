@@ -10,7 +10,7 @@ import type { ShellCommandReviewSettings } from './shellCommandReview';
 import { gitRollbackTool, listGitSnapshotsTool, setGlobalSkillsDir, activateTerminalTracking } from '../tools';
 import { OperationController } from '../operationController';
 import { getChatViewHtml } from './chatViewHtml';
-
+import { AUTO_COMPACT_TOKEN_THRESHOLD } from '../constants';
 export class ChatViewProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'vibeCodingChat';
 
@@ -221,6 +221,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         this._restoreModelFromSession();
         this._sendModelListToWebview();
         this._replayWebview();
+        this._uiManager.post({ type: 'tokenUsage', usage: null, compactThreshold: AUTO_COMPACT_TOKEN_THRESHOLD });
       }
       if (msg.type === 'webviewError') {
         const message =
