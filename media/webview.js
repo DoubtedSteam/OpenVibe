@@ -1810,7 +1810,7 @@ Please report this to https://github.com/markedjs/marked.`, e) {
       var footer = byId("usage-footer");
       if (!footer) return;
       if (msg.compactThreshold) _compactThreshold = msg.compactThreshold;
-      var ctx = msg.usage ? msg.usage.prompt_tokens : null;
+      var ctx = msg.contextTokens != null ? msg.contextTokens : msg.usage ? msg.usage.prompt_tokens : null;
       var ctxStr = ctx == null ? "\u2013" : fmtTokens(ctx);
       footer.innerHTML = '<span class="usage-item" title="context ' + (ctx == null ? "unknown" : fmtTokensFull(ctx)) + " tokens / compact threshold " + fmtTokensFull(_compactThreshold) + ' tokens"><span class="usage-value">' + ctxStr + '</span><span class="usage-label">/' + fmtTokens(_compactThreshold) + "</span></span>";
     }

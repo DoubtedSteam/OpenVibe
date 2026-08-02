@@ -79,6 +79,8 @@ export interface ChatSession {
   lastOpenedAt?: number;
   /** Cached user-message count for the session list. Stored in index.json, kept in memory for all sessions. */
   messageCount?: number;
+  /** Last known context length (prompt_tokens) of this conversation. Per-session token usage; reset on clearHistory. */
+  lastPromptTokens?: number;
 }
 
 export interface ApiConfig {

@@ -331,6 +331,7 @@ export class SessionManager {
       selectedModelIndex: s.selectedModelIndex,
       assistantTodoState: s.assistantTodoState,
       messageCount,
+      lastPromptTokens: s.lastPromptTokens,
     };
   }
 // (empty line)
@@ -348,6 +349,7 @@ export class SessionManager {
       selectedModelIndex: entry.selectedModelIndex,
       assistantTodoState: entry.assistantTodoState,
       messageCount: entry.messageCount,
+      lastPromptTokens: entry.lastPromptTokens,
     };
   }
 
@@ -592,6 +594,7 @@ export class SessionManager {
       currentSession.messages = [];
       currentSession.llmMessages = [];
       delete currentSession.assistantTodoState;
+      delete currentSession.lastPromptTokens;
       currentSession.updated = Date.now();
       this._saveSessions();
     }
@@ -646,6 +649,23 @@ export class SessionManager {
       return;
     }
     currentSession.selectedModelIndex = index;
+    currentSession.updated = Date.now();
+    this._saveSessions();
+  }
+
+  /** Get this conversation's last known context length (prompt_tokens), or null if never measured. */
+  public getCurrentSessionTokenContext(): number | null {
+    const currentSession = this._sessions.find((s) => s.id === this._currentSessionId);
+    return currentSession && typeof currentSession.lastPromptTokens === 'number'
+      ? currentSession.lastPromptTokens
+      : null;
+  }
+
+  /** Record the latest context length (prompt_tokens) for this conversation and persist. */
+  public setCurrentSessionTokenContext(promptTokens: number): void {
+    const currentSession = this._sessions.find((s) => s.id === this._currentSessionId);
+    if (!currentSession || typeof promptTokens !== 'number' || !isFinite(promptTokens)) return;
+    currentSession.lastPromptTokens = promptTokens;
     currentSession.updated = Date.now();
     this._saveSessions();
   }

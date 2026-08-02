@@ -29,6 +29,8 @@ export class MessageHandler {
       /** Add message to a specific session by sessionId (for cross-session routing during async ops). */
       addMessageToSession: (sessionId: string, message: ChatMessage) => boolean;
       getCurrentSessionId: () => string;
+      /** Record the latest context length (prompt_tokens) for the current conversation (per-session token usage). */
+      setCurrentSessionTokenContext: (promptTokens: number) => void;
 
       saveCurrentSession: () => void;
       sanitizeIncompleteToolCalls: () => void;
@@ -560,6 +562,9 @@ export class MessageHandler {
       accumulated: { ...this._accumulatedUsage },
       compactThreshold: AUTO_COMPACT_TOKEN_THRESHOLD,
     });
+
+    // Per-session token usage: remember this conversation's current context length.
+    this._context.setCurrentSessionTokenContext(usage.prompt_tokens);
 
     // Record a snapshot using the API's accurate prompt_tokens for this call.
     // This is used by compactHistory to determine the 20k-token reserve window.

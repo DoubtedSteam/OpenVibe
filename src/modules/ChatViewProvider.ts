@@ -100,6 +100,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       getEditPermissionEnabled: () => this._uiManager.getEditPermissionEnabled(),
       compactHistory: (triggeredByTokenLimit) => this._conversation.compactHistory(triggeredByTokenLimit),
       addUsageSnapshot: (promptTokens) => this._conversation.addUsageSnapshot(promptTokens),
+      setCurrentSessionTokenContext: (promptTokens) => this._sessionManager.setCurrentSessionTokenContext(promptTokens),
       onUserInstructionStart: () => this._toolExecutor.resetReviewUiCounters(),
       operation: this._operation,
       onStopSideEffects: () => this._uiManager.cancelPendingConfirms(),
@@ -221,7 +222,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         this._restoreModelFromSession();
         this._sendModelListToWebview();
         this._replayWebview();
-        this._uiManager.post({ type: 'tokenUsage', usage: null, compactThreshold: AUTO_COMPACT_TOKEN_THRESHOLD });
+        this._postSessionTokenContext();
       }
       if (msg.type === 'webviewError') {
         const message =
@@ -247,6 +248,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         this._restoreModelFromSession();
         this._sendModelListToWebview();
         this._uiManager.post({ type: 'clearMessages' });
+        this._postSessionTokenContext();
         this._replayWebview();
       }
       if (msg.type === 'deleteSession') {
@@ -318,6 +320,16 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         }
       });
     }
+
+  /** Send the current conversation's last known context length (per-session token usage) to the webview footer. */
+  private _postSessionTokenContext(): void {
+    this._uiManager.post({
+      type: 'tokenUsage',
+      usage: null,
+      contextTokens: this._sessionManager.getCurrentSessionTokenContext(),
+      compactThreshold: AUTO_COMPACT_TOKEN_THRESHOLD,
+    });
+  }
 
   private _sendModelListToWebview(): void {
     const models = this._uiManager.getModels();

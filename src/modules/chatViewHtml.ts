@@ -675,9 +675,9 @@ export function getChatViewHtml(webview: vscode.Webview, extensionUri: vscode.Ur
     align-items: center;
     gap: 12px;
     padding: 3px 8px;
-    font-size: 10px;
+    font-size: 12px;
     color: var(--vscode-descriptionForeground);
-    opacity: 0.6;
+    opacity: 0.75;
     border-top: 1px solid var(--vscode-input-border, transparent);
     min-height: 20px;
   }
