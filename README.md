@@ -139,7 +139,7 @@ edit(filePath, startLine, endLine, newContent)
 
 | 区块 | 来源 | 说明 |
 |------|------|------|
-| **SYSTEM_PROMPT** | `src/systemPrompt.ts` | 固定提示模板（~75 行）：Tools 描述、Memory 规范、Task Planning 规则、Workflow 核心循环 |
+| **SYSTEM_PROMPT** | `src/systemPrompt.ts` | 固定提示模板（~104 行）：Tools 描述、Memory 增量学习规范、Task Planning 规则、Workflow 核心循环 |
 | **Host environment** | `src/agentRuntimeContext.ts` | 动态生成：OS 信息、路径分隔符、换行符、Shell 类型、当前活动编辑器 |
 | **语言指令** | `langInstr` | 根据 `vibe-coding.language` 配置生成（zh-CN / en），追加在尾部 |
 
@@ -551,7 +551,7 @@ load_skill(name="paper-revision-router")
 
 <h2 id="memory-management-system">内存管理 / Memory</h2>
 
-项目知识库采用**三级文件拆分**设计，存放在 `.OpenVibe/memory/` 目录下，实现**按需读写、互不影响**的项目上下文管理。
+项目知识库采用**三级文件拆分**设计，存放在 `.OpenVibe/memory/` 目录下，实现**按需读写、互不影响**的项目上下文管理。知识**随需求渐进积累**（增量学习），而非启动时一次性建立对项目的完整认识。
 
 ### 三级架构
 
@@ -559,24 +559,25 @@ load_skill(name="paper-revision-router")
 |------|------|------|--------|
 | **定义规范** | `README.md` | 元定义：各层级用途、读写时机、维护规则 | ★★★★★ 几乎不变 |
 | **Level 1** | `L1-purpose.md` | 项目概览：一句话定义、核心目标、设计原则、技术栈、数据流 | ★★★ 极少变 |
-| **Level 2** | `L2-inventory.md` | 文件清单：目录树、每个文件一行描述、导入导出、删除影响 | ★★☆ 中等 |
-| **Level 3** | `L3-roles.md` | 组件职责：模块/类的职责、关键字段、生命周期、关系 | ★☆☆ 经常变 |
+| **Level 2** | `L2-inventory.md` | 已探索文件的学习记录：接触过的文件 + 一行描述 + 关键导出/依赖（增量增长） | ★★☆ 随探索增长 |
+| **Level 3** | `L3-roles.md` | 已理解组件的职责档案：模块/类的职责、关键字段、生命周期、关系（首次接触才建档） | ★☆☆ 经常变 |
 
 ### 设计要点
 
+- **增量学习（v2.1）** — 接触哪里学哪里：首次 `read_file`/`edit` 一个文件 → 记录到 L2；首次理解组件 → 建档到 L3。**未接触 = 无条目**，不为未读文件预写职责
 - **按需读写** — 没有自动注入/预加载，AI 自行决策何时读取哪一层，不浪费 token
 - **互不影响** — 修改 `L3-roles.md`（最常见操作）不会 invalidate 对话中 L1/L2 的内容
 - **定义即文件** — `README.md` 是架构的"元定义"规范，AI 通过读取它了解各层的规则
 - **自举** — 本项目自身的知识库即按本目录规范管理
-- **Bootstrap** — 目录非自动创建，AI 发现文件不存在时触发初始化流程
+- **最小 Bootstrap** — 目录非自动创建；初始化只建骨架（README + L1），**不扫描整个项目**，L2/L3 随接触逐步增长
 
-> Project knowledge is stored in **`.OpenVibe/memory/`** with three levels: purpose, inventory, and roles. See `README.md` inside that directory for the full definition.
+> Project knowledge is stored in **`.OpenVibe/memory/`** with three levels: purpose, inventory, and roles. Knowledge accumulates incrementally — contact is recorded, untouched files have no entries. See `README.md` inside that directory for the full definition.
 
 <h2 id="source-files-index">关键源文件索引 / Source files index</h2>
 
 | 文件 | 作用 |
 |------|------|
-| `src/systemPrompt.ts` | 固定系统提示模板（~75 行） |
+| `src/systemPrompt.ts` | 固定系统提示模板（~104 行，含 Memory 增量学习规范） |
 | `src/agentRuntimeContext.ts` | 动态生成 Host environment + Active Editor |
 | `src/modules/ConversationService.ts` | 消息组装（`buildMessagesForLlm`：含 BTW 过滤 + 历史压缩`compactHistory` + 子 Agent 消息压缩`compactAgentMessages`） |
 | `src/modules/MessageHandler.ts` | 主循环：三阶段调度（自由→调度→自由）、BTW 检测、tool call 循环、compact 权限控制 |

@@ -35,6 +35,14 @@ The project may store structured context in .OpenVibe/memory/
 that directory for the full definition. Read the relevant file
 when you need project context.
 
+**Incremental learning (lazy, not eager):** Knowledge accumulates as you work —
+do NOT pre-index the whole project up front.
+- Contact = record: when you first read_file/edit a file, add it to L2-inventory.md;
+  when you first understand a component, add it to L3-roles.md.
+- Untouched = no entry: never create entries for files/components you have not read; do not guess.
+- Modified = sync: after changing a component's structure/fields, update L3-roles.md;
+  after adding/removing files, update L2-inventory.md.
+
 **Consistency rule (before task_complete):** If you modified any files this session,
 check whether the changes affect the knowledge base and update it BEFORE calling task_complete:
 - New or removed files → update L2-inventory.md
