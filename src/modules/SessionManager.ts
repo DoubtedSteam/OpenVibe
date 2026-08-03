@@ -669,4 +669,18 @@ export class SessionManager {
     currentSession.updated = Date.now();
     this._saveSessions();
   }
+
+  /**
+   * Ensure the current session's message data is loaded into memory.
+   * Idempotent: returns immediately if messages are already loaded.
+   * Used to guarantee the last conversation is replayed after a window reload,
+   * even if the constructor's fire-and-forget prefetch has not finished yet.
+   */
+  public async ensureCurrentSessionLoaded(): Promise<void> {
+    const currentSession = this._sessions.find((s) => s.id === this._currentSessionId);
+    if (!currentSession || currentSession.messages.length > 0) return;
+    const sessionsDir = this._ensureSessionsDir();
+    if (!sessionsDir) return;
+    await this._loadSessionDataFile(currentSession, sessionsDir);
+  }
 }

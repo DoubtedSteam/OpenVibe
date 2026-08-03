@@ -217,6 +217,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       }
       if (msg.type === 'ready') {
         this._uiManager.sendWorkspaceBanner();
+        // Guarantee the last conversation's messages are loaded before replaying
+        // (the constructor prefetch is fire-and-forget and may not have finished yet).
+        await this._sessionManager.ensureCurrentSessionLoaded();
         this._sessionManager.postSessionsList();
         // Restore model selection from persisted session
         this._restoreModelFromSession();
