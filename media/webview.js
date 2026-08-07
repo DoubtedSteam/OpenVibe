@@ -1493,7 +1493,10 @@ Please report this to https://github.com/markedjs/marked.`, e) {
       }
       var bubble = document.createElement("div");
       bubble.className = "bubble";
-      if (content === null || content === void 0) {
+      if (role === "user") {
+        bubble.classList.add("user-raw");
+        bubble.textContent = content === null || content === void 0 ? "" : String(content);
+      } else if (content === null || content === void 0) {
         bubble.innerHTML = "";
       } else {
         bubble.innerHTML = parseMarkdown(String(content));

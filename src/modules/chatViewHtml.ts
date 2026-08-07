@@ -97,6 +97,9 @@ export function getChatViewHtml(webview: vscode.Webview, extensionUri: vscode.Ur
     word-break: break-word;
     overflow-wrap: break-word;
   }
+  .bubble.user-raw {
+    white-space: pre-wrap;
+  }
   .bubble p { margin: 8px 0; }
   .bubble p:first-child { margin-top: 0; }
   .bubble p:last-child { margin-bottom: 0; }
