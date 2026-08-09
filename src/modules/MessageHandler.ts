@@ -419,6 +419,21 @@ export class MessageHandler {
 
       // ── Compact executor ───────────────────────────────────────
       this._context.compactAgentMessages?.(execTag);
+      // ── Memory Sync (L2, harness-enforced) ──────────────────────
+      // 检测本轮已修改但未登记于 L2-inventory.md 的文件，
+      // 由 free review agent 在确认完成前统一同步（接触即记录）。
+      const pendingSync = this._pendingL2SyncFiles();
+      if (pendingSync.length > 0) {
+        this._addTaggedMessage({
+          role: 'system',
+          content:
+            `## Memory Sync (harness-enforced)\n\n` +
+            `以下文件已被修改，但尚未登记在 \`.OpenVibe/memory/L2-inventory.md\`（增量学习规范：接触即记录）：\n` +
+            pendingSync.map((f) => `- \`${f}\``).join('\n') +
+            `\n\n在确认当前 todo item 完成并调用 \`advance_todo_item\` 之前，请用 edit 工具为上述每个文件在 L2-inventory.md 中添加条目（路径 + 一行描述 + 关键导出/依赖）。已登记或属于 \`.OpenVibe/memory/\` 自身的文件无需操作。`,
+          subAgentTag: 'free',
+        });
+      }
 
       // ── Free Review (replaces evaluator) ───────────────────────
       // All tools available; LLM follows its natural workflow (including
@@ -585,6 +600,37 @@ export class MessageHandler {
       usage.total_tokens >= AUTO_COMPACT_TOKEN_THRESHOLD
     ) {
       this._context.compactHistory(true).catch(() => {});
+    }
+  }
+  /**
+   * L2 harness check: 返回本轮已修改但尚未登记于 `.OpenVibe/memory/L2-inventory.md`
+   * 的文件（排除 memory 自身文件，防止同步自身触发「需要同步」的死循环）。
+   * 以代码级信号驱动 memory 更新，而非依赖 LLM 对 prompt 的自觉遵守。
+   * 知识库尚未 bootstrap（无 L2 文件）时返回空数组，交由主流程在 free 阶段处理。
+   */
+  private _pendingL2SyncFiles(): string[] {
+    try {
+      const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      if (!root) return [];
+      const edited = this._context.getSessionEditedFiles();
+      if (edited.length === 0) return [];
+      // 豁免 memory 自身文件（防死循环）
+      const pending = edited.filter(
+        (f) => !f.includes('.OpenVibe/memory/') && f !== '.OpenVibe/memory.md'
+      );
+      if (pending.length === 0) return [];
+
+      const l2Path = path.join(root, '.OpenVibe', 'memory', 'L2-inventory.md');
+      if (!fs.existsSync(l2Path)) return [];
+
+      const l2 = fs.readFileSync(l2Path, 'utf-8');
+      const l2Lines = l2.split('\n').map((l) => l.trim()).filter(Boolean);
+      return pending.filter((f) => {
+        const base = path.basename(f);
+        return !l2.includes(f) && !l2Lines.some((l) => l.includes(base));
+      });
+    } catch {
+      return [];
     }
   }
 
