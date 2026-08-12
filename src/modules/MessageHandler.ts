@@ -54,6 +54,8 @@ export class MessageHandler {
       setBlockedTools?: (tools: string[]) => void;
       /** Compact all messages with the given subAgentTag into a summary message. */
       compactAgentMessages?: (tag: string) => void;
+      /** Whether harness memory sync tracking (L2) is enabled via vibe-coding.memorySync.enabled. */
+      getMemorySyncEnabled: () => boolean;
     }
   ) {}
 
@@ -422,17 +424,20 @@ export class MessageHandler {
       // ── Memory Sync (L2, harness-enforced) ──────────────────────
       // 检测本轮已修改但未登记于 L2-inventory.md 的文件，
       // 由 free review agent 在确认完成前统一同步（接触即记录）。
-      const pendingSync = this._pendingL2SyncFiles();
-      if (pendingSync.length > 0) {
-        this._addTaggedMessage({
-          role: 'system',
-          content:
-            `## Memory Sync (harness-enforced)\n\n` +
-            `以下文件已被修改，但尚未登记在 \`.OpenVibe/memory/L2-inventory.md\`（增量学习规范：接触即记录）：\n` +
-            pendingSync.map((f) => `- \`${f}\``).join('\n') +
-            `\n\n在确认当前 todo item 完成并调用 \`advance_todo_item\` 之前，请用 edit 工具为上述每个文件在 L2-inventory.md 中添加条目（路径 + 一行描述 + 关键导出/依赖）。已登记或属于 \`.OpenVibe/memory/\` 自身的文件无需操作。`,
-          subAgentTag: 'free',
-        });
+      // 受 vibe-coding.memorySync.enabled 配置开关控制。
+      if (this._context.getMemorySyncEnabled()) {
+        const pendingSync = this._pendingL2SyncFiles();
+        if (pendingSync.length > 0) {
+          this._addTaggedMessage({
+            role: 'system',
+            content:
+              `## Memory Sync (harness-enforced)\n\n` +
+              `以下文件已被修改，但尚未登记在 \`.OpenVibe/memory/L2-inventory.md\`（增量学习规范：接触即记录）：\n` +
+              pendingSync.map((f) => `- \`${f}\``).join('\n') +
+              `\n\n在确认当前 todo item 完成并调用 \`advance_todo_item\` 之前，请用 edit 工具为上述每个文件在 L2-inventory.md 中添加条目（路径 + 一行描述 + 关键导出/依赖）。已登记或属于 \`.OpenVibe/memory/\` 自身的文件无需操作。`,
+            subAgentTag: 'free',
+          });
+        }
       }
 
       // ── Free Review (replaces evaluator) ───────────────────────

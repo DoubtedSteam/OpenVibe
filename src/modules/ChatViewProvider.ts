@@ -107,6 +107,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       autoNameSession: () => { void this._conversation.autoNameSession(); },
       setBlockedTools: (tools: string[]) => this._toolExecutor.setBlockedTools(tools),
       compactAgentMessages: (tag: string) => this._conversation.compactAgentMessages(tag),
+      getMemorySyncEnabled: () => ChatViewProvider._readMemorySyncEnabled(),
     });
 
     // ── Activate terminal output tracking ────────────────────────────────
@@ -184,6 +185,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       enabled: c.get<boolean>('shellCommandReview.enabled', true) !== false,
       reviewTimeoutMs: Math.max(5000, c.get<number>('shellCommandReview.reviewTimeoutMs', 120000)),
     };
+  }
+  private static _readMemorySyncEnabled(): boolean {
+    const c = vscode.workspace.getConfiguration('vibe-coding');
+    return c.get<boolean>('memorySync.enabled', true) !== false;
   }
 
   // ─── WebviewViewProvider ───────────────────────────────────────────────────

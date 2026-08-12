@@ -161,6 +161,11 @@
           "minimum": 5000,
           "description": "HTTP timeout (ms) for each editor-agent API call (todolist.edit expand retries)."
         },
+        "vibe-coding.memorySync.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "When true, the harness tracks memory synchronization: after each sub-agent (executor) completes, it detects files modified but not yet registered in .OpenVibe/memory/L2-inventory.md and instructs the review agent to sync them (contact = record). Set to false to disable automatic memory tracking."
+        },
         "vibe-coding.editReview.enabled": {
           "type": "boolean",
           "default": true,
