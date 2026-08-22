@@ -50,8 +50,13 @@
       {
         "command": "vibe-coding.clearHistory",
         "title": "Clear Chat History"
+      },
+      {
+        "command": "vibe-coding.migrateApiKeyToSecretStorage",
+        "title": "OpenVibe: 迁移 API Key 到 SecretStorage"
       }
     ],
+
     "menus": {
       "view/title": [
         {

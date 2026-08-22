@@ -102,11 +102,17 @@ function readSettingsSnapshot(): Record<string, unknown> {
 
   const out: Record<string, unknown> = {};
   for (const key of Object.keys(SETTING_SPECS)) {
+    // apiKey lives in SecretStorage; surface the cached value instead of the (legacy) settings field.
+    if (key === 'apiKey') {
+      out[key] = activeConfig!.getApiKey();
+      continue;
+    }
     const info = cfg.inspect(key);
     const globalValue = info && info.globalValue !== undefined ? info.globalValue : undefined;
     out[key] = globalValue !== undefined ? globalValue : SETTING_DEFAULTS[key];
   }
   return out;
+
 }
 
 /**
@@ -209,6 +215,17 @@ export function openSettingsDashboard(context: vscode.ExtensionContext, config: 
         } else if (spec === 'string') {
           value = String(value ?? '');
         }
+        // apiKey is stored in SecretStorage (never in plain settings).
+        if (key === 'apiKey') {
+          const ok = await activeConfig!.setApiKey(String(value ?? ''));
+          post(panel, {
+            type: 'settingUpdateResult',
+            key,
+            ok,
+            error: ok ? '' : 'SecretStorage 写入失败',
+          });
+          break;
+        }
         try {
           const cfg = activeConfig!.getConfiguration();
 
@@ -223,6 +240,7 @@ export function openSettingsDashboard(context: vscode.ExtensionContext, config: 
           post(panel, { type: 'settingUpdateResult', key, ok: false, error: String(e?.message ?? e) });
         }
         break;
+
       }
 
       case 'clearOverride': {
