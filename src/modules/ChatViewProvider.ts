@@ -242,8 +242,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         applyToolProfile(this._currentToolProfile());
         this._sendModelListToWebview();
         this._sendPreferencesToWebview();
+        this._sendChatFontSizeToWebview();
         this._replayWebview();
         this._postSessionTokenContext();
+
       }
       if (msg.type === 'webviewError') {
         const message =
@@ -370,6 +372,14 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
           this._sendPreferencesToWebview();
         }
+        if (msg.type === 'setChatFontSize') {
+          // Persist the chat font size in globalState so it survives webview teardown.
+          const size = typeof msg.size === 'number' && isFinite(msg.size) ? Math.round(msg.size) : undefined;
+          if (size !== undefined) {
+            await this._context.globalState.update('openvibe.chatFontSize', size);
+          }
+        }
+
 
       });
     }
@@ -404,6 +414,15 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       reasoningEffort: this._config.getReasoningEffort(),
     });
   }
+
+  /** Push the persisted chat font size (globalState) to the webview on load. */
+  private _sendChatFontSizeToWebview(): void {
+    const size = this._context.globalState.get<number>('openvibe.chatFontSize');
+    if (typeof size === 'number' && isFinite(size)) {
+      this._uiManager.post({ type: 'chatFontSize', size });
+    }
+  }
+
 
 
 
