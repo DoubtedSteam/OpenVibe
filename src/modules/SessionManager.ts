@@ -332,6 +332,7 @@ export class SessionManager {
       assistantTodoState: s.assistantTodoState,
       messageCount,
       lastPromptTokens: s.lastPromptTokens,
+      toolProfile: s.toolProfile,
     };
   }
 // (empty line)
@@ -350,6 +351,7 @@ export class SessionManager {
       assistantTodoState: entry.assistantTodoState,
       messageCount: entry.messageCount,
       lastPromptTokens: entry.lastPromptTokens,
+      toolProfile: entry.toolProfile,
     };
   }
 
@@ -576,6 +578,7 @@ export class SessionManager {
       isActive: true,
       lastOpenedAt: now,
       selectedModelIndex: sourceSession.selectedModelIndex,
+      toolProfile: sourceSession.toolProfile,
       // Intentionally NOT copying assistantTodoState — duplicate starts fresh
     };
 
@@ -650,7 +653,31 @@ export class SessionManager {
     }
     currentSession.selectedModelIndex = index;
     currentSession.updated = Date.now();
-    this._saveSessions();
+    // 立即落盘（不经过 250ms 防抖），避免重载窗口时丢失刚选择的模型。
+    this._saveQueued = true;
+    void this._flushSaveSessions();
+  }
+
+
+  /** Get the current conversation's mode (tool profile id), or undefined if never set. */
+  public getCurrentSessionToolProfile(): string | undefined {
+    const currentSession = this._sessions.find((s) => s.id === this._currentSessionId);
+    return currentSession && typeof currentSession.toolProfile === 'string' && currentSession.toolProfile.trim()
+      ? currentSession.toolProfile
+      : undefined;
+  }
+
+  /** Set the current conversation's mode (tool profile id) and persist immediately. */
+  public setCurrentSessionToolProfile(profile: string): void {
+    const currentSession = this._sessions.find((s) => s.id === this._currentSessionId);
+    if (!currentSession) {
+      return;
+    }
+    currentSession.toolProfile = profile;
+    currentSession.updated = Date.now();
+    // 立即落盘，避免重载窗口丢失刚选择的模式。
+    this._saveQueued = true;
+    void this._flushSaveSessions();
   }
 
   /** Get this conversation's last known context length (prompt_tokens), or null if never measured. */

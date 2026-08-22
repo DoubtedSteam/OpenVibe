@@ -2,7 +2,7 @@
   "name": "vibe-coding-assistant",
   "displayName": "OpenVibe",
   "description": "AI coding assistant with file editing tools",
-  "version": "0.8.2",
+  "version": "0.10.0",
   "publisher": "DoubtedSteam",
   "repository": {
     "type": "git",
@@ -43,10 +43,24 @@
         "title": "OpenVibe Chat"
       },
       {
+        "command": "vibe-coding.openSettings",
+        "title": "OpenVibe 设置中心",
+        "icon": "$(settings-gear)"
+      },
+      {
         "command": "vibe-coding.clearHistory",
         "title": "Clear Chat History"
       }
     ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "vibe-coding.openSettings",
+          "when": "view == vibeCodingChat",
+          "group": "navigation"
+        }
+      ]
+    },
     "configuration": {
       "title": "OpenVibe",
       "properties": {
@@ -103,6 +117,12 @@
             ]
           }
         },
+        "vibe-coding.toolProfile": {
+          "type": "string",
+          "default": "full",
+          "description": "Name of the active tool profile. Profiles are JSON files in the global tool-profiles directory that list tools to hide from the LLM. 'full' (default) hides nothing. Changing this setting applies immediately."
+        },
+
         "vibe-coding.confirmChanges": {
           "type": "boolean",
           "default": true,
@@ -138,6 +158,26 @@
           ],
           "description": "Language for AI assistant interaction. Controls the language used in system prompts, tool descriptions, and assistant responses."
         },
+        "vibe-coding.reasoningEffort": {
+          "type": "string",
+          "default": "high",
+          "enum": [
+            "off",
+            "low",
+            "medium",
+            "high",
+            "max"
+          ],
+          "enumDescriptions": [
+            "关闭思考模式",
+            "低",
+            "中",
+            "高",
+            "最大"
+          ],
+          "description": "DeepSeek 思考模式强度（reasoning_effort）。off 表示关闭思考；其余档位会在请求中携带 thinking.type=enabled 与对应的 reasoning_effort。"
+        },
+
         "vibe-coding.todolistReview.enabled": {
           "type": "boolean",
           "default": true,

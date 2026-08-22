@@ -81,6 +81,8 @@ export interface ChatSession {
   messageCount?: number;
   /** Last known context length (prompt_tokens) of this conversation. Per-session token usage; reset on clearHistory. */
   lastPromptTokens?: number;
+  /** Per-session mode (tool profile id, e.g. "full"/"写作"). Falls back to vibe-coding.toolProfile when unset. */
+  toolProfile?: string;
 }
 
 export interface ApiConfig {
@@ -95,6 +97,8 @@ export interface ApiConfig {
   maxSequenceLength?: number;
   /** Language for AI interaction: 'auto' | 'en' | 'zh-CN' */
   language?: string;
+  /** DeepSeek 思考模式强度：'off' | 'low' | 'medium' | 'high' | 'max'。 */
+  reasoningEffort?: string;
 }
 /**
  * Configuration for a single model entry in the vibe-coding.models array.

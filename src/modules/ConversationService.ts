@@ -346,8 +346,7 @@ export class ConversationService {
 
   /**
    * Replays persisted messages to the webview (bubbles + tool cards).
-    * Strips any remaining <edit-content> tags from stored content as a safety net.
-    */
+   */
   replaySessionToWebview(post: (msg: any) => void): void {
     replaySessionToWebview(this._session.getCurrentMessages(), post);
   }

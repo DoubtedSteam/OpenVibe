@@ -4,7 +4,7 @@ import * as fs from 'fs';
 import { ChatMessage, ApiConfig } from '../types';
 import { getActiveEditorInfo, getStaticHostEnvironmentBlock, buildLanguageInstruction, getDateInfo } from '../agentRuntimeContext';
 import { SYSTEM_PROMPT } from '../systemPrompt';
-import { TOOL_DEFINITIONS } from '../toolDefinitions';
+import { getVisibleToolDefinitions } from '../tools/toolProfiles';
 import { sendChatMessage } from '../api';
 import { gitSnapshotTool } from '../tools';
 import { AUTO_COMPACT_TOKEN_THRESHOLD } from '../constants';
@@ -234,7 +234,7 @@ export class MessageHandler {
       const langInstr = buildLanguageInstruction(apiConfig.language);
       const allMessages = this._context.buildMessagesForLlm(SYSTEM_PROMPT + langInstr + '\n\n' + getStaticHostEnvironmentBlock());
 
-      const response = await sendChatMessage(allMessages, apiConfig, TOOL_DEFINITIONS, this._context.operation.signal());
+      const response = await sendChatMessage(allMessages, apiConfig, getVisibleToolDefinitions(), this._context.operation.signal());
       const hasPendingToolCalls = !!(response.toolCalls && response.toolCalls.length > 0);
       this._accumulateAndSendUsage(response.tokenUsage, hasPendingToolCalls);
 
@@ -244,20 +244,10 @@ export class MessageHandler {
       }
 
       if (response.toolCalls && response.toolCalls.length > 0) {
-        // ── Extract <edit-content> blocks ──────────────────────────────
-        const editContentBlocks: string[] = [];
-        let displayContent = response.content || '';
-        if (response.content) {
-          const tagRe = /<edit-content>([\s\S]*?)<\/edit-content>/gi;
-          let match: RegExpExecArray | null;
-          while ((match = tagRe.exec(response.content)) !== null) {
-            editContentBlocks.push(match[1]);
-          }
-          if (editContentBlocks.length > 0) {
-            displayContent = response.content.replace(tagRe, '').trim();
-            displayContent = displayContent.replace(/```\s*```/g, '');
-          }
-        }
+        // NOTE: <edit-content> XML fallback was removed (2026-08-22).
+        // Tool call arguments are pure JSON strings — newContent/command carry
+        // the full text directly (JSON escaping handles newlines/quotes).
+        const displayContent = response.content || '';
 
         this._addTaggedMessage({
           role: 'assistant',
@@ -279,15 +269,22 @@ export class MessageHandler {
 
           const name = toolCall.function.name;
           const rawArgs = toolCall.function.arguments;
-          let args: Record<string, unknown> = {};
-          try { args = JSON.parse(rawArgs); } catch { /* keep empty */ }
-          if (editContentBlocks.length > 0 && (name === 'edit' || name === 'run_shell_command')) {
-            if (name === 'edit' && (!args['newContent'] || args['newContent'] === '')) {
-              args['newContent'] = editContentBlocks.shift()!;
-            } else if (name === 'run_shell_command' && (!args['command'] || args['command'] === '')) {
-              args['command'] = editContentBlocks.shift()!;
-            }
+          let args: Record<string, unknown>;
+          try {
+            args = JSON.parse(rawArgs);
+          } catch (e: any) {
+            // Arguments JSON 解析失败：返回错误要求模型重试，
+            // 绝不带空参数执行工具（避免 edit 空 newContent 静默删除）。
+            const errResult = JSON.stringify({
+              error:
+                `Tool call arguments JSON parse failed for '${name}': ${e?.message ?? 'invalid JSON'}. ` +
+                'Please regenerate valid JSON arguments and retry.',
+            });
+            this._postIfSameSession({ type: 'toolResult', name, result: errResult });
+            this._addTaggedMessage({ role: 'tool', content: errResult, tool_call_id: toolCall.id });
+            continue;
           }
+
 
           // task_complete
           if (name === 'task_complete') {

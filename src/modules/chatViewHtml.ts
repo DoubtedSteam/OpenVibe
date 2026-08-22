@@ -501,7 +501,7 @@ export function getChatViewHtml(webview: vscode.Webview, extensionUri: vscode.Ur
   .confirm-btn.cancel:hover { background: var(--vscode-toolbar-hoverBackground); }
   .confirm-meta { margin-top: 6px; font-size: 13px; color: var(--vscode-descriptionForeground); white-space: pre-wrap; }
 
-  /* Input area: textarea left; right column = Edit (full width) + send/stop (same width block) */
+  /* Input area: textarea left; right column = send/stop buttons */
   .input-area {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
@@ -537,14 +537,10 @@ export function getChatViewHtml(webview: vscode.Webview, extensionUri: vscode.Ur
     flex-direction: column;
     gap: 4px;
     align-items: stretch;
-    /* At least as wide as two chat buttons + gap; grows if Edit label needs more */
+    /* At least as wide as two chat buttons + gap */
     width: max(76px, fit-content);
     max-width: 100%;
     box-sizing: border-box;
-  }
-  .input-actions-top {
-    display: flex;
-    width: 100%;
   }
   .input-actions-bottom {
     display: flex;
@@ -554,49 +550,6 @@ export function getChatViewHtml(webview: vscode.Webview, extensionUri: vscode.Ur
     flex-wrap: nowrap;
   }
 
-  .edit-toggle {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px 8px;
-    background: transparent;
-    color: var(--vscode-descriptionForeground);
-    border: 1px solid transparent;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 12px;
-    flex-shrink: 0;
-    opacity: 0.7;
-    transition: opacity 0.15s, border-color 0.15s;
-    box-sizing: border-box;
-    width: 100%;
-    justify-content: center;
-  }
-  .edit-toggle:hover {
-    opacity: 1;
-    border-color: var(--vscode-input-border, #555);
-    background: var(--vscode-toolbar-hoverBackground, rgba(128,128,128,0.1));
-  }
-  .edit-toggle.on {
-    opacity: 1;
-    border-color: var(--vscode-testing-runAction, #388a34);
-    background: rgba(56, 138, 52, 0.1);
-  }
-  .edit-toggle.off {
-    opacity: 0.7;
-  }
-  .toggle-icon {
-    font-size: 14px;
-  }
-  .toggle-text {
-    font-size: 11px;
-     white-space: nowrap;
-   }
-   .edit-toggle-group {
-     display: flex;
-     align-items: center;
-     gap: 4px;
-   }
   .loading { font-size: 12px; font-style: italic; color: var(--vscode-descriptionForeground); padding: 2px 4px; }
   .error-msg {
     font-size: 12px; color: var(--vscode-errorForeground);
@@ -670,19 +623,31 @@ export function getChatViewHtml(webview: vscode.Webview, extensionUri: vscode.Ur
   }
 
 
-  /* Token usage footer bar */
-  #usage-footer {
+  /* Bottom bar: left controls (mode/model/thinking) + right context usage */
+  #bottom-bar {
     flex-shrink: 0;
     display: flex;
-    justify-content: flex-end;
+    justify-content: space-between;
     align-items: center;
     gap: 12px;
     padding: 3px 8px;
+    border-top: 1px solid var(--vscode-input-border, transparent);
+  }
+  #bottom-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    min-width: 0;
+  }
+  #usage-footer {
+    display: flex;
+    align-items: center;
+    gap: 12px;
     font-size: 12px;
     color: var(--vscode-descriptionForeground);
     opacity: 0.75;
-    border-top: 1px solid var(--vscode-input-border, transparent);
-    min-height: 20px;
+    white-space: nowrap;
   }
   #usage-footer .usage-item {
     white-space: nowrap;
@@ -747,9 +712,9 @@ export function getChatViewHtml(webview: vscode.Webview, extensionUri: vscode.Ur
   }
   .add-session-btn:hover { background: var(--vscode-button-hoverBackground); }
 
-  /* Model selector */
-  .model-selector { position: relative; display: inline-flex; }
-  .model-select-btn {
+  /* Mode / model / thinking-level selectors (bottom bar) */
+  .mode-selector, .model-selector, .reasoning-selector { position: relative; display: inline-flex; }
+  .mode-select-btn, .model-select-btn, .reasoning-select-btn {
     display: flex; align-items: center; gap: 4px; padding: 3px 8px;
     font-size: 11px; font-family: inherit;
     background: transparent; color: var(--vscode-descriptionForeground);
@@ -757,31 +722,40 @@ export function getChatViewHtml(webview: vscode.Webview, extensionUri: vscode.Ur
     opacity: 0.7; transition: opacity 0.15s, border-color 0.15s;
     white-space: nowrap;
   }
-  .model-select-btn:hover { opacity: 1; border-color: var(--vscode-input-border, #555); background: var(--vscode-toolbar-hoverBackground, rgba(128,128,128,0.1)); }
-  .model-select-arrow { font-size: 8px; opacity: 0.6; }
-  .model-dropdown {
-    position: absolute; top: 100%; right: 0; z-index: 200;
+  .mode-select-btn { min-width: 110px; justify-content: center; }
+  .mode-select-btn:hover, .model-select-btn:hover, .reasoning-select-btn:hover {
+    opacity: 1; border-color: var(--vscode-input-border, #555);
+    background: var(--vscode-toolbar-hoverBackground, rgba(128,128,128,0.1));
+  }
+  .mode-select-arrow, .model-select-arrow, .reasoning-select-arrow { font-size: 8px; opacity: 0.6; }
+  .mode-dropdown, .model-dropdown, .reasoning-dropdown {
+    position: absolute; bottom: 100%; left: 0; z-index: 200;
     min-width: 180px; max-height: 300px; overflow-y: auto;
     background: var(--vscode-dropdown-background, var(--vscode-editor-background));
     border: 1px solid var(--vscode-focusBorder, #007acc);
     border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-    font-size: 12px; margin-top: 4px;
+    font-size: 12px; margin-bottom: 4px;
   }
-  .model-dropdown-item {
+  .mode-dropdown-item, .model-dropdown-item, .reasoning-dropdown-item {
     display: flex; align-items: center; gap: 8px;
     padding: 8px 12px; cursor: pointer; color: var(--vscode-foreground);
     border-bottom: 1px solid var(--vscode-dropdown-border, transparent);
     transition: background 0.1s;
   }
-  .model-dropdown-item:last-child { border-bottom: none; }
-  .model-dropdown-item:hover { background: var(--vscode-list-hoverBackground, rgba(128,128,128,0.15)); }
-  .model-dropdown-item.active {
+  .mode-dropdown-item:last-child, .model-dropdown-item:last-child, .reasoning-dropdown-item:last-child { border-bottom: none; }
+  .mode-dropdown-item:hover, .model-dropdown-item:hover, .reasoning-dropdown-item:hover { background: var(--vscode-list-hoverBackground, rgba(128,128,128,0.15)); }
+  .mode-dropdown-item.active, .model-dropdown-item.active, .reasoning-dropdown-item.active {
     background: var(--vscode-list-activeSelectionBackground);
     color: var(--vscode-list-activeSelectionForeground);
   }
-  .model-dropdown-item .model-check { font-size: 12px; width: 16px; flex-shrink: 0; }
-  .model-dropdown-item .model-item-name { flex: 1; font-weight: 500; }
-  .model-dropdown-item .model-item-id { font-size: 10px; color: var(--vscode-descriptionForeground); opacity: 0.7; }
+  .mode-dropdown-item .sel-check, .model-dropdown-item .sel-check, .reasoning-dropdown-item .sel-check { font-size: 12px; width: 16px; flex-shrink: 0; }
+  .mode-dropdown-item .sel-name, .model-dropdown-item .sel-name, .reasoning-dropdown-item .sel-name { flex: 1; font-weight: 500; }
+  .mode-dropdown-item .sel-sub, .model-dropdown-item .sel-sub, .reasoning-dropdown-item .sel-sub { font-size: 10px; color: var(--vscode-descriptionForeground); opacity: 0.7; }
+  .mode-dropdown { min-width: 240px; }
+  .mode-dropdown-item { align-items: flex-start; }
+  .mode-dropdown-item .mode-item-body { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+  .mode-dropdown-item .mode-item-body .sel-name { flex: none; font-weight: 600; }
+  .mode-dropdown-item .mode-item-body .sel-sub { flex: none; white-space: normal; line-height: 1.35; }
 
   /* Toolbar */
   /* Toolbar */
@@ -794,14 +768,14 @@ export function getChatViewHtml(webview: vscode.Webview, extensionUri: vscode.Ur
     display: flex; align-items: center; gap: 6px; font-size: 13px;
   }
   #toggle-sidebar:hover { background: var(--vscode-toolbar-hoverBackground); }
-  #clear, #snapshots {
+  #clear, #snapshots, #settings {
     display: flex; align-items: center; gap: 4px; padding: 3px 8px;
     font-size: 11px; font-family: inherit;
     background: transparent; color: var(--vscode-descriptionForeground);
     border: 1px solid transparent; border-radius: 4px; cursor: pointer;
     opacity: 0.7; transition: opacity 0.15s, border-color 0.15s;
   }
-  #clear:hover, #snapshots:hover {
+  #clear:hover, #snapshots:hover, #settings:hover {
     opacity: 1; border-color: var(--vscode-input-border, #555);
     background: var(--vscode-toolbar-hoverBackground, rgba(128,128,128,0.1));
   }
@@ -892,18 +866,12 @@ export function getChatViewHtml(webview: vscode.Webview, extensionUri: vscode.Ur
         </button>
       </div>
       <div class="toolbar-right">
-        <div id="model-selector" class="model-selector" style="display: none;">
-          <button id="model-select-btn" class="model-select-btn" title="Switch model">
-            <span id="model-select-label">🤖 Model</span>
-            <span class="model-select-arrow">▾</span>
-          </button>
-          <div id="model-dropdown" class="model-dropdown" style="display: none;"></div>
-        </div>
         <div class="font-size-group">
           <button id="font-size-down" title="Decrease font size">A−</button>
           <button id="font-size-reset" title="Reset font size">A</button>
           <button id="font-size-up" title="Increase font size">A+</button>
         </div>
+        <button id="settings" title="OpenVibe 设置中心（可视化后台）">⚙ 设置</button>
         <button id="snapshots" title="View and rollback to Git snapshots">⏮️ Snapshots</button>
         <button id="clear" title="Clear conversation history">🗑 Clear</button>
       </div>
@@ -942,7 +910,32 @@ export function getChatViewHtml(webview: vscode.Webview, extensionUri: vscode.Ur
       </div>
     </div>
 
-    <div id="usage-footer"></div>
+    <div id="bottom-bar">
+      <div id="bottom-controls">
+        <div id="mode-selector" class="mode-selector">
+          <button id="mode-select-btn" class="mode-select-btn" title="Switch mode">
+            <span id="mode-select-label">🧭 Mode</span>
+            <span class="mode-select-arrow">▾</span>
+          </button>
+          <div id="mode-dropdown" class="mode-dropdown" style="display: none;"></div>
+        </div>
+        <div id="model-selector" class="model-selector" style="display: none;">
+          <button id="model-select-btn" class="model-select-btn" title="Switch model">
+            <span id="model-select-label">🤖 Model</span>
+            <span class="model-select-arrow">▾</span>
+          </button>
+          <div id="model-dropdown" class="model-dropdown" style="display: none;"></div>
+        </div>
+        <div id="reasoning-selector" class="reasoning-selector">
+          <button id="reasoning-select-btn" class="reasoning-select-btn" title="Model thinking level">
+            <span id="reasoning-select-label">🧠 Thinking</span>
+            <span class="reasoning-select-arrow">▾</span>
+          </button>
+          <div id="reasoning-dropdown" class="reasoning-dropdown" style="display: none;"></div>
+        </div>
+      </div>
+      <div id="usage-footer"></div>
+    </div>
 
 
       <div class="input-area">
@@ -951,12 +944,6 @@ export function getChatViewHtml(webview: vscode.Webview, extensionUri: vscode.Ur
           <textarea id="input" rows="3" placeholder="Describe what you want to change… (Tip: type @ to reference files/problems/selection)"></textarea>
         </div>
         <div class="input-actions-column">
-          <div class="input-actions-top">
-            <button id="edit-toggle" class="edit-toggle on" title="Toggle edit permission - ON: LLM can use edit tools, OFF: read-only mode">
-              <span class="toggle-icon">🔓</span>
-              <span class="toggle-text">Edit ON</span>
-            </button>
-          </div>
           <div class="input-actions-bottom">
             <button id="send" class="chat-button" title="Send message">▶</button>
             <button id="stop" class="chat-button" title="Stop current operation" disabled>■</button>

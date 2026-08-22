@@ -179,6 +179,7 @@ export class UIManager {
       maxInteractions: activeMaxInteractions != null ? activeMaxInteractions : cfg.get<number>('maxInteractions', -1),
       maxSequenceLength: activeMaxSequenceLength != null ? activeMaxSequenceLength : cfg.get<number>('maxSequenceLength', 2000),
       language: resolvedLang,
+      reasoningEffort: cfg.get<string>('reasoningEffort', 'high'),
     };
   }
 

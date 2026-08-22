@@ -7,7 +7,7 @@ import { UIManager } from './UIManager';
 import { ConversationService } from './ConversationService';
 import type { TodolistReviewSettings } from './todolistReview';
 import type { ShellCommandReviewSettings } from './shellCommandReview';
-import { gitRollbackTool, listGitSnapshotsTool, setGlobalSkillsDir, activateTerminalTracking } from '../tools';
+import { gitRollbackTool, listGitSnapshotsTool, setGlobalSkillsDir, activateTerminalTracking, listToolProfiles, getCurrentToolProfile, applyToolProfile, killActiveShellProcesses, DEFAULT_TOOL_PROFILE } from '../tools';
 import { OperationController } from '../operationController';
 import { getChatViewHtml } from './chatViewHtml';
 import { AUTO_COMPACT_TOKEN_THRESHOLD } from '../constants';
@@ -103,7 +103,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       setCurrentSessionTokenContext: (promptTokens) => this._sessionManager.setCurrentSessionTokenContext(promptTokens),
       onUserInstructionStart: () => this._toolExecutor.resetReviewUiCounters(),
       operation: this._operation,
-      onStopSideEffects: () => this._uiManager.cancelPendingConfirms(),
+      onStopSideEffects: () => {
+        this._uiManager.cancelPendingConfirms();
+        // Force-kill any shell command process tree still running through the tool.
+        killActiveShellProcesses();
+      },
       autoNameSession: () => { void this._conversation.autoNameSession(); },
       setBlockedTools: (tools: string[]) => this._toolExecutor.setBlockedTools(tools),
       compactAgentMessages: (tag: string) => this._conversation.compactAgentMessages(tag),
@@ -115,6 +119,16 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   }
   public setOutputChannel(channel: vscode.OutputChannel): void {
     this._uiManager.setOutputChannel(channel);
+  }
+
+  /**
+   * Refresh the chat view's mode (tool profile) selector after the settings
+   * dashboard mutated profiles. Re-applies the current session's profile so
+   * the in-memory tool filter stays in sync with the files on disk.
+   */
+  public refreshPreferences(): void {
+    applyToolProfile(this._currentToolProfile());
+    this._sendPreferencesToWebview();
   }
 
   /**
@@ -220,6 +234,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         await this._openDiffInEditor(msg.filePath);
         return;
       }
+      if (msg.type === 'openSettings') {
+        // 从聊天前端跳转到可视化设置后台
+        await vscode.commands.executeCommand('vibe-coding.openSettings');
+        return;
+      }
       if (msg.type === 'ready') {
         this._uiManager.sendWorkspaceBanner();
         // Guarantee the last conversation's messages are loaded before replaying
@@ -228,7 +247,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         this._sessionManager.postSessionsList();
         // Restore model selection from persisted session
         this._restoreModelFromSession();
+        // Restore per-session mode (tool profile) for this conversation.
+        applyToolProfile(this._currentToolProfile());
         this._sendModelListToWebview();
+        this._sendPreferencesToWebview();
         this._replayWebview();
         this._postSessionTokenContext();
       }
@@ -254,7 +276,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         this._toolExecutor.restorePersistedTodoState(this._sessionManager.getCurrentSessionAssistantTodoState());
         // Restore model selection for the switched-to conversation
         this._restoreModelFromSession();
+        // Restore per-session mode (tool profile) for the switched-to conversation.
+        applyToolProfile(this._currentToolProfile());
         this._sendModelListToWebview();
+        this._sendPreferencesToWebview();
         this._uiManager.post({ type: 'clearMessages' });
         this._postSessionTokenContext();
         this._replayWebview();
@@ -264,6 +289,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         const deleted = await this._sessionManager.deleteSession(msg.sessionId);
         if (deleted && wasCurrent) {
           this._toolExecutor.restorePersistedTodoState(this._sessionManager.getCurrentSessionAssistantTodoState());
+          this._restoreModelFromSession();
+          applyToolProfile(this._currentToolProfile());
+          this._sendModelListToWebview();
+          this._sendPreferencesToWebview();
           this._uiManager.post({ type: 'clearMessages' });
           this._replayWebview();
         }
@@ -272,6 +301,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         const newSession = await this._sessionManager.duplicateSession(msg.sessionId);
         if (newSession) {
           this._toolExecutor.restorePersistedTodoState(null);
+          this._restoreModelFromSession();
+          applyToolProfile(this._currentToolProfile());
+          this._sendModelListToWebview();
+          this._sendPreferencesToWebview();
           this._uiManager.post({ type: 'clearMessages' });
           this._replayWebview();
         }
@@ -326,6 +359,19 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           this._sessionManager.setCurrentSessionSelectedModelIndex(index);
           this._sendModelListToWebview();
         }
+        if (msg.type === 'switchMode') {
+          const id = typeof msg.id === 'string' && msg.id.trim() ? msg.id.trim() : DEFAULT_TOOL_PROFILE;
+          // 会话级模式：只写入当前会话并立即应用，不写全局配置（避免跨窗口串扰）。
+          this._sessionManager.setCurrentSessionToolProfile(id);
+          applyToolProfile(id);
+          this._sendPreferencesToWebview();
+        }
+        if (msg.type === 'setReasoningEffort') {
+          const value = typeof msg.value === 'string' && msg.value.trim() ? msg.value.trim() : 'high';
+          await vscode.workspace.getConfiguration('vibe-coding').update('reasoningEffort', value, vscode.ConfigurationTarget.Global);
+          this._sendPreferencesToWebview();
+        }
+
       });
     }
 
@@ -351,6 +397,17 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     });
   }
 
+  private _sendPreferencesToWebview(): void {
+    const cfg = vscode.workspace.getConfiguration('vibe-coding');
+    this._uiManager.post({
+      type: 'preferences',
+      modes: listToolProfiles(),
+      currentMode: getCurrentToolProfile(),
+      reasoningEffort: cfg.get<string>('reasoningEffort', 'high'),
+    });
+  }
+
+
   /**
    * Restore the model selection index from the current session into UIManager.
    * Called on session switch, initial load, and after session creation.
@@ -360,6 +417,17 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     this._uiManager.setSelectedModelIndex(sessionIndex);
   }
 
+
+  /**
+   * Resolve the current conversation's mode (tool profile id).
+   * Falls back to the global vibe-coding.toolProfile setting when the session hasn't chosen one.
+   */
+  private _currentToolProfile(): string {
+    const sessionProfile = this._sessionManager.getCurrentSessionToolProfile();
+    if (sessionProfile) return sessionProfile;
+    return vscode.workspace.getConfiguration('vibe-coding').get<string>('toolProfile', DEFAULT_TOOL_PROFILE);
+  }
+
   private _replayWebview(): void {
     this._conversation.replaySessionToWebview((m) => this._uiManager.post(m));
   }
@@ -367,6 +435,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   private async _createNewSession(): Promise<void> {
     await this._sessionManager.createSession();
     this._toolExecutor.restorePersistedTodoState(this._sessionManager.getCurrentSessionAssistantTodoState());
+    this._restoreModelFromSession();
+    applyToolProfile(this._currentToolProfile());
+    this._sendModelListToWebview();
+    this._sendPreferencesToWebview();
     this._uiManager.post({ type: 'clearMessages' });
     this._replayWebview();
   }

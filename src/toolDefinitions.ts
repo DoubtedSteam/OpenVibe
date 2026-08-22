@@ -94,9 +94,9 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
         'HOST ENFORCEMENT (hard rule): If the file already exists in the workspace, you MUST call read_file or find_in_file (with a match) on that exact path after the latest user message and before this edit — the tool will reject edit otherwise. ' +
         'Exception: creating a brand-new file (path not yet present) does not require a prior read. ' +
         'After every successful edit on a file, line-query permission is cleared — you must read_file or find_in_file again before another edit on the same file. ' +
-        'To insert without removing any lines, set endLine = startLine - 1 with non-empty newContent (or an <edit-content> tag written in the same response). ' +
-        'To delete lines, set newContent to an empty string \"\". ' +
-        '⚠️ DANGER: empty newContent with endLine >= startLine = IRREVERSIBLE DELETION (no undo). The <edit-content> tag is extracted from your visible response text, so you MUST write it in the same response as this tool call while leaving newContent empty; if the tag is missing, the edit silently becomes a deletion instead of failing. ' +
+         'To insert without removing any lines, set endLine = startLine - 1 with non-empty newContent. ' +
+         'To delete lines, set newContent to an empty string "". ' +
+         '⚠️ DANGER: empty newContent with endLine >= startLine = IRREVERSIBLE DELETION (no undo). Only pass an empty string when you truly intend to delete the range — never leave newContent empty for a replace/insert. ' +
         'After an edit, call read_file to verify the result.',
       parameters: {
         type: 'object',
@@ -115,11 +115,12 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
               'Last line of the range to edit (1-based, inclusive). ' +
               'Set to startLine - 1 to perform a pure insert.',
           },
-           newContent: {
+          newContent: {
             type: 'string',
             description:
-                'Edit text. Empty string to delete the range (⚠️ irreversible). ' +
-                'For multi-line content, leave newContent empty and write the text inside <edit-content> tags in your visible response IN THE SAME RESPONSE as this tool call (avoids JSON escaping); if the tag is missing, the edit silently becomes a deletion.',
+              'Edit text — the full content to write, passed directly as a JSON string. ' +
+              'Multi-line content is fine: JSON handles newlines (\\n) and quotes automatically, no XML tags needed. ' +
+              'Empty string "" deletes the range (⚠️ IRREVERSIBLE, no undo) — only pass empty when you truly intend to delete.',
           },
 
         },

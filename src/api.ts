@@ -59,8 +59,18 @@ export async function sendChatMessage(
   const payload: Record<string, unknown> = {
     model: config.model,
     messages: transformedMessages,
-    temperature: 0.0,
   };
+
+  // DeepSeek 思考模式：off 关闭，其余档位开启并携带 reasoning_effort。
+  // 思考模式下不支持 temperature/top_p 等采样参数（不会报错，但会被忽略）。
+  const effort = (config.reasoningEffort || 'high').trim();
+  if (effort !== 'off') {
+    payload.thinking = { type: 'enabled' };
+    payload.reasoning_effort = effort;
+  } else {
+    payload.thinking = { type: 'disabled' };
+    payload.temperature = 0.0;
+  }
 
   if (tools && tools.length > 0) {
     payload.tools = tools;

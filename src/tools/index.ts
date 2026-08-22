@@ -4,6 +4,24 @@
 
 // Helpers (skills, global dir)
 export { setGlobalSkillsDir } from './helpers';
+// Tool profiles (cross-workspace visibility config)
+export {
+  initToolProfilesDir,
+  applyToolProfile,
+  getCurrentToolProfile,
+  isToolHidden,
+  getHiddenTools,
+  getVisibleToolDefinitions,
+  listToolProfiles,
+  listToolProfilesDetailed,
+  getProfilesDir,
+  saveToolProfile,
+  deleteToolProfile,
+  isReviewDisabled,
+  DEFAULT_TOOL_PROFILE,
+} from './toolProfiles';
+export type { ToolProfileInfo, ToolProfileDetail, SaveProfileResult } from './toolProfiles';
+
 
 // read_file
 export type { ReadFileParams } from './readFileTool';
@@ -26,9 +44,8 @@ export type { ShowNotificationParams, AskHumanParams } from './notificationTools
 export { showNotificationTool, askHumanTool } from './notificationTools';
 
 // run_shell_command
-// run_shell_command
 export type { RunShellCommandParams } from './shellTool';
-export { runShellCommandTool } from './shellTool';
+export { runShellCommandTool, killActiveShellProcesses } from './shellTool';
 
 // get_terminal_content — read output from user's VS Code terminals
 export type { GetTerminalContentParams } from './terminalTool';

@@ -1,13 +1,5 @@
 import type { ChatMessage } from '../types';
 
-/** Strip <edit-content> tags from content for display safety. */
-function stripTags(text: string): string {
-  let cleaned = text.replace(/<edit-content>[\s\S]*?<\/edit-content>/gi, '').trim();
-  // Clean up empty code fences that may result from tag stripping
-  cleaned = cleaned.replace(/```\s*```/g, '');
-  return cleaned;
-}
-
 /** Strip the ─── Context ─── block (runtime LLM metadata) from user messages. */
 function stripContextBlock(text: string): string {
   return text.replace(/─── Context ───\n[\s\S]*?\n────────────────\n\n/, '');
@@ -15,20 +7,19 @@ function stripContextBlock(text: string): string {
 
 /**
  * Replays persisted messages to the webview (bubbles + tool cards).
- * Strips any remaining <edit-content> tags from stored content as a safety net.
  */
 export function replaySessionToWebview(messages: ChatMessage[], post: (msg: any) => void): void {
   let i = 0;
   while (i < messages.length) {
     const m = messages[i];
     if (m.role === 'user' && m.content) {
-      post({ type: 'addMessage', message: { role: 'user', content: stripContextBlock(stripTags(m.content)) } });
+      post({ type: 'addMessage', message: { role: 'user', content: stripContextBlock(m.content) } });
       i++;
       continue;
     }
     if (m.role === 'assistant' && m.tool_calls && m.tool_calls.length > 0) {
       if (m.content) {
-        post({ type: 'addMessage', message: { role: 'assistant', content: stripTags(m.content) } });
+        post({ type: 'addMessage', message: { role: 'assistant', content: m.content } });
       }
       i++;
       for (const tc of m.tool_calls) {
@@ -41,7 +32,7 @@ export function replaySessionToWebview(messages: ChatMessage[], post: (msg: any)
         post({ type: 'toolCall', name: tc.function.name, args });
         // Tool execution may append UI-only assistant bubbles (hiddenFromLlm) before the tool row.
         while (i < messages.length && messages[i].role === 'assistant' && messages[i].hiddenFromLlm && messages[i].content) {
-          post({ type: 'addMessage', message: { role: 'assistant', content: stripTags(messages[i].content!) } });
+          post({ type: 'addMessage', message: { role: 'assistant', content: messages[i].content! } });
           i++;
         }
         const tm = messages[i];
@@ -99,7 +90,7 @@ export function replaySessionToWebview(messages: ChatMessage[], post: (msg: any)
       continue;
     }
     if (m.role === 'assistant' && m.content && !m.hiddenFromLlm) {
-      post({ type: 'addMessage', message: { role: 'assistant', content: stripTags(m.content) } });
+      post({ type: 'addMessage', message: { role: 'assistant', content: m.content } });
       i++;
       continue;
     }

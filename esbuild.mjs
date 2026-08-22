@@ -29,12 +29,24 @@ const webviewConfig = {
   minify: production,
 };
 
+/** @type {esbuild.BuildOptions} */
+const settingsWebviewConfig = {
+  entryPoints: ['src/webview/settingsDashboard.js'],
+  bundle: true,
+  format: 'iife',
+  platform: 'browser',
+  target: 'ES2020',
+  outfile: 'media/settings-webview.js',
+  sourcemap: !production,
+  minify: production,
+};
+
 async function main() {
-  const configs = [extConfig, webviewConfig];
+  const configs = [extConfig, webviewConfig, settingsWebviewConfig];
   if (watch) {
     const ctxs = await Promise.all(configs.map(c => esbuild.context(c)));
     await Promise.all(ctxs.map(ctx => ctx.watch()));
-    console.log('[esbuild] Watching for changes (extension + webview)...');
+    console.log('[esbuild] Watching for changes (extension + webview + settings webview)...');
   } else {
     const results = await Promise.all(configs.map(c => esbuild.build(c)));
     for (const result of results) {
@@ -43,7 +55,7 @@ async function main() {
         process.exit(1);
       }
     }
-    console.log('[esbuild] Build complete (extension + webview)');
+    console.log('[esbuild] Build complete (extension + webview + settings webview)');
   }
 }
 

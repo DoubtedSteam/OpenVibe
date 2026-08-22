@@ -23,6 +23,8 @@ import {
   grepSearchTool,
   browserSubAgentTool,
   getTerminalContentTool,
+  isToolHidden,
+  isReviewDisabled,
 } from '../tools';
 import type { ReplaceCheckContext, ReplaceCheckResult } from '../tools';
 import type { ApiConfig, AgentLogEntry, AssistantTodoPersistedState } from '../types';
@@ -194,6 +196,12 @@ export class ToolExecutor {
      if (this._blockedTools.size > 0 && this._blockedTools.has(name)) {
        return JSON.stringify({ error: `Tool "${name}" is not available in the current sub-agent scope.` });
      }
+      // Check if the tool is hidden by the active tool profile
+      if (isToolHidden(name)) {
+        return JSON.stringify({ error: `Tool "${name}" is hidden by the current tool profile.` });
+      }
+
+
 
      // Check if the tool requires edit permission
      const editTools = ['edit', 'create_directory'];
@@ -277,7 +285,9 @@ export class ToolExecutor {
             endLine: args.endLine as number,
             newContent: newContent,
           },
-          (ctx) => this._context.llmCheckReplace(ctx),
+          isReviewDisabled()
+            ? async () => ({ ok: true, reason: 'Review disabled by mode', notes: [] } as ReplaceCheckResult)
+            : (ctx) => this._context.llmCheckReplace(ctx),
           this._context.getApiConfig().confirmChanges !== false ? (ctx) => this._context.userConfirmReplace(ctx) : undefined
         );
         try {
@@ -490,7 +500,7 @@ export class ToolExecutor {
           return JSON.stringify({ success: false, error: 'User cancelled shell command' });
         }
       }
-      return await runShellCommandTool({ command: proposedFromTool });
+      return await runShellCommandTool({ command: proposedFromTool, signal: this._signal() });
     }
 
     // Fast preflight: reject commands that are policy-violating before calling LLM review
@@ -564,7 +574,7 @@ export class ToolExecutor {
       if (this._stopped()) {
         return JSON.stringify({ success: false, operation: 'run_shell_command', error: 'Operation stopped by user.' });
       }
-      const execResult = await runShellCommandTool({ command: proposedFromTool });
+      const execResult = await runShellCommandTool({ command: proposedFromTool, signal: this._signal() });
       // Extract result summary for history tracking
       let execSummary = '';
       let execSuccess = false;
