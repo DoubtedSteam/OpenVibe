@@ -64,20 +64,24 @@
     "configuration": {
       "title": "OpenVibe",
       "properties": {
+
         "vibe-coding.apiBaseUrl": {
           "type": "string",
           "default": "https://api.deepseek.com",
-          "description": "Base URL for OpenAI-compatible API"
+          "description": "Base URL for OpenAI-compatible API",
+          "scope": "application"
         },
         "vibe-coding.apiKey": {
           "type": "string",
           "default": "",
-          "description": "API Key"
+          "description": "API Key (user-level only; recommended to use SecretStorage via the migrate command)",
+          "scope": "application"
         },
         "vibe-coding.model": {
           "type": "string",
           "default": "deepseek-reasoner",
-          "description": "Model name"
+          "description": "Model name",
+          "scope": "application"
         },
         "vibe-coding.models": {
           "type": "array",
@@ -115,33 +119,39 @@
               "name",
               "model"
             ]
-          }
+          },
+          "scope": "application"
         },
         "vibe-coding.toolProfile": {
           "type": "string",
           "default": "full",
-          "description": "Name of the active tool profile. Profiles are JSON files in the global tool-profiles directory that list tools to hide from the LLM. 'full' (default) hides nothing. Changing this setting applies immediately."
+          "description": "Name of the active tool profile. Profiles are JSON files in the global tool-profiles directory that list tools to hide from the LLM. 'full' (default) hides nothing. Changing this setting applies immediately.",
+          "scope": "window"
         },
 
         "vibe-coding.confirmChanges": {
           "type": "boolean",
           "default": true,
-          "description": "Whether to ask for confirmation before applying file changes (edit tool)"
+          "description": "Whether to ask for confirmation before applying file changes (edit tool)",
+          "scope": "application"
         },
         "vibe-coding.confirmShellCommand": {
           "type": "boolean",
           "default": true,
-          "description": "Whether to ask for confirmation before executing run_shell_command (after shell review); independent from confirmChanges"
+          "description": "Whether to ask for confirmation before executing run_shell_command (after shell review); independent from confirmChanges",
+          "scope": "application"
         },
         "vibe-coding.maxInteractions": {
           "type": "number",
           "default": -1,
-          "description": "Maximum number of tool call iterations (-1 means unlimited)"
+          "description": "Maximum number of tool call iterations (-1 means unlimited)",
+          "scope": "window"
         },
         "vibe-coding.maxSequenceLength": {
           "type": "number",
           "default": 800000,
-          "description": "Maximum length for generated text sequences"
+          "description": "Maximum length for generated text sequences",
+          "scope": "window"
         },
         "vibe-coding.language": {
           "type": "string",
@@ -156,7 +166,8 @@
             "Always use English",
             "Always use Simplified Chinese"
           ],
-          "description": "Language for AI assistant interaction. Controls the language used in system prompts, tool descriptions, and assistant responses."
+          "description": "Language for AI assistant interaction. Controls the language used in system prompts, tool descriptions, and assistant responses.",
+          "scope": "application"
         },
         "vibe-coding.reasoningEffort": {
           "type": "string",
@@ -175,59 +186,70 @@
             "高",
             "最大"
           ],
-          "description": "DeepSeek 思考模式强度（reasoning_effort）。off 表示关闭思考；其余档位会在请求中携带 thinking.type=enabled 与对应的 reasoning_effort。"
+          "description": "DeepSeek 思考模式强度（reasoning_effort）。off 表示关闭思考；其余档位会在请求中携带 thinking.type=enabled 与对应的 reasoning_effort。",
+          "scope": "window"
         },
 
         "vibe-coding.todolistReview.enabled": {
           "type": "boolean",
           "default": true,
-          "description": "When true, create_todo_list runs a blocking independent LLM review for todolist.generate / todolist.edit before applying changes."
+          "description": "When true, create_todo_list runs a blocking independent LLM review for todolist.generate / todolist.edit before applying changes.",
+          "scope": "application"
         },
         "vibe-coding.todolistReview.maxAttempts": {
           "type": "number",
           "default": 5,
           "minimum": 1,
-          "description": "Max review/regenerate rounds per create_todo_list call (generate or expand)."
+          "description": "Max review/regenerate rounds per create_todo_list call (generate or expand).",
+          "scope": "window"
         },
         "vibe-coding.todolistReview.reviewTimeoutMs": {
           "type": "number",
           "default": 120000,
           "minimum": 5000,
-          "description": "HTTP timeout (ms) for each review-agent and regenerate (generate) API call."
+          "description": "HTTP timeout (ms) for each review-agent and regenerate (generate) API call.",
+          "scope": "window"
         },
         "vibe-coding.todolistReview.editorTimeoutMs": {
           "type": "number",
           "default": 120000,
           "minimum": 5000,
-          "description": "HTTP timeout (ms) for each editor-agent API call (todolist.edit expand retries)."
+          "description": "HTTP timeout (ms) for each editor-agent API call (todolist.edit expand retries).",
+          "scope": "window"
         },
         "vibe-coding.memorySync.enabled": {
           "type": "boolean",
           "default": true,
-          "description": "When true, the harness tracks memory synchronization: after each sub-agent (executor) completes, it detects files modified but not yet registered in .OpenVibe/memory/L2-inventory.md and instructs the review agent to sync them (contact = record). Set to false to disable automatic memory tracking."
+          "description": "When true, the harness tracks memory synchronization: after each sub-agent (executor) completes, it detects files modified but not yet registered in .OpenVibe/memory/L2-inventory.md and instructs the review agent to sync them (contact = record). Set to false to disable automatic memory tracking.",
+          "scope": "window"
         },
         "vibe-coding.editReview.enabled": {
           "type": "boolean",
           "default": true,
-          "description": "When true, code edit tool calls run a blocking independent LLM review (separate from the main assistant) before applying changes."
+          "description": "When true, code edit tool calls run a blocking independent LLM review (separate from the main assistant) before applying changes.",
+          "scope": "application"
         },
         "vibe-coding.editReview.timeoutMs": {
           "type": "number",
           "default": 120000,
           "minimum": 5000,
-          "description": "HTTP timeout (ms) for the independent review call used by the code edit tool."
+          "description": "HTTP timeout (ms) for the independent review call used by the code edit tool.",
+          "scope": "window"
         },
         "vibe-coding.shellCommandReview.enabled": {
           "type": "boolean",
           "default": true,
-          "description": "When true, run_shell_command runs an independent safety review before optional human confirmation (single-pass, same mode as code edit review)."
+          "description": "When true, run_shell_command runs an independent safety review before optional human confirmation (single-pass, same mode as code edit review).",
+          "scope": "application"
         },
         "vibe-coding.shellCommandReview.reviewTimeoutMs": {
           "type": "number",
           "default": 120000,
           "minimum": 5000,
-          "description": "HTTP timeout (ms) for the shell safety review API call."
+          "description": "HTTP timeout (ms) for the shell safety review API call.",
+          "scope": "window"
         }
+
       }
     }
   },
