@@ -503,10 +503,17 @@ load_skill(name="paper-revision-router")
 
 在 VS Code **设置**中搜索 `vibe-coding` 即可。下列键名与 `package.json` 中 `contributes.configuration` 一致。
 
+> **配置分层 / Config layering**
+> - **用户级（`application` scope）**：`apiBaseUrl`、`apiKey`、`model`、`models`、`language`、`confirmChanges`、`confirmShellCommand`、`editReview.enabled`、`todolistReview.enabled`、`shellCommandReview.enabled` —— 只能写在 **User Settings**，不会被工作区 `.vscode/settings.json` 覆盖（API Key 等敏感项无法被仓库静默改写）。
+> - **工作区级（`window` scope）**：`toolProfile`、`reasoningEffort`、`maxInteractions`、`maxSequenceLength`、`memorySync.enabled` 及各 review 的 `timeoutMs` / `maxAttempts` —— 允许项目在 Workspace Settings 中按需覆盖。
+> - **API Key 存储**：`vibe-coding.apiKey` 已不再推荐长期明文保存。扩展优先从 **SecretStorage**（VS Code 安全存储）读取 `openvibe.apiKey`；老配置中的 `vibe-coding.apiKey` 会在激活时自动迁移到 SecretStorage（**不自动清除明文**）。可执行命令 **`OpenVibe: 迁移 API Key 到 SecretStorage`** 手动迁移并选择是否清除 Settings 中的明文。
+> - **工作区数据**：`.OpenVibe/` 目录（会话、记忆）属于**工作区本地数据**，请勿提交敏感信息；建议加入 `.gitignore`。
+
+
 | 配置项 | 类型 | 默认 | 说明 |
 |--------|------|------|------|
 | `vibe-coding.apiBaseUrl` | `string` | `https://api.deepseek.com` | OpenAI 兼容 API 的 Base URL |
-| `vibe-coding.apiKey` | `string` | `""` | API 密钥（**必填**） |
+| `vibe-coding.apiKey` | `string` | `""` | API 密钥（**必填**，用户级）。**推荐**改用 SecretStorage：设置后台的 API Key 输入框或迁移命令会写入 SecretStorage，不再明文落盘 |
 | `vibe-coding.model` | `string` | `deepseek-reasoner` | 模型名 |
 | `vibe-coding.models` | `array` | `[]` | 多模型列表（底部栏模型选择器）。每项含 `name`（显示名）+ `model`（模型名），可覆写 `apiBaseUrl` / `apiKey` / `maxInteractions` / `maxSequenceLength`；未配置时回退全局设置 |
 | `vibe-coding.toolProfile` | `string` | `full` | 当前工具模式（tool profile，如 `full` 标准 / `写作` 故事）；profile 文件位于 `~/.openvibe/tool-profiles/`，被隐藏的工具不会发给 LLM 且在执行层被拒绝。会话级选择优先于该全局默认 |
@@ -530,13 +537,18 @@ load_skill(name="paper-revision-router")
 
 ### 完整配置示例 / Full configuration example
 
-将以下内容放入 VS Code `settings.json`（修改 `apiKey` 即可使用）：
+将以下内容放入 **User** 的 `settings.json`（用户级配置；`apiKey` 推荐改用 SecretStorage，见下方说明）：
 
 ```jsonc
 {
-  // ── 必需：API 配置 ──────────────────────────────────────────
-  "vibe-coding.apiKey": "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",  // ← 改成你的 Key
+  // ── API 配置 ──────────────────────────────────────────────
+  // 推荐：在设置中心（或命令面板执行
+  //   "OpenVibe: 迁移 API Key 到 SecretStorage"）填写密钥，
+  // 密钥会写入 SecretStorage，不在此处明文保存。
+  // 老用户若已在 settings 中配置明文 apiKey，扩展会在激活时自动迁移（不清除明文）。
   "vibe-coding.apiBaseUrl": "https://api.deepseek.com",
+  "vibe-coding.model": "deepseek-reasoner",
+
   "vibe-coding.model": "deepseek-reasoner",
 
   // ── 多模型切换（可选）─────────────────────────────────────────
@@ -609,6 +621,7 @@ load_skill(name="paper-revision-router")
 | `src/modules/ToolExecutor.ts` | Todo 状态管理、工具调度与阻断（`setBlockedTools`）、shell review |
 | `src/modules/ChatViewProvider.ts` | Webview 通信、UI 消息持久化、模块连线 |
 | `src/modules/UIManager.ts` | UI 状态管理（Edit Permission、Webview 通信） |
+| `src/modules/ConfigService.ts` | 配置统一入口：`vibe-coding.*` 默认值与读取、API Key SecretStorage 缓存、`getApiConfig` 组装 |
 | `src/modules/SessionManager.ts` | 会话持久化（消息、快照、技能、压缩档案） |
 | `src/modules/todoListManager.ts` | Todo 清单状态管理（创建、展开、标记完成、状态查询） |
 | `src/modules/activatedSkillsManager.ts` | 激活技能持久化管理（注册回调、恢复状态） |
