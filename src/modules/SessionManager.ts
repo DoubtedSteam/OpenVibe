@@ -11,8 +11,19 @@ export class SessionManager {
   private _sessions: ChatSession[] = [];
   private _currentWorkspacePath: string | null = null;
   private _saveTimer: NodeJS.Timeout | null = null;
-  private _saveInFlight = false;
   private _saveQueued = false;
+
+
+  /** Session ids whose per-session data file (<id>.json) must be rewritten on next flush. */
+  private _dirtySessionIds = new Set<string>();
+
+  /** Serializes all save operations (debounced trigger + explicit flush calls). */
+  private _saveChain: Promise<void> = Promise.resolve();
+
+  /** Mark a session's data file as needing a rewrite. */
+  private _markSessionDirty(sessionId: string): void {
+    this._dirtySessionIds.add(sessionId);
+  }
 
   constructor(
     private readonly _context: vscode.ExtensionContext,
@@ -111,7 +122,9 @@ export class SessionManager {
     if (!currentSession) return;
     currentSession.llmMessages = messages;
     currentSession.updated = Date.now();
+    this._markSessionDirty(currentSession.id);
     this._saveSessions();
+
   }
 
   public getCurrentSessionId(): string {
@@ -130,7 +143,9 @@ export class SessionManager {
       currentSession.llmMessages.push(msg);
     }
     currentSession.updated = Date.now();
+    this._markSessionDirty(currentSession.id);
     this._saveSessions();
+
   }
   /**
    * Adds a message to a specific session identified by sessionId.
@@ -149,7 +164,10 @@ export class SessionManager {
       session.llmMessages.push(msg);
     }
     session.updated = Date.now();
+    this._markSessionDirty(session.id);
     this._saveSessions();
+    return true;
+
     return true;
   }
 
@@ -182,12 +200,26 @@ export class SessionManager {
       session.agentLogs = session.agentLogs.slice(session.agentLogs.length - 200);
     }
     session.updated = Date.now();
+    this._markSessionDirty(session.id);
     this._saveSessions();
+
   }
 
+  /** Debounced save (legacy semantics). Callers needing strong consistency should use flushCurrentSession(). */
   public saveCurrentSession(): void {
     this._saveSessions();
   }
+
+  /**
+   * Flush all pending saves (index.json + dirty session data files) immediately.
+   * Resolves when the writes complete; safe to await before session switches.
+   */
+  public flushCurrentSession(): Promise<void> {
+    this._saveQueued = true;
+    this._saveChain = this._saveChain.then(() => this._flushSaveSessions());
+    return this._saveChain;
+  }
+
 
   public setCurrentMessages(messages: ChatMessage[]): void {
     let session = this._sessions.find(s => s.id === this._currentSessionId);
@@ -204,7 +236,9 @@ export class SessionManager {
     }
     session.messages = messages;
     session.updated = Date.now();
+    this._markSessionDirty(session.id);
     this._saveSessions();
+
   }
 
   private _loadSessions(): void {
@@ -274,9 +308,10 @@ export class SessionManager {
     }
     this._saveTimer = setTimeout(() => {
       this._saveTimer = null;
-      void this._flushSaveSessions();
+      this._saveChain = this._saveChain.then(() => this._flushSaveSessions());
     }, 250);
   }
+
 
   /** Write current session's messages/agentLogs/llmMessages to its own file. */
   private async _saveSessionDataFile(session: ChatSession, sessionsDir: string): Promise<void> {
@@ -358,14 +393,11 @@ export class SessionManager {
 
 
   private async _flushSaveSessions(): Promise<void> {
-    if (this._saveInFlight) {
+    if (!this._saveQueued && this._dirtySessionIds.size === 0) {
       return;
     }
-    if (!this._saveQueued) {
-      return;
-    }
-    this._saveInFlight = true;
     this._saveQueued = false;
+
     try {
       const sessionsDir = this._ensureSessionsDir();
       if (!sessionsDir) {
@@ -376,10 +408,16 @@ export class SessionManager {
       const indexData = this._sessions.map(s => this._toIndexEntry(s));
       await fs.promises.writeFile(indexFile, JSON.stringify(indexData, null, 2), 'utf-8');
 
-      // 2. Write current session's data file (messages, agentLogs, archives)
-      const currentSession = this._sessions.find(s => s.id === this._currentSessionId);
-      if (currentSession) {
-        await this._saveSessionDataFile(currentSession, sessionsDir);
+      // 2. Write every dirty session's data file (messages, agentLogs, archives).
+      //    This covers the current session AND any session mutated by async work
+      //    (e.g. tool calls routed to a session that is no longer active).
+      const dirtyIds = [...this._dirtySessionIds];
+      for (const id of dirtyIds) {
+        const session = this._sessions.find(s => s.id === id);
+        if (session) {
+          await this._saveSessionDataFile(session, sessionsDir);
+        }
+        this._dirtySessionIds.delete(id);
       }
 
       // 3. Clean up orphaned data files (sessions deleted but files leftover)
@@ -398,16 +436,15 @@ export class SessionManager {
     } catch (err) {
       this._post({ type: 'error', message: `Failed to save sessions: ${err}` });
     } finally {
-      this._saveInFlight = false;
       // If new saves were queued while we were writing, flush again quickly.
-      if (this._saveQueued) {
-        this._saveTimer = setTimeout(() => {
-          this._saveTimer = null;
-          void this._flushSaveSessions();
-        }, 50);
+
+      // If new saves were queued while we were writing, flush again quickly.
+      if (this._saveQueued || this._dirtySessionIds.size > 0) {
+        this._saveChain = this._saveChain.then(() => this._flushSaveSessions());
       }
     }
   }
+
 
   public postSessionsList(): void {
     this._post({
@@ -432,8 +469,9 @@ export class SessionManager {
       return;
     }
 
-    // Save current session's data to file before switching
-    await this.saveCurrentSession();
+    // Flush current session's data to disk BEFORE switching (strong consistency).
+    await this.flushCurrentSession();
+
     this._currentSessionId = sessionId;
 
     // Load new session's data if not already in memory
@@ -499,12 +537,11 @@ export class SessionManager {
     }
 
     // 强制同步落盘（跳过 debounce），确保 index.json 即时更新
-    this._saveQueued = true;
-    if (this._saveTimer) {
-      clearTimeout(this._saveTimer);
-      this._saveTimer = null;
-    }
-    await this._flushSaveSessions();
+    await this.flushCurrentSession();
+
+    this.postSessionsList();
+    return !unlinkFailed;
+
 
     this.postSessionsList();
     return !unlinkFailed;
@@ -577,8 +614,8 @@ export class SessionManager {
       llmMessages: deepCopyLlmMessages,
       agentLogs: deepCopyAgentLogs,
       snapshots: deepCopySnapshots,
-      isActive: true,
       lastOpenedAt: now,
+
       selectedModelKey: sourceSession.selectedModelKey,
       selectedModelIndex: sourceSession.selectedModelIndex,
 
@@ -603,7 +640,9 @@ export class SessionManager {
       delete currentSession.assistantTodoState;
       delete currentSession.lastPromptTokens;
       currentSession.updated = Date.now();
+      this._markSessionDirty(currentSession.id);
       this._saveSessions();
+
     }
   }
 
@@ -630,7 +669,9 @@ export class SessionManager {
       };
     }
     currentSession.updated = Date.now();
+    this._markSessionDirty(currentSession.id);
     this._saveSessions();
+
   }
   // ─── Activated skills (conversation-scoped) ───────────────────────────────
   // ─── Selected model index (conversation-scoped) ────────────────────────
@@ -659,8 +700,8 @@ export class SessionManager {
     currentSession.selectedModelIndex = index;
     currentSession.updated = Date.now();
     // 立即落盘（不经过 250ms 防抖），避免重载窗口时丢失刚选择的模型。
-    this._saveQueued = true;
-    void this._flushSaveSessions();
+    void this.flushCurrentSession();
+
   }
 
   /**
@@ -691,8 +732,8 @@ export class SessionManager {
     }
     currentSession.updated = Date.now();
     // 立即落盘（不经过 250ms 防抖），避免重载窗口时丢失刚选择的模型。
-    this._saveQueued = true;
-    void this._flushSaveSessions();
+    void this.flushCurrentSession();
+
   }
 
 
@@ -714,8 +755,8 @@ export class SessionManager {
     currentSession.toolProfile = profile;
     currentSession.updated = Date.now();
     // 立即落盘，避免重载窗口丢失刚选择的模式。
-    this._saveQueued = true;
-    void this._flushSaveSessions();
+    void this.flushCurrentSession();
+
   }
 
   /** Get this conversation's last known context length (prompt_tokens), or null if never measured. */
