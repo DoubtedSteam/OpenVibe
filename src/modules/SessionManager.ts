@@ -326,8 +326,8 @@ export class SessionManager {
       title: s.title,
       created: s.created,
       updated: s.updated,
-      isActive: s.id === this._currentSessionId,
       lastOpenedAt: s.lastOpenedAt,
+      selectedModelKey: s.selectedModelKey,
       selectedModelIndex: s.selectedModelIndex,
       assistantTodoState: s.assistantTodoState,
       messageCount,
@@ -335,6 +335,7 @@ export class SessionManager {
       toolProfile: s.toolProfile,
     };
   }
+
 // (empty line)
 
   /** Rebuild a full ChatSession from an index entry (without messages — call _loadSessionDataFile separately). */
@@ -345,8 +346,8 @@ export class SessionManager {
       created: entry.created,
       updated: entry.updated,
       messages: [],        // loaded lazily
-      isActive: entry.isActive,
       lastOpenedAt: entry.lastOpenedAt,
+      selectedModelKey: entry.selectedModelKey,
       selectedModelIndex: entry.selectedModelIndex,
       assistantTodoState: entry.assistantTodoState,
       messageCount: entry.messageCount,
@@ -354,6 +355,7 @@ export class SessionManager {
       toolProfile: entry.toolProfile,
     };
   }
+
 
   private async _flushSaveSessions(): Promise<void> {
     if (this._saveInFlight) {
@@ -517,9 +519,9 @@ export class SessionManager {
       created: now,
       updated: now,
       messages: [],
-      isActive: true,
       lastOpenedAt: now
     };
+
     
     // Add to sessions list
     this._sessions.push(newSession);
@@ -577,7 +579,9 @@ export class SessionManager {
       snapshots: deepCopySnapshots,
       isActive: true,
       lastOpenedAt: now,
+      selectedModelKey: sourceSession.selectedModelKey,
       selectedModelIndex: sourceSession.selectedModelIndex,
+
       toolProfile: sourceSession.toolProfile,
       // Intentionally NOT copying assistantTodoState — duplicate starts fresh
     };
@@ -645,6 +649,7 @@ export class SessionManager {
 
   /**
    * Set the selected model index for the current conversation and persist.
+   * Deprecated for new writes: prefer setCurrentSessionSelectedModelKey.
    */
   public setCurrentSessionSelectedModelIndex(index: number): void {
     const currentSession = this._sessions.find((s) => s.id === this._currentSessionId);
@@ -657,6 +662,39 @@ export class SessionManager {
     this._saveQueued = true;
     void this._flushSaveSessions();
   }
+
+  /**
+   * Get the stable model identity key (e.g. `${name}::${model}`) for the current
+   * conversation. Returns undefined when the conversation uses the default/legacy model.
+   */
+  public getCurrentSessionSelectedModelKey(): string | undefined {
+    const currentSession = this._sessions.find((s) => s.id === this._currentSessionId);
+    if (!currentSession || typeof currentSession.selectedModelKey !== 'string' || !currentSession.selectedModelKey) {
+      return undefined;
+    }
+    return currentSession.selectedModelKey;
+  }
+
+  /**
+   * Set the stable model identity key for the current conversation and persist.
+   * Pass undefined to reset to the default/legacy model.
+   */
+  public setCurrentSessionSelectedModelKey(key: string | undefined): void {
+    const currentSession = this._sessions.find((s) => s.id === this._currentSessionId);
+    if (!currentSession) {
+      return;
+    }
+    if (key === undefined) {
+      delete currentSession.selectedModelKey;
+    } else {
+      currentSession.selectedModelKey = key;
+    }
+    currentSession.updated = Date.now();
+    // 立即落盘（不经过 250ms 防抖），避免重载窗口时丢失刚选择的模型。
+    this._saveQueued = true;
+    void this._flushSaveSessions();
+  }
+
 
 
   /** Get the current conversation's mode (tool profile id), or undefined if never set. */

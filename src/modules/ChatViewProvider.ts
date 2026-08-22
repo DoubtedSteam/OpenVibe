@@ -346,10 +346,17 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         if (msg.type === 'switchModel') {
           const index = typeof msg.index === 'number' ? msg.index : -1;
           this._uiManager.setSelectedModelIndex(index);
-          // Persist model selection to the current conversation
-          this._sessionManager.setCurrentSessionSelectedModelIndex(index);
+          // Persist model selection by stable identity key (survives models reordering).
+          const models = this._uiManager.getModels();
+          let key: string | undefined;
+          if (index >= 0 && index < models.length) {
+            const m = models[index];
+            key = `${m.name}::${m.model}`;
+          }
+          this._sessionManager.setCurrentSessionSelectedModelKey(key);
           this._sendModelListToWebview();
         }
+
         if (msg.type === 'switchMode') {
           const id = typeof msg.id === 'string' && msg.id.trim() ? msg.id.trim() : DEFAULT_TOOL_PROFILE;
           // 会话级模式：只写入当前会话并立即应用，不写全局配置（避免跨窗口串扰）。
@@ -405,9 +412,19 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
    * Called on session switch, initial load, and after session creation.
    */
   private _restoreModelFromSession(): void {
+    // New sessions persist a stable identity key; resolve it against the current
+    // models array so reordering vibe-coding.models does not change the selection.
+    const key = this._sessionManager.getCurrentSessionSelectedModelKey();
+    if (key) {
+      const idx = this._uiManager.resolveSelectedModelIndex(key);
+      this._uiManager.setSelectedModelIndex(idx);
+      return;
+    }
+    // Legacy sessions: fall back to the persisted index.
     const sessionIndex = this._sessionManager.getCurrentSessionSelectedModelIndex();
     this._uiManager.setSelectedModelIndex(sessionIndex);
   }
+
 
 
   /**

@@ -131,7 +131,25 @@ export class UIManager {
       return models[idx].name;
     }
     return this._config.getModel();
+    return this._config.getModel();
   }
+
+  /**
+   * Resolve a persisted model identity key (e.g. `${name}::${model}`) to its
+   * current index in the vibe-coding.models array. Returns -1 when the key is
+   * missing, malformed, or no longer present (survives models reordering).
+   */
+  public resolveSelectedModelIndex(key: string | undefined): number {
+    if (!key) return -1;
+    const sep = key.indexOf('::');
+    if (sep < 0) return -1;
+    const name = key.slice(0, sep);
+    const model = key.slice(sep + 2);
+    const models = this.getModels();
+    return models.findIndex((m) => m.name === name && m.model === model);
+  }
+
+
 
   public getApiConfig(): ApiConfig {
     return this._config.getApiConfig(this._selectedModelIndex);
