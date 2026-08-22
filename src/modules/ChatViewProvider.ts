@@ -5,15 +5,16 @@ import { ToolExecutor } from './ToolExecutor';
 import { SessionManager } from './SessionManager';
 import { UIManager } from './UIManager';
 import { ConversationService } from './ConversationService';
-import type { TodolistReviewSettings } from './todolistReview';
-import type { ShellCommandReviewSettings } from './shellCommandReview';
+import { ConfigService } from './ConfigService';
 import { gitRollbackTool, listGitSnapshotsTool, setGlobalSkillsDir, activateTerminalTracking, listToolProfiles, getCurrentToolProfile, applyToolProfile, killActiveShellProcesses, DEFAULT_TOOL_PROFILE } from '../tools';
 import { OperationController } from '../operationController';
 import { getChatViewHtml } from './chatViewHtml';
 import { AUTO_COMPACT_TOKEN_THRESHOLD } from '../constants';
+
 export class ChatViewProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'vibeCodingChat';
 
+  private _config: ConfigService;
   private _messageHandler: MessageHandler;
   private _toolExecutor: ToolExecutor;
   private _sessionManager: SessionManager;
@@ -22,13 +23,18 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   private _operation = new OperationController();
   constructor(
     private readonly _extensionUri: vscode.Uri,
-    private readonly _context: vscode.ExtensionContext
+    private readonly _context: vscode.ExtensionContext,
+    config: ConfigService
   ) {
     // ── Initialize global skills pool (shared across all workspaces) ──────
     const globalSkillsDir = path.join(_context.globalStorageUri.fsPath, 'skills');
     setGlobalSkillsDir(globalSkillsDir);
 
-    this._uiManager = new UIManager(_context);
+    this._config = config;
+
+
+    this._uiManager = new UIManager(this._config);
+
 
     this._sessionManager = new SessionManager(_context, (msg: any) => this._uiManager.post(msg));
 
@@ -59,20 +65,25 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         return llmIndependentEditReview({
           ctx,
           apiConfig,
+          settings: this._config.getEditReviewSettings(),
           post: (m: any) => this._uiManager.post(m),
           reviewRound,
           signal: this._operation.signal(),
           log: (e) => this._conversation.addAgentLog(e),
         });
       },
+
       userConfirmReplace: (ctx) => this._uiManager.userConfirmReplace(ctx),
       userConfirmShellCommand: (command) => this._uiManager.userConfirmShellCommand(command),
       userConfirmHumanAssistance: (question) => this._uiManager.userConfirmHumanAssistance(question),
       getApiConfig: () => this._uiManager.getApiConfig(),
       getLastUserTextForTools: () => this._conversation.getLastUserTextForTools(),
       getRelatedContextForTodolistReview: () => this._conversation.getRelatedContextForTodolistReview(),
-      getTodolistReviewSettings: () => ChatViewProvider._readTodolistReviewSettings(),
-      getShellCommandReviewSettings: () => ChatViewProvider._readShellCommandReviewSettings(),
+      getTodolistReviewSettings: () => this._config.getTodolistReviewSettings(),
+      getShellCommandReviewSettings: () => this._config.getShellCommandReviewSettings(),
+      getMemorySyncEnabled: () => this._config.getMemorySyncEnabled(),
+
+
       getEditPermissionEnabled: () => this._uiManager.getEditPermissionEnabled(),
       setEditPermissionEnabled: (enabled: boolean) => this._uiManager.setEditPermissionEnabled(enabled),
       isStopped: () => this._operation.isStopped(),
@@ -111,7 +122,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       autoNameSession: () => { void this._conversation.autoNameSession(); },
       setBlockedTools: (tools: string[]) => this._toolExecutor.setBlockedTools(tools),
       compactAgentMessages: (tag: string) => this._conversation.compactAgentMessages(tag),
-      getMemorySyncEnabled: () => ChatViewProvider._readMemorySyncEnabled(),
+      getMemorySyncEnabled: () => this._config.getMemorySyncEnabled(),
+
     });
 
     // ── Activate terminal output tracking ────────────────────────────────
@@ -183,27 +195,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     }
   }
 
-  private static _readTodolistReviewSettings(): TodolistReviewSettings {
-    const c = vscode.workspace.getConfiguration('vibe-coding');
-    return {
-      enabled: c.get<boolean>('todolistReview.enabled', true) !== false,
-      maxAttempts: Math.max(1, c.get<number>('todolistReview.maxAttempts', 5)),
-      reviewTimeoutMs: Math.max(5000, c.get<number>('todolistReview.reviewTimeoutMs', 120000)),
-      editorTimeoutMs: Math.max(5000, c.get<number>('todolistReview.editorTimeoutMs', 120000)),
-    };
-  }
-
-  private static _readShellCommandReviewSettings(): ShellCommandReviewSettings {
-    const c = vscode.workspace.getConfiguration('vibe-coding');
-    return {
-      enabled: c.get<boolean>('shellCommandReview.enabled', true) !== false,
-      reviewTimeoutMs: Math.max(5000, c.get<number>('shellCommandReview.reviewTimeoutMs', 120000)),
-    };
-  }
-  private static _readMemorySyncEnabled(): boolean {
-    const c = vscode.workspace.getConfiguration('vibe-coding');
-    return c.get<boolean>('memorySync.enabled', true) !== false;
-  }
 
   // ─── WebviewViewProvider ───────────────────────────────────────────────────
   public resolveWebviewView(
@@ -368,7 +359,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         }
         if (msg.type === 'setReasoningEffort') {
           const value = typeof msg.value === 'string' && msg.value.trim() ? msg.value.trim() : 'high';
-          await vscode.workspace.getConfiguration('vibe-coding').update('reasoningEffort', value, vscode.ConfigurationTarget.Global);
+          await this._config.getConfiguration().update('reasoningEffort', value, vscode.ConfigurationTarget.Global);
+
           this._sendPreferencesToWebview();
         }
 
@@ -398,14 +390,14 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   }
 
   private _sendPreferencesToWebview(): void {
-    const cfg = vscode.workspace.getConfiguration('vibe-coding');
     this._uiManager.post({
       type: 'preferences',
       modes: listToolProfiles(),
       currentMode: getCurrentToolProfile(),
-      reasoningEffort: cfg.get<string>('reasoningEffort', 'high'),
+      reasoningEffort: this._config.getReasoningEffort(),
     });
   }
+
 
 
   /**
@@ -425,8 +417,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   private _currentToolProfile(): string {
     const sessionProfile = this._sessionManager.getCurrentSessionToolProfile();
     if (sessionProfile) return sessionProfile;
-    return vscode.workspace.getConfiguration('vibe-coding').get<string>('toolProfile', DEFAULT_TOOL_PROFILE);
+    return this._config.getToolProfile();
   }
+
 
   private _replayWebview(): void {
     this._conversation.replaySessionToWebview((m) => this._uiManager.post(m));

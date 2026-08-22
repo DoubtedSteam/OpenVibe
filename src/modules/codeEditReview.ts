@@ -1,5 +1,5 @@
-import * as vscode from 'vscode';
 import { sendChatMessage } from '../api';
+
 import type { ApiConfig, ChatMessage, AgentLogEntry } from '../types';
 import type { ReplaceCheckContext, ReplaceCheckResult } from '../tools';
 
@@ -48,13 +48,9 @@ function trimForWebview(s: string): { text: string; truncated: boolean } {
   return { text: s.slice(0, MAX_CONTEXT_CHARS) + '\n\n… [truncated for chat view]', truncated: true };
 }
 
-function readEditReviewSettings(): { enabled: boolean; timeoutMs: number } {
-  const c = vscode.workspace.getConfiguration('vibe-coding');
-  return {
-    enabled: c.get<boolean>('editReview.enabled', true) !== false,
-    timeoutMs: Math.max(5000, c.get<number>('editReview.timeoutMs', 120000)),
-  };
-}
+/** Default edit-review settings when the caller does not inject ConfigService values. */
+const DEFAULT_EDIT_REVIEW_SETTINGS = { enabled: true, timeoutMs: 120000 };
+
 
 function extractJsonObject(text: string): unknown {
   const t = text.trim();
@@ -102,13 +98,16 @@ Output exactly one JSON object:
 export async function llmIndependentEditReview(params: {
   ctx: ReplaceCheckContext;
   apiConfig: ApiConfig;
+  /** Edit-review settings injected by the caller (from ConfigService). Falls back to defaults when omitted. */
+  settings?: { enabled: boolean; timeoutMs: number };
   post: (msg: any) => void;
   /** 1-based index of this Replace check in the current user instruction (shown on the card). */
   reviewRound?: number;
   signal?: AbortSignal;
   log?: (e: AgentLogEntry) => void;
 }): Promise<ReplaceCheckResult> {
-  const settings = readEditReviewSettings();
+  const settings = params.settings ?? DEFAULT_EDIT_REVIEW_SETTINGS;
+
   if (!settings.enabled) {
     // fall back to legacy UIManager check by returning ok and letting UIManager handle display upstream
     return { ok: true, reason: 'Independent edit review disabled', notes: [] };

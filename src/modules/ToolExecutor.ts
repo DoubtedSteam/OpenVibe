@@ -100,6 +100,9 @@ export class ToolExecutor {
        getRelatedContextForTodolistReview: () => string;
        getTodolistReviewSettings: () => TodolistReviewSettings;
        getShellCommandReviewSettings: () => ShellCommandReviewSettings;
+       /** Whether automatic memory synchronization is enabled (vibe-coding.memorySync.enabled). */
+       getMemorySyncEnabled: () => boolean;
+
        /** Check if edit permission is enabled */
        getEditPermissionEnabled: () => boolean;
        /** Update edit permission state */
@@ -213,7 +216,8 @@ export class ToolExecutor {
 
      switch (name) {
       case 'get_workspace_info':
-        return getWorkspaceInfoTool();
+        return getWorkspaceInfoTool(this._context.getMemorySyncEnabled);
+
 
       case 'read_file': {
         const fp = args.filePath as string;

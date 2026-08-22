@@ -3,6 +3,8 @@ import { getAgentRuntimeContextBlock } from '../agentRuntimeContext';
 import { ApiConfig, ModelConfig } from '../types';
 import { ReplaceCheckContext, ReplaceCheckResult } from '../tools';
 import { sendChatMessage } from '../api';
+import { ConfigService } from './ConfigService';
+
 
 /** Avoid oversized webview payloads; editor open uses the same trimmed text. */
 const MAX_REPLACE_CHECK_CONTEXT_CHARS = 120_000;
@@ -61,8 +63,9 @@ export class UIManager {
    private _pendingHumanAssistanceConfirms: Map<string, (approved: boolean, userMessage?: string) => void> = new Map();
    private _editPermissionEnabled: boolean = true;
    private _selectedModelIndex: number = -1;
-   constructor(private readonly _context: vscode.ExtensionContext) {
+   constructor(private readonly _config: ConfigService) {
    }
+
 
    public setView(view: vscode.WebviewView | undefined): void {
      this._view = view;
@@ -101,11 +104,10 @@ export class UIManager {
    }
 
   /**
-   * Read the vibe-coding.models array from settings.
+   * Read the vibe-coding.models array via ConfigService.
    */
   public getModels(): ModelConfig[] {
-    const cfg = vscode.workspace.getConfiguration('vibe-coding');
-    return cfg.get<ModelConfig[]>('models', []);
+    return this._config.getModels();
   }
 
   /** Get the currently selected model index. */
@@ -128,60 +130,13 @@ export class UIManager {
     if (idx >= 0 && idx < models.length) {
       return models[idx].name;
     }
-    const cfg = vscode.workspace.getConfiguration('vibe-coding');
-    return cfg.get<string>('model', 'gpt-4o');
+    return this._config.getModel();
   }
 
   public getApiConfig(): ApiConfig {
-    const cfg = vscode.workspace.getConfiguration('vibe-coding');
-    const models = this.getModels();
-
-    // Determine which model entry to use
-    let activeModelName = cfg.get<string>('model', 'gpt-4o');
-    let activeBaseUrl = cfg.get<string>('apiBaseUrl', 'https://api.openai.com/v1');
-    let activeApiKey = cfg.get<string>('apiKey', '');
-    let activeMaxInteractions: number | undefined;
-    let activeMaxSequenceLength: number | undefined;
-
-    // Default to first model if none selected but models are configured
-    let effectiveIndex = this._selectedModelIndex;
-    if (effectiveIndex < 0 && models.length > 0) {
-      effectiveIndex = 0;
-    }
-
-    if (effectiveIndex >= 0 && effectiveIndex < models.length) {
-      const entry = models[effectiveIndex];
-      if (entry.apiBaseUrl) { activeBaseUrl = entry.apiBaseUrl; }
-      if (entry.apiKey) { activeApiKey = entry.apiKey; }
-      activeModelName = entry.model;
-      if (entry.maxInteractions != null) { activeMaxInteractions = entry.maxInteractions; }
-      if (entry.maxSequenceLength != null) { activeMaxSequenceLength = entry.maxSequenceLength; }
-    }
-
-    if (!activeApiKey) {
-      throw new Error('API key not configured. Please set vibe-coding.apiKey or provide apiKey in vibe-coding.models in Settings.');
-    }
-
-    // Resolve language setting: "auto" → detect from VS Code UI language
-    const rawLang = cfg.get<string>('language', 'auto');
-    let resolvedLang = rawLang;
-    if (rawLang === 'auto') {
-      const uiLang = vscode.env.language;
-      // If UI language starts with "zh" (zh-CN, zh-TW, etc.), use zh-CN; otherwise use English
-      resolvedLang = uiLang.startsWith('zh') ? 'zh-CN' : 'en';
-    }
-    return {
-      baseUrl: activeBaseUrl,
-      apiKey: activeApiKey,
-      model: activeModelName,
-      confirmChanges: cfg.get<boolean>('confirmChanges', true),
-      confirmShellCommand: cfg.get<boolean>('confirmShellCommand', true),
-      maxInteractions: activeMaxInteractions != null ? activeMaxInteractions : cfg.get<number>('maxInteractions', -1),
-      maxSequenceLength: activeMaxSequenceLength != null ? activeMaxSequenceLength : cfg.get<number>('maxSequenceLength', 2000),
-      language: resolvedLang,
-      reasoningEffort: cfg.get<string>('reasoningEffort', 'high'),
-    };
+    return this._config.getApiConfig(this._selectedModelIndex);
   }
+
 
   public async llmCheckReplace(ctx: ReplaceCheckContext): Promise<ReplaceCheckResult> {
     // 每次调用前重建，避免前次 abort 影响后续请求

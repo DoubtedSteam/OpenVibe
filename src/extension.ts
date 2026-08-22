@@ -1,11 +1,13 @@
 import * as vscode from 'vscode';
 import { ChatViewProvider } from './modules/ChatViewProvider';
 import { openSettingsDashboard } from './modules/settingsDashboard';
+import { ConfigService } from './modules/ConfigService';
 import { BrowserManager } from './utils/browserManager';
 import { clearTerminalBuffers } from './tools/terminalTool';
 import * as path from 'path';
 import * as os from 'os';
 import { initToolProfilesDir } from './tools/toolProfiles';
+
 
 
 export function activate(context: vscode.ExtensionContext) {
@@ -22,9 +24,14 @@ export function activate(context: vscode.ExtensionContext) {
   const toolProfilesDir = path.join(os.homedir(), '.openvibe', 'tool-profiles');
   initToolProfilesDir(toolProfilesDir);
 
+  // ── Shared config service: single source of truth for vibe-coding.* reads ─
+  const config = new ConfigService(context);
+  // Preload SecretStorage apiKey (fire-and-forget; getApiKey() stays sync).
+  void config.initialize();
 
   // 注册聊天视图提供者
-  const provider = new ChatViewProvider(context.extensionUri, context);
+  const provider = new ChatViewProvider(context.extensionUri, context, config);
+
   provider.setOutputChannel(outputChannel);
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(ChatViewProvider.viewType, provider, {
@@ -40,7 +47,8 @@ export function activate(context: vscode.ExtensionContext) {
   // 注册命令：打开可视化设置后台（设置中心）
   context.subscriptions.push(
     vscode.commands.registerCommand('vibe-coding.openSettings', () => {
-      openSettingsDashboard(context);
+      openSettingsDashboard(context, config);
+
     })
   );
   // 注册内部命令：设置后台修改 mode/profile 后刷新聊天视图的模式选择器

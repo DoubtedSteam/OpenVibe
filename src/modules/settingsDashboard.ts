@@ -14,6 +14,7 @@
 import * as vscode from 'vscode';
 import { TOOL_DEFINITIONS } from '../toolDefinitions';
 import { getSettingsDashboardHtml } from './settingsDashboardHtml';
+import { ConfigService, CONFIG_DEFAULTS } from './ConfigService';
 import {
   listToolProfilesDetailed,
   saveToolProfile,
@@ -23,6 +24,7 @@ import {
   getCurrentToolProfile,
   DEFAULT_TOOL_PROFILE,
 } from '../tools';
+
 
 export const SETTINGS_VIEW_TYPE = 'openvibeSettings';
 
@@ -52,31 +54,39 @@ const SETTING_SPECS: Record<string, SettingKind> = {
   'shellCommandReview.reviewTimeoutMs': 'number',
 };
 
-/** Defaults shown in the dashboard when a key is not present in user settings. */
+/**
+ * Defaults shown in the dashboard when a key is not present in user settings.
+ * Derived from ConfigService.CONFIG_DEFAULTS (single source of truth, same as package.json).
+ */
 const SETTING_DEFAULTS: Record<string, unknown> = {
-  apiBaseUrl: 'https://api.deepseek.com',
-  apiKey: '',
-  model: 'deepseek-reasoner',
-  models: [],
-  toolProfile: 'full',
-  confirmChanges: true,
-  confirmShellCommand: true,
-  maxInteractions: -1,
-  maxSequenceLength: 800000,
-  language: 'zh-CN',
-  reasoningEffort: 'high',
-  'todolistReview.enabled': true,
-  'todolistReview.maxAttempts': 5,
-  'todolistReview.reviewTimeoutMs': 120000,
-  'todolistReview.editorTimeoutMs': 120000,
-  'memorySync.enabled': true,
-  'editReview.enabled': true,
-  'editReview.timeoutMs': 120000,
-  'shellCommandReview.enabled': true,
-  'shellCommandReview.reviewTimeoutMs': 120000,
+  apiBaseUrl: CONFIG_DEFAULTS.apiBaseUrl,
+  apiKey: CONFIG_DEFAULTS.apiKey,
+  model: CONFIG_DEFAULTS.model,
+  models: CONFIG_DEFAULTS.models,
+  toolProfile: CONFIG_DEFAULTS.toolProfile,
+  confirmChanges: CONFIG_DEFAULTS.confirmChanges,
+  confirmShellCommand: CONFIG_DEFAULTS.confirmShellCommand,
+  maxInteractions: CONFIG_DEFAULTS.maxInteractions,
+  maxSequenceLength: CONFIG_DEFAULTS.maxSequenceLength,
+  language: CONFIG_DEFAULTS.language,
+  reasoningEffort: CONFIG_DEFAULTS.reasoningEffort,
+  'todolistReview.enabled': CONFIG_DEFAULTS.todolistReviewEnabled,
+  'todolistReview.maxAttempts': CONFIG_DEFAULTS.todolistReviewMaxAttempts,
+  'todolistReview.reviewTimeoutMs': CONFIG_DEFAULTS.todolistReviewReviewTimeoutMs,
+  'todolistReview.editorTimeoutMs': CONFIG_DEFAULTS.todolistReviewEditorTimeoutMs,
+  'memorySync.enabled': CONFIG_DEFAULTS.memorySyncEnabled,
+  'editReview.enabled': CONFIG_DEFAULTS.editReviewEnabled,
+  'editReview.timeoutMs': CONFIG_DEFAULTS.editReviewTimeoutMs,
+  'shellCommandReview.enabled': CONFIG_DEFAULTS.shellCommandReviewEnabled,
+  'shellCommandReview.reviewTimeoutMs': CONFIG_DEFAULTS.shellCommandReviewTimeoutMs,
 };
 
+
 let currentPanel: vscode.WebviewPanel | undefined;
+
+/** ConfigService instance injected by extension.ts (single shared instance). */
+let activeConfig: ConfigService | undefined;
+
 
 function post(panel: vscode.WebviewPanel, message: unknown): void {
   void panel.webview.postMessage(message);
@@ -88,7 +98,8 @@ function post(panel: vscode.WebviewPanel, message: unknown): void {
  * only, so workspace/folder-level overrides must NOT leak into the form.
  */
 function readSettingsSnapshot(): Record<string, unknown> {
-  const cfg = vscode.workspace.getConfiguration('vibe-coding');
+  const cfg = activeConfig!.getConfiguration();
+
   const out: Record<string, unknown> = {};
   for (const key of Object.keys(SETTING_SPECS)) {
     const info = cfg.inspect(key);
@@ -104,7 +115,8 @@ function readSettingsSnapshot(): Record<string, unknown> {
  * can warn the user why the global value may not take effect in this window.
  */
 function readOverrides(): Record<string, { workspaceValue?: unknown; workspaceFolderValue?: unknown }> {
-  const cfg = vscode.workspace.getConfiguration('vibe-coding');
+  const cfg = activeConfig!.getConfiguration();
+
   const out: Record<string, { workspaceValue?: unknown; workspaceFolderValue?: unknown }> = {};
   for (const key of Object.keys(SETTING_SPECS)) {
     const info = cfg.inspect(key);
@@ -144,11 +156,13 @@ function refreshChatView(): void {
 /**
  * Open (or focus) the settings dashboard panel.
  */
-export function openSettingsDashboard(context: vscode.ExtensionContext): void {
+export function openSettingsDashboard(context: vscode.ExtensionContext, config: ConfigService): void {
+  activeConfig = config;
   if (currentPanel) {
     currentPanel.reveal(undefined, true);
     return;
   }
+
 
   const panel = vscode.window.createWebviewPanel(
     SETTINGS_VIEW_TYPE,
@@ -196,7 +210,8 @@ export function openSettingsDashboard(context: vscode.ExtensionContext): void {
           value = String(value ?? '');
         }
         try {
-          const cfg = vscode.workspace.getConfiguration('vibe-coding');
+          const cfg = activeConfig!.getConfiguration();
+
           await cfg.update(key, value, vscode.ConfigurationTarget.Global);
           if (key === 'toolProfile') {
             // Keep the in-memory filter in sync with the new global default.
@@ -219,7 +234,8 @@ export function openSettingsDashboard(context: vscode.ExtensionContext): void {
           break;
         }
         try {
-          const cfg = vscode.workspace.getConfiguration('vibe-coding');
+          const cfg = activeConfig!.getConfiguration();
+
           if (cfg.inspect(key)?.workspaceValue !== undefined) {
             await cfg.update(key, undefined, vscode.ConfigurationTarget.Workspace);
           }
@@ -271,7 +287,8 @@ export function openSettingsDashboard(context: vscode.ExtensionContext): void {
             applyToolProfile(DEFAULT_TOOL_PROFILE);
           }
           // If the global default pointed at the deleted profile, reset it.
-          const cfg = vscode.workspace.getConfiguration('vibe-coding');
+          const cfg = activeConfig!.getConfiguration();
+
           if (cfg.get<string>('toolProfile', DEFAULT_TOOL_PROFILE) === id) {
             await cfg.update('toolProfile', DEFAULT_TOOL_PROFILE, vscode.ConfigurationTarget.Global);
           }

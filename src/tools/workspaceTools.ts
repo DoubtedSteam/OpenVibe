@@ -52,7 +52,7 @@ function buildMemorySummary(topLevelEntries: string[]): Record<string, unknown> 
   }
 }
 
-export function getWorkspaceInfoTool(): string {
+export function getWorkspaceInfoTool(getMemorySyncEnabled?: () => boolean): string {
   const folders = vscode.workspace.workspaceFolders;
   if (!folders || folders.length === 0) {
     return JSON.stringify({
@@ -68,9 +68,10 @@ export function getWorkspaceInfoTool(): string {
     );
   } catch { /* ignore read errors */ }
 
-  // Memory 摘要：受 vibe-coding.memorySync.enabled 开关控制（关闭时省略该字段）
+  // Memory 摘要：受 vibe-coding.memorySync.enabled 开关控制（关闭时省略该字段）。
+  // 开关值由调用方（ToolExecutor → ConfigService）注入，避免本模块直接读配置。
   let memorySummary: Record<string, unknown> | null = null;
-  if (vscode.workspace.getConfiguration('vibe-coding').get<boolean>('memorySync.enabled', true) !== false) {
+  if ((getMemorySyncEnabled?.() ?? true) !== false) {
     memorySummary = buildMemorySummary(entries);
   }
 
@@ -82,6 +83,7 @@ export function getWorkspaceInfoTool(): string {
     ...getRuntimeEnvironmentSummary(),
   });
 }
+
 
 // ─── create_directory ─────────────────────────────────────────────────────────
 
