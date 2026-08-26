@@ -15,11 +15,53 @@ const MAX_STDERR = 100_000;
 const _activeProcesses = new Set<ChildProcess>();
 
 /**
+ * Children that already have a PowerShell fallback kill scheduled.
+ * `_killProcessTree` is invoked both by `killActiveShellProcesses` and by the
+ * abort listener — dedupe so each child gets at most one fallback pass.
+ */
+const _fallbackScheduled = new WeakSet<ChildProcess>();
+
+/**
+ * PowerShell fallback: collect every descendant of `rootPid` by walking the
+ * ParentProcessId chain, then force-kill them all.
+ *
+ * Why: `taskkill /T` walks the kernel's live process tree. As soon as an
+ * intermediate process has already exited (e.g. a command launched a child via
+ * `start`, or Stop was pressed while the tree was still being built), the
+ * descendants detach from the tree and become orphans that taskkill can no
+ * longer find. `Win32_Process.ParentProcessId` keeps the (possibly dead)
+ * parent PID, so we can still trace orphans back to the root and kill them.
+ */
+function _psKillProcessTreeFallback(rootPid: number): void {
+  try {
+    const script =
+      `$root=${rootPid};` +
+      `$seen=@{};$seen[$root]=$true;$changed=$true;` +
+      `while($changed){$changed=$false;` +
+      `Get-CimInstance Win32_Process | ForEach-Object {` +
+      `$ppid=[int]$_.ParentProcessId;$pv=[int]$_.ProcessId;` +
+      `if($seen.ContainsKey($ppid) -and -not $seen.ContainsKey($pv)){$seen[$pv]=$true;$changed=$true}}};` +
+      `$seen.Keys | Where-Object {$_ -ne ${rootPid}} | ForEach-Object {Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue};` +
+      `Stop-Process -Id ${rootPid} -Force -ErrorAction SilentlyContinue;`;
+    const ps = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', script], {
+      windowsHide: true,
+      stdio: 'ignore',
+    });
+    ps.unref();
+  } catch {
+    // ignore
+  }
+}
+
+/**
  * Force-kill the ENTIRE process tree of a spawned child.
  *
  * On Windows, `child.kill()` only kills the shell wrapper (cmd.exe) and leaves
  * its descendants (npm/node/tsc/dev servers...) running as orphans, so we use
- * `taskkill /pid <pid> /T /F` which recursively kills the whole tree.
+ * `taskkill /pid <pid> /T /F` which recursively kills the whole tree — and as
+ * a safety net a delayed PowerShell pass that walks the ParentProcessId chain
+ * (covers orphans that already detached from the kernel tree, which taskkill
+ * would miss).
  * On POSIX, a negative PID signals the whole process group.
  */
 function _killProcessTree(child: ChildProcess): void {
@@ -32,6 +74,13 @@ function _killProcessTree(child: ChildProcess): void {
         stdio: 'ignore',
       });
       killer.unref();
+      // Delayed fallback: by then taskkill has either finished the job or the
+      // kernel tree is broken (orphans) — PowerShell PPID-chain walk catches them.
+      if (!_fallbackScheduled.has(child)) {
+        _fallbackScheduled.add(child);
+        const t = setTimeout(() => _psKillProcessTreeFallback(pid), 400);
+        t.unref();
+      }
     } else {
       try {
         process.kill(-pid, 'SIGTERM');
