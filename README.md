@@ -2,14 +2,14 @@
 
 # OpenVibe — 极简 AI 编程助手 / Minimalist AI Assistant
 
-**在 VS Code 工作区内直接读写与编辑项目的智能助手。** 基于 **read**、**find**、**edit** 三类核心工具，并配合任务规划、多智能体审查与会话管理。
+**在 VS Code 工作区内直接读写与编辑项目的智能助手。** 基于 **read**、**find**、**edit** 三类核心工具，并配合任务规划、多智能体审查与会话管理。当前版本 **v0.10.0**：纯 JSON 工具参数、可视化设置中心、工具模式（Tool Profiles）、多模型切换、思考强度与历史压缩（见[版本历史](#changelog)）。
 
-> **An intelligent assistant that reads and edits your project inside the VS Code workspace.** Built around **read**, **find**, and **edit**, with task planning, multi‑agent review, and session management.
+> **An intelligent assistant that reads and edits your project inside the VS Code workspace.** Built around **read**, **find**, and **edit**, with task planning, multi-agent review, and session management. Current version **v0.10.0** (see [changelog](#changelog)).
 
 <h2 id="table-of-contents">目录 / Table of contents</h2>
 
 - [重要提示 / Important notice](#important-notice)
-- [新闻 / News](#news)
+- [版本历史 / Changelog](#changelog)
 - [项目概述 / Project overview](#project-overview)
 - [设计理念 / Design philosophy](#design-philosophy)
 - [核心工具 / Core tools](#core-tools-explained)
@@ -32,67 +32,35 @@
 
 > Smart editing works, but **this is not recommended as a production‑only workflow**; the experience is experimental and exploratory—hence the name. Early development used the DeepSeek API for roughly 30 RMB.
 
-<h2 id="news">新闻 / News</h2>
+<h2 id="changelog">版本历史 / Changelog</h2>
 
-| 日期 | 内容 |
-|------|------|
-| 2026-08-22 | **v0.10.0 发布**：废弃 `<edit-content>` XML fallback（详见下条）。自 v0.8.0（2026-06-06）以来累计 0.8.1 ~ 0.9.1 五个小版本，完整功能时间线见下方 07-31 ~ 08-21 各条目。 |
-| 2026-08-22 | **废弃 XML content fallback（`<edit-content>` 标签）**：工具参数回归纯 JSON 字符串——多行内容直接写入 `newContent` / `command`，由 JSON 转义处理，不再需要 XML 标签提取/注入。消除了「空 `newContent` 静默删除」风险、并行工具调用标签错位以及历史消息中 `tool_calls` 参数与执行结果不一致的问题；工具参数 JSON 解析失败时返回错误要求模型重试，绝不带空参数执行。 |
-| 2026-08-21 | **v0.9.1（主要版本）**：1) **可视化设置中心**——聊天工具栏 ⚙ 或命令 `vibe-coding.openSettings` 打开；覆盖全部 `vibe-coding.*` 设置（21 项白名单）的可视化编辑、工具模式插件矩阵（可用/隐藏切换、全启/全隐、免审查标记）、模式新建/删除/改名、工作区覆盖检测（⚠ 徽标 + 一键清除）；修改即时写入并执行 `refreshModes` 同步聊天底部栏 2) **工具模式 Tool Profiles**——跨工作区工具可见性配置（`~/.openvibe/tool-profiles/*.json`），内置「标准模式」full（全工具）与「故事模式」写作（隐藏 `run_shell_command` + 免审查），隐藏工具从 LLM 工具列表移除且执行层拒绝；会话级模式记忆 + 底部栏模式切换 3) **多模型切换 UI**——`vibe-coding.models` 数组（每项可覆写 apiBaseUrl/apiKey/maxInteractions/maxSequenceLength），底部栏模型选择器 + 会话级记忆（重载不丢失），未选中时默认第一个 4) **思考强度**——`vibe-coding.reasoningEffort` 五档（off/low/medium/high/max），DeepSeek `thinking` 模式（`thinking.type` + `reasoning_effort`），off 关闭思考 5) **Memory Sync（L2 harness）**——子 Agent 完成后自动检测未登记 `.OpenVibe/memory/L2-inventory.md` 的已修改文件并注入同步指令（接触即记录），`vibe-coding.memorySync.enabled` 可关闭 6) **shell 进程树终止**——停止按钮可终止整棵进程树（Windows `taskkill /pid <pid> /T /F`；POSIX 进程组 SIGTERM→SIGKILL），能真正杀掉 npm install / dev server 等长命令 7) **会话持久化增强**——todo 状态、最近会话（lastOpenedAt）、模型/模式选择均落盘，重载窗口不丢失 8) **独立审查配置化**——edit/todo/shell 审查的开关与超时可配置（`editReview.*` / `todolistReview.*` / `shellCommandReview.*`）。 |
-| 2026-08-16 | **v0.9.0**：修复与体验优化。 |
-| 2026-08-15 | **v0.8.3**：包含 `get_terminal_content` 工具（读取 VS Code 终端输出，Shell Integration API，支持按终端名过滤与行数限制）；其余为修复与体验优化。 |
-| 2026-08-02 | **v0.8.2**：修复与体验优化。 |
-| 2026-07-31 | **v0.8.1**：修复与体验优化。 |
-| 2026-06-06 | **多智能体调度架构 (Scheduling Architecture)**：1) 主循环拆分为三个 Phase（自由模式→调度模式→自由模式） 2) `create_todo_list` 触发调度模式：每个 todo 项自动派遣执行 Agent（封锁 todo 修改）+ 评估 Agent（只读+可改计划） 3) 子 Agent 消息自动打标签（`subAgentTag`）并按边界压缩（执行者提取最后一轮回复作为摘要，评估者只保留 todo 修改痕迹，零 LLM 成本） 4) 全局 compact 仅在自由模式触发，子 Agent 内禁止。 |
-| 2026-05-20 | **BTW 临时子对话**：输入以 `\btw` 开头即启动旁支对话，连续 `\btw` 累计在子对话中；非 `\btw` 消息自动结束子对话，btw 内容从 LLM 上下文移除，主对话不受影响。 |
-| 2026-05-09 | **浏览器子智能体 (Browser Sub-Agent)**：新增 `browser_sub_agent` 工具——AI 可将复杂浏览任务委派给子智能体，自主完成页面导航、表单填写、元素点击、文本提取等操作。子智能体使用独立 LLM 循环（同一 API 提供商）自主规划执行，基于 Playwright 实现无头浏览器自动化，支持 SSRF 防护。返回结构化 JSON 结果（状态摘要 + 操作日志 + 页面状态）。 |
-| 2026-05-02 | **知识库泛化重构**：将单文件 `.OpenVibe/memory.md` 拆分为**三级目录结构** `.OpenVibe/memory/`（`README.md` 元定义 + `L1-purpose.md` + `L2-inventory.md` + `L3-roles.md`），实现按需读写、互不影响。架构泛化为通用知识库系统，适用于任何项目。同步更新 system prompt 为极简提醒版。 |
-| 2026-04-29 | **Compact 历史压缩重构**：放弃独立摘要 LLM，改为**复用主对话 LLM** + 保持原始消息格式，大幅提升 KV 缓存命中率。1) 使用与主对话相同的 system prompt（`SYSTEM_PROMPT + Host env + langInstr`），前缀缓存完美命中 2) 待压缩消息保持原始 `ChatMessage` 数组格式，中间 KV cache 可复用 3) 只修改 `llmMessages`（LLM 上下文），前端 `messages`（完整历史）完全不受影响 4) 新增 `_sanitizeMessageList` 确保发送前清理不完整 tool call 序列，避免 API 400 错误 |
-| 2026-04-28 | **ask_human 重载容错 + 持续改进**：1) 修复 `ask_human` 在 Reload Window 后显示"Missing tool result"晦涩错误的 bug，改为显示友好提示和原始问题内容，用户发送新消息即可继续 2) `<edit-content>` 标签现也支持 `run_shell_command`，编辑和 shell 统一使用同一个标签，简化转义处理 3) XML content fallback 完善：同一轮消息支持多个标签按顺序匹配 |
-| 2026-04-26 | **Web Fetch 优化 + ask_human 交互改进**：1) `web_fetch` HTML 处理全面升级——保留标题层级（h1-h6 转 Markdown）、块级换行、`<pre>/<code>` 代码格式、提取链接列表和 meta description、移除 `<noscript>` 2) `ask_human` 对话框新增文本输入框和 Send 按钮，用户可输入消息回传 AI 3) System Prompt 中 `web_fetch` 与 `ask_human` 联动：AI 不知道 URL 时自动请求用户帮忙找到页面 |
-| 2026-04-25 | **技能系统 + 多语言支持 + 工作流改进规范 + 更多**：1) 动态技能加载（`list_skills`/`load_skill`） 2) `vibe-coding.language` 多语言交互配置 3) `ask_human` 人工协助工具 4) 会话自动命名 5) XML content fallback 传递原始文本 6) Memory 即时更新规范 7) 增量编译验证与 Bug 异常处理规范 8) 工作流改进四大规范（Memory 使用、Todo 异常处理、工具调用策略、会话节奏控制）。🎉 感谢 **DeepSeek V4** 的发布，让 OpenVibe 在强大模型驱动下真正胜任实际开发工作！ |
-| 2026-04-16 | **新增转义字符处理协议**（已废弃，最终由纯 JSON 工具参数取代）：引入 `MM_OUTPUT` 特殊标记，允许 `edit` 和 `run_shell_command` 工具直接传递原始文本，避免 JSON/Markdown 转义问题。 |
-| 2026-04-16 | **强化 shell 审查与执行**：1) 严格禁止使用 shell 进行任何文件读写操作（强制使用专用工具） 2) 结构化返回 + 关键错误摘要 3) 注入 todo 与最近执行历史到审查流程 4) 多级审查流程：主智能体→shell 编辑代理→独立安全审查→用户确认 |
-| 2026-04-14 | 增加**独立审查**：任务清单审查与代码编辑审查，由独立 LLM 代理提升修改质量。 |
-| 2026-04-11 | 增加 **Git** 支持：编码过程中可自动创建快照，并在 UI 中回滚与管理版本。 |
+> **2026-08-22 · v0.10.0**：**废弃 `<edit-content>` XML fallback**——工具参数回归纯 JSON 字符串，多行内容直接写入 `newContent` / `command`，由 JSON 转义处理，不再需要 XML 标签提取/注入。消除了「空 `newContent` 静默删除」风险、并行工具调用标签错位以及历史消息中 `tool_calls` 参数与执行结果不一致的问题；工具参数 JSON 解析失败时返回错误要求模型重试，绝不带空参数执行。自 v0.8.0（2026-06-06）以来累计 0.8.1 ~ 0.9.1 五个小版本。
 
-> **2026-08-22:** **v0.10.0 release** — `<edit-content>` XML fallback deprecated (see below). Five minor versions (0.8.1 ~ 0.9.1) shipped since v0.8.0 (2026-06-06); full feature timeline in the 07-31 ~ 08-21 entries below.
+> **2026-08-21 · v0.9.1（主要版本）**：1) **可视化设置中心**——聊天工具栏 ⚙ 或 `vibe-coding.openSettings`：全部 `vibe-coding.*` 设置的可视化编辑、工具模式插件矩阵（可用/隐藏切换、全启/全隐、免审查标记）、模式新建/删除/改名、工作区覆盖检测（⚠ 徽标 + 一键清除） 2) **工具模式 Tool Profiles**——跨工作区工具可见性配置（`~/.openvibe/tool-profiles/*.json`），内置「标准 full」/「故事（隐藏 `run_shell_command` + 免审查）」模式，隐藏工具从 LLM 工具列表移除且执行层拒绝；会话级模式记忆 + 底部栏切换 3) **多模型切换 UI**——`vibe-coding.models` 数组（每项可覆写 apiBaseUrl/apiKey/maxInteractions/maxSequenceLength），底部栏模型选择器 + 会话级记忆（重载不丢失） 4) **思考强度**——`vibe-coding.reasoningEffort` 五档（off/low/medium/high/max），DeepSeek `thinking` 模式 5) **Memory Sync（L2 harness）**——子 Agent 完成后自动检测未登记的修改文件并注入同步指令（接触即记录），可配置关闭 6) **shell 进程树终止**——停止按钮可终止整棵进程树（Windows `taskkill /T /F`；POSIX 进程组 SIGTERM→SIGKILL） 7) **会话持久化增强**——todo 状态、最近会话、模型/模式选择均落盘 8) **独立审查配置化**——edit/todo/shell 审查开关与超时可配置（`editReview.*` / `todolistReview.*` / `shellCommandReview.*`）。
 
-> **2026-08-21:** **v0.9.1 (major)** — 1) **Visual Settings Dashboard** (⚙ toolbar button or `vibe-coding.openSettings`): visual editing for all `vibe-coding.*` settings (21-key whitelist), tool-mode plugin matrix (show/hide tools, enable-all/disable-all, review-free flag), mode create/delete/rename, workspace override detection (⚠ badge + one-click clear); changes write instantly and sync the chat bottom bar via `refreshModes` 2) **Tool Profiles** — cross-workspace tool visibility config (`~/.openvibe/tool-profiles/*.json`), built-in "Standard" (full) and "Story" (hides `run_shell_command` + review-free) modes; hidden tools are removed from the LLM tool list and rejected at execution; per-session mode memory + bottom-bar switcher 3) **Multi-model switching UI** — `vibe-coding.models` array (each entry can override apiBaseUrl/apiKey/maxInteractions/maxSequenceLength), bottom-bar model selector with per-session persistence (survives reload), defaults to first model when none selected 4) **Reasoning effort** — `vibe-coding.reasoningEffort` five levels (off/low/medium/high/max), DeepSeek `thinking` mode (`thinking.type` + `reasoning_effort`), off disables thinking 5) **Memory Sync (L2 harness)** — after a sub-agent completes, files modified but not yet registered in `.OpenVibe/memory/L2-inventory.md` are detected and sync instructions are injected (contact = record); disable via `vibe-coding.memorySync.enabled` 6) **Shell process-tree kill** — the stop button now terminates the whole process tree (Windows `taskkill /pid <pid> /T /F`; POSIX process group SIGTERM→SIGKILL), actually killing long-running commands like npm install / dev servers 7) **Session persistence** — todo state, last-opened session (lastOpenedAt), model/mode selections are all persisted across reloads 8) **Configurable independent reviews** — edit/todo/shell review toggles and timeouts (`editReview.*` / `todolistReview.*` / `shellCommandReview.*`).
+<details>
+<summary>更早版本 / Earlier versions（2026-04 ~ 2026-08）</summary>
 
-> **2026-08-16:** **v0.9.0** — fixes and polish.
+| 版本 | 日期 | 要点 |
+|------|------|------|
+| v0.9.0 | 2026-08-16 | 修复与体验优化 |
+| v0.8.3 | 2026-08-15 | 新增 `get_terminal_content` 工具（Shell Integration API 读取终端输出，支持按终端名过滤与行数限制） |
+| v0.8.2 | 2026-08-02 | 修复与体验优化 |
+| v0.8.1 | 2026-07-31 | 修复与体验优化 |
+| v0.8.0 | 2026-06-06 | **多智能体调度架构**：主循环三 Phase（自由→调度→自由）；`create_todo_list` 触发逐项派遣执行 Agent（封锁 todo 修改）+ 评估 Agent（只读 + 可改计划）；子消息按边界压缩（零 LLM 成本）；全局 compact 仅限自由模式 |
+| — | 2026-05-20 | **BTW 临时子对话**：输入以 `\btw` 开头即启动旁支对话，结束后自动从 LLM 上下文移除，主对话不受影响 |
+| — | 2026-05-09 | **浏览器子智能体**：`browser_sub_agent`（独立 LLM 循环 + Playwright 无头浏览器 + SSRF 防护） |
+| — | 2026-05-02 | **知识库三级化**：`.OpenVibe/memory/`（README 元定义 + L1/L2/L3），按需读写、互不影响，泛化为通用知识库 |
+| — | 2026-04-29 | **Compact 重构**：复用主对话 LLM + 原始消息格式，前缀/KV 缓存高命中 |
+| — | 2026-04-26 ~ 04-28 | `web_fetch` HTML 处理升级（标题层级/代码块/链接提取）；`ask_human` 重载容错 + 输入框消息回传 |
+| — | 2026-04-25 | **技能系统**（`list_skills` / `load_skill`）、多语言（`vibe-coding.language`）、会话自动命名、工作流规范 |
+| — | 2026-04-16 | **shell 强化审查**（禁止 shell 文件读写、结构化返回、多级审查 + 用户确认）；转义协议演进（MM_OUTPUT → XML fallback，最终被纯 JSON 取代） |
+| — | 2026-04-14 | **独立审查**：todo 清单与代码编辑由独立 LLM 代理校验 |
+| — | 2026-04-11 | **Git 快照**：编码过程中自动快照，UI 中回滚与管理版本 |
 
-> **2026-08-15:** **v0.8.3** — includes the `get_terminal_content` tool (reads VS Code terminal output via the Shell Integration API, with terminal-name filter and line limits); otherwise fixes and polish.
+</details>
 
-> **2026-08-02:** **v0.8.2** — fixes and polish.
-
-> **2026-07-31:** **v0.8.1** — fixes and polish.
-
-> **2026-08-22:** **XML content fallback (`<edit-content>` tags) deprecated** — tool arguments are now pure JSON strings; multiline content goes directly into `newContent` / `command` (JSON escaping handles newlines). This removes the silent-deletion risk of empty `newContent`, parallel tool-call misalignment, and history inconsistency (persisted `tool_calls` args now always match what was executed). A failed JSON parse of tool arguments returns an error and asks the model to retry — tools are never executed with empty args.
-
-> **2026-06-06:** **Multi-agent scheduling architecture** — 1) Main loop split into 3 phases (free → scheduling → free) 2) `create_todo_list` triggers scheduling mode: each todo item dispatches an Executor Agent (todo-modification blocked) + Evaluator Agent (read-only, can modify plan) 3) Sub-agent messages auto-tagged (`subAgentTag`) and scoped-compacted (executor: extract last response as summary; evaluator: keep only todo modification traces — zero LLM cost) 4) Global compact only allowed in free mode; blocked inside sub-agents.
-
-> **2026-05-20:** **BTW (By The Way) sub-conversation** — Start a side conversation with the `\btw` prefix. During the sub-conversation, LLM context = [history] + [btw messages]; when the sub-conversation ends, btw messages are automatically excluded from LLM context, keeping the main chat flow clean.
-
-> **2026-05-09:** **Browser Sub-Agent** — Added `browser_sub_agent` tool: AI can delegate complex browsing tasks to a sub-agent that autonomously handles page navigation, form filling, element clicking, and text extraction. The sub-agent uses its own LLM loop (same API provider) to plan and execute steps, powered by Playwright headless browser automation with SSRF protection. Returns structured JSON results (status summary + action log + page state).
-
-> **2026-05-02:** **Knowledge base generalization**: Split the single `.OpenVibe/memory.md` into a **3-level directory** `.OpenVibe/memory/` (`README.md` meta-definition + `L1-purpose.md` + `L2-inventory.md` + `L3-roles.md`), enabling on-demand reading and independent cache layers. The architecture is generalized as a universal knowledge base system applicable to any project. System prompt updated to a minimal reminder version.
-
-> **2026-04-29:** **Compact history compaction rework**: Dropped the separate summarizer LLM in favor of **reusing the main conversation LLM** + keeping original message format for maximum KV cache hit rate. 1) Uses the exact same system prompt as the main conversation (`SYSTEM_PROMPT + Host env + langInstr`) — prefix cache hits perfectly 2) Messages to be compressed stay in raw `ChatMessage` array format — intermediate KV cache is reusable 3) Only `llmMessages` (LLM context) is modified; frontend `messages` (full history) remains untouched 4) Added `_sanitizeMessageList` to strip incomplete tool_call sequences before sending, preventing API 400 errors
-
-> **2026-04-28:** ask_human reload resilience + continuous improvements: 1) Fixed the "Missing tool result" cryptic error after Reload Window, replaced with a friendly prompt showing the original question — users can continue by sending a new message 2) `<edit-content>` tag now also supports `run_shell_command`, unifying the escaping protocol for both edit and shell 3) Enhanced XML content fallback: multiple tags in the same response are matched to tools in order
-
-> **2026-04-26:** Web Fetch optimization + ask_human interaction improvements: 1) `web_fetch` HTML processing overhaul — heading hierarchy preserved (h1-h6 to Markdown), block-level line breaks, `<pre>/<code>` code formatting, link list and meta description extraction, `<noscript>` removal 2) `ask_human` dialog now includes a text input field and Send button, allowing users to type and send messages back to the AI 3) System prompt now links `web_fetch` with `ask_human`: when the AI doesn't know a URL, it automatically asks the user to help find the page
-
-> **2026-04-25:** Skills system + multi-language support + workflow guidelines + more: 1) Dynamic skill loading (`list_skills`/`load_skill`) 2) `vibe-coding.language` config 3) `ask_human` tool 4) Session auto-naming 5) XML content fallback for raw text 6) Memory instant-update rule 7) Incremental compilation & Bug exception handling 8) Workflow improvement guidelines (Memory usage, Todo exception handling, tool call strategy, session rhythm control). 🎉 Thanks to **DeepSeek V4** — OpenVibe is now truly capable of real-world development work with such a powerful model under the hood!
-
-> **2026-04-16:** Raw payload protocol `MM_OUTPUT` for `edit` and `run_shell_command` tools (deprecated; ultimately replaced by plain JSON tool arguments) — bypass JSON/Markdown escaping for complex multiline code and shell scripts.
-
-> **2026-04-16:** Enhanced shell review & execution: 1) Strict prohibition on shell file operations (use dedicated tools) 2) Structured output + key error summaries 3) Todo & recent history injection 4) Multi-level review flow: primary agent → shell editor agent → independent security review → user confirmation.
-
-> **2026-04-14:** Independent review for todo lists and code edits via separate LLM agents.  
-
-> **2026-04-11:** Git snapshots during coding; rollback and history in the UI.  
+> **2026-08-22 · v0.10.0 (EN)**: `<edit-content>` XML fallback deprecated — tool arguments are pure JSON strings again; multiline content goes directly into `newContent` / `command`. Removes the silent-deletion risk of empty `newContent`, parallel tool-call misalignment, and history inconsistency (persisted `tool_calls` args now always match what was executed). A failed JSON parse returns an error and asks the model to retry — tools are never executed with empty args.
 
 
 <h2 id="project-overview">项目概述 / Project overview</h2>
@@ -181,7 +149,7 @@ edit(filePath, startLine, endLine, newContent)
 - **Todo 状态**：当有待办事项时显示剩余数量
 - **设计理由**：用户消息每轮必定变化，嵌入上下文不增加消息数，也不破坏 prompt 前缀缓存
 
-> Skills 不嵌入 system prompt，而是通过 `load_skill` 工具返回的指令文本进入 LLM 上下文。`activate_skill` 仅用于跨会话持久化激活状态。
+> Skills 不嵌入 system prompt，而是通过 `load_skill` 工具返回的指令文本进入 LLM 上下文。
 
 <h2 id="dual-track-messages">双轨消息系统 / Dual-track messages</h2>
 
@@ -392,18 +360,21 @@ MessageHandler.handleUserMessage()
 |------|------|
 | `get_workspace_info` | 工作区根目录与顶层文件 |
 | `create_directory` | 创建目录（可递归） |
-| `create_todo_list` | 多步骤任务规划（先计划后执行），经独立 LLM 审查验证 |
+| `get_diagnostics` | 获取 VS Code 诊断（问题/警告/错误），可按文件过滤或全工作区 |
+| `get_file_info` | 文件/目录元数据（存在性、大小、修改时间），用于编辑前验证路径 |
+| `show_notification` | 向用户显示 VS Code 通知（toast） |
+| `create_todo_list` | 多步骤任务规划（先计划后执行），经独立 LLM 审查验证；支持 `expandIndex` 展开子计划 |
+| `complete_todo_item` / `advance_todo_item` | 标记 todo 完成 / 推进到下一步（含摘要） |
+| `task_complete` | 任务完成信号，结束当前请求 |
+| `compact` | 压缩长对话，节省上下文（仅自由模式） |
 | `run_shell_command` | 在项目根执行命令；**禁止使用 shell 进行任何文件读写操作**（强制使用专用工具），经 shell 编辑代理优化 + 独立安全审查（含防上下文获取、防漂移、结构化返回、多级审查流程）。多行命令直接以 JSON 字符串传递（转义换行），无需 XML 标签 |
-| `complete_todo_item` | 标记 todo 完成，支持按 index 或名称标记 |
-| `compact` | 压缩长对话，节省上下文 |
-| `list_skills` | 列出 `.OpenVibe/skills/` 下所有可用的技能 |
-| `load_skill` | 加载指定技能的 SKILL.md 文件并返回结构化指令内容 |
+| `list_skills` / `load_skill` | 列出 / 加载技能（`.OpenVibe/skills/` 与全局技能池，SKILL.md → 指令注入上下文） |
+| `grep_search` | 跨工作区文件搜索（**字面子串匹配，非正则**；默认排除 node_modules/.git 等，支持 include/exclude glob） |
 | `get_terminal_content` | 读取用户 VS Code 终端（Shell Integration API）的最近输出，可按终端名过滤、指定返回行数；用于查看长任务（dev server / 构建）状态或排查手动命令错误 |
 | `ask_human` | 请求人工协助（手动测试、设计决策、收集信息、帮忙找网页等）。对话框含输入框 + **Send**（发送消息回传 AI）/ **Done**（确认完成）/ **Cancel** 按钮，30 分钟超时 |
 | `web_fetch` | 抓取网页并提取纯文本内容。支持 Cookie/自定义 Headers 访问登录页面。HTML 处理保留标题层级（h1-h6）、代码块格式（pre/code）、提取链接列表和 meta description |
 | `browser_sub_agent` | **浏览器子智能体**——委派复杂浏览器任务给独立的 LLM 循环代理。可自主导航、填表、点击、提取文本和搜索，基于 Playwright 无头浏览器自动化 + SSRF 防护。返回结构化 JSON（状态摘要 + 操作日志 + 页面状态）。需配置 API Key |
-| `text_diff` | 生成类似 git diff 的文本差异输出，支持上下文行数和行号显示（仅内存计算，无文件操作） |
-| Git 相关 | 快照与历史管理（见新闻） |
+| Git 快照 | 编码过程中自动创建 Git 快照，可在 UI 中回滚与管理版本（非 LLM 工具，由 MessageHandler/ToolExecutor 自动触发） |
 
 </details>
 
@@ -530,9 +501,7 @@ load_skill(name="paper-revision-router")
 | `vibe-coding.editReview.enabled` | `boolean` | `true` | 是否对代码 `edit` 做独立审查 |
 | `vibe-coding.editReview.timeoutMs` | `number` | `120000` | 编辑审查超时（毫秒，≥5000） |
 | `vibe-coding.shellCommandReview.enabled` | `boolean` | `true` | 是否对 shell 命令启用编辑代理 + 安全审查 |
-| `vibe-coding.shellCommandReview.maxAttempts` | `number` | `5` | 单次命令最大编辑/审查轮数（≥1） |
 | `vibe-coding.shellCommandReview.reviewTimeoutMs` | `number` | `120000` | Shell 安全审查超时（毫秒，≥5000） |
-| `vibe-coding.shellCommandReview.editorTimeoutMs` | `number` | `120000` | Shell 编辑代理超时（毫秒，≥5000） |
 | `vibe-coding.memorySync.enabled` | `boolean` | `true` | Memory Sync（L2 harness）：子 Agent 完成后自动检测已修改但未登记于 `.OpenVibe/memory/L2-inventory.md` 的文件并注入同步指令（接触即记录）；设为 `false` 关闭自动记忆同步 |
 
 ### 完整配置示例 / Full configuration example
@@ -547,8 +516,6 @@ load_skill(name="paper-revision-router")
   // 密钥会写入 SecretStorage，不在此处明文保存。
   // 老用户若已在 settings 中配置明文 apiKey，扩展会在激活时自动迁移（不清除明文）。
   "vibe-coding.apiBaseUrl": "https://api.deepseek.com",
-  "vibe-coding.model": "deepseek-reasoner",
-
   "vibe-coding.model": "deepseek-reasoner",
 
   // ── 多模型切换（可选）─────────────────────────────────────────
@@ -641,7 +608,7 @@ load_skill(name="paper-revision-router")
 | `src/tools/workspaceTools.ts` | 工作区工具（`get_workspace_info` / `create_directory` / `get_diagnostics` / `get_file_info`） |
 | `src/tools/notificationTools.ts` | `show_notification` / `ask_human` 工具实现 |
 | `src/tools/gitTools.ts` | Git 快照与历史管理 |
-| `src/tools/skillTools.ts` | 技能系统（`list_skills` / `load_skill` / `activate_skill` 等） |
+| `src/tools/skillTools.ts` | 技能系统（`list_skills` / `load_skill`） |
 | `src/tools/grepSearchTool.ts` | `grep_search` 工具实现 |
 | `src/tools/terminalTool.ts` | `get_terminal_content` 工具实现（Shell Integration API 读取终端输出） |
 | `src/tools/browserAgentTool.ts` | `browser_sub_agent` 浏览器子智能体工具实现（Playwright） |
@@ -656,6 +623,9 @@ load_skill(name="paper-revision-router")
 | `src/operationController.ts` | 操作中止控制（`AbortController` 封装） |
 | `src/utils/pathHelpers.ts` | 路径工具函数（`resolveWorkspacePath`、`readLines`、`writeLines`） |
 | `src/utils/htmlParser.ts` | HTML 转纯文本（`htmlToPlainText`、提取标题/链接/描述） |
+| `src/utils/browserAgent.ts` | 浏览器子智能体执行循环（Playwright） |
+| `src/utils/browserManager.ts` | 浏览器实例管理（含 forceClose 清理） |
+| `src/webview/` | 前端逻辑：`main.js`（消息渲染、diff 卡片、底部栏 mode/模型/思考强度选择器）、`settingsDashboard.js`（设置中心前端） |
 
 
 <h2 id="license">许可证 / License</h2>

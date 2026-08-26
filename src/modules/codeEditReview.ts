@@ -117,16 +117,12 @@ export async function llmIndependentEditReview(params: {
     `## Edit being reviewed
 File: ${params.ctx.filePath} | lines ${params.ctx.startLine}–${params.ctx.endLine}
 
-` +
-    `#### BEFORE
-\`\`\`
-${params.ctx.beforeContext}
-\`\`\`
+The unified diff below includes +/-3 context lines around the change
+('   ' = context, '-' = removed, '+' = added).
 
-` +
-    `#### AFTER
+#### UNIFIED DIFF
 \`\`\`
-${params.ctx.afterContext}
+${params.ctx.unifiedDiff}
 \`\`\`
 `;
 

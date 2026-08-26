@@ -1,10 +1,7 @@
 import * as vscode from 'vscode';
-import { getAgentRuntimeContextBlock } from '../agentRuntimeContext';
 import { ApiConfig, ModelConfig } from '../types';
-import { ReplaceCheckContext, ReplaceCheckResult } from '../tools';
-import { sendChatMessage } from '../api';
+import { ReplaceCheckContext } from '../tools';
 import { ConfigService } from './ConfigService';
-
 
 /** Avoid oversized webview payloads; editor open uses the same trimmed text. */
 const MAX_REPLACE_CHECK_CONTEXT_CHARS = 120_000;
@@ -57,7 +54,6 @@ function trimForWebview(s: string): { text: string; truncated: boolean } {
 export class UIManager {
   private _view?: vscode.WebviewView;
   private _outputChannel?: vscode.OutputChannel;
-  private _abortController: AbortController = new AbortController();
    private _pendingReplaceConfirms: Map<string, (approved: boolean) => void> = new Map();
    private _pendingShellConfirms: Map<string, (approved: boolean) => void> = new Map();
    private _pendingHumanAssistanceConfirms: Map<string, (approved: boolean, userMessage?: string) => void> = new Map();
@@ -155,71 +151,6 @@ export class UIManager {
     return this._config.getApiConfig(this._selectedModelIndex);
   }
 
-
-  public async llmCheckReplace(ctx: ReplaceCheckContext): Promise<ReplaceCheckResult> {
-    // 每次调用前重建，避免前次 abort 影响后续请求
-    this._abortController = new AbortController();
-    const apiConfig = this.getApiConfig();
-
-    const prompt =
-      `You are a code-review assistant. A replace_lines operation is about to be applied.
-` +
-      `File: ${ctx.filePath}  |  lines ${ctx.startLine}–${ctx.endLine}
-
-` +
-      `## BEFORE (lines marked >>> will be replaced)
-\`\`\`
-${ctx.beforeContext}
-\`\`\`
-
-` +
-      `## AFTER (lines marked >>> are the new content)
-\`\`\`
-${ctx.afterContext}
-\`\`\`
-
-` +
-      `Focus on comparing the before/after code sections for semantic consistency and logical correctness. ` +
-      `Tool call success determination is handled automatically by program logic; ` +
-      `evaluate only whether the code change itself is correct and safe. Does this replacement look correct and safe to apply? ` +
-      `Reply with exactly one word: CONFIRM or REJECT, followed by a brief reason.`;
-
-    let reply: string;
-    try {
-      const checkMessages = [
-        { role: 'system' as const, content: getAgentRuntimeContextBlock() },
-        { role: 'user' as const, content: prompt },
-      ];
-      // Use the same API but without tools so we get a plain text answer
-      const response = await sendChatMessage(checkMessages, apiConfig, undefined, this._abortController.signal);
-      reply = (response.content ?? '').trim().toUpperCase();
-    } catch {
-      // If the check call itself fails, default to rejecting to stay safe
-      return { ok: false, reason: 'Check call failed', notes: [] };
-    }
-
-    const approved = reply.startsWith('CONFIRM');
-
-    // Surface the LLM's verdict in the chat UI as a check card
-    const reason = reply.slice(approved ? 7 : 6).trim() || '(no reason given)';
-    const unifiedT = trimForWebview(ctx.unifiedDiff || '');
-    this.post({
-      type: 'addCheckCard',
-      data: {
-        filePath: ctx.filePath,
-        startLine: ctx.startLine,
-        endLine: ctx.endLine,
-        verdict: approved ? 'CONFIRMED' : 'REJECTED',
-        reason: reason,
-        timestamp: Date.now(),
-        unifiedDiff: unifiedT.text,
-        contextTruncated: unifiedT.truncated,
-        languageId: languageIdFromPath(ctx.filePath),
-      },
-    });
-
-    return { ok: approved, reason, notes: [] };
-  }
 
   public async userConfirmReplace(ctx: ReplaceCheckContext): Promise<boolean> {
     if (!this._view) {

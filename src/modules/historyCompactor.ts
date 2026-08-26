@@ -1,7 +1,6 @@
 import type { ChatMessage, ToolCall, ApiConfig } from '../types';
 import { COMPACT_RESERVE_TOKENS } from '../constants';
 import { SYSTEM_PROMPT } from '../systemPrompt';
-import { TOOL_DEFINITIONS } from '../toolDefinitions';
 import { sendChatMessage } from '../api';
 import { buildLanguageInstruction, getStaticHostEnvironmentBlock } from '../agentRuntimeContext';
 import { sanitizeMessageList } from './messageSanitizer';
@@ -145,7 +144,7 @@ export async function compactHistoryFn(
     const summaryResponse = await sendChatMessage(
       compactMessages,
       apiConfig,
-      TOOL_DEFINITIONS,
+      undefined,
       abortController.signal,
     );
 

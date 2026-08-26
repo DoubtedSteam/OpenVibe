@@ -20,8 +20,6 @@ export interface ReplaceCheckContext {
   filePath: string;
   startLine: number;
   endLine: number;
-  beforeContext: string;
-  afterContext: string;
   unifiedDiff: string;
 }
 
@@ -116,25 +114,10 @@ export async function replaceLinesTool(
     }
   }
 
-  // Build context windows (+-10 lines)
-  const CTX = 10;
+  // Build a unified diff with +/-3 context lines — single view shared by the
+  // LLM review, the webview diff preview, and the tool result.
+  const CTX = 3;
   const isNewFile = total === 0 && !fs.existsSync(absPath);
-
-  let beforeContext: string;
-  if (isNewFile) {
-    beforeContext = "   (New file, no content yet)";
-  } else {
-    const ctxStart = Math.max(1, params.startLine - CTX);
-    const ctxEnd   = Math.min(total, clampedEnd + CTX);
-    beforeContext = lines
-      .slice(ctxStart - 1, ctxEnd)
-      .map((l, i) => {
-        const ln = ctxStart + i;
-        const inRange = ln >= params.startLine && ln <= clampedEnd;
-        return (inRange ? '>>>' : '   ') + ' ' + ln + ': ' + l;
-      })
-      .join('\n');
-  }
 
   const afterLines = [
     ...lines.slice(0, params.startLine - 1),
@@ -142,39 +125,27 @@ export async function replaceLinesTool(
     ...lines.slice(clampedEnd),
   ];
 
-  let afterContext: string;
-  if (isNewFile) {
-    afterContext = afterLines
-      .map((l, i) => {
-        const ln = i + 1;
-        return '>>> ' + ln + ': ' + l;
-      })
-      .join('\n');
-  } else {
-    const ctxStart = Math.max(1, params.startLine - CTX);
-    const afterCtxEnd = Math.min(afterLines.length, ctxStart - 1 + CTX + newLines.length + CTX);
-    afterContext = afterLines
-      .slice(ctxStart - 1, afterCtxEnd)
-      .map((l, i) => {
-        const ln = ctxStart + i;
-        const inRange = ln >= params.startLine && ln < params.startLine + newLines.length;
-        return (inRange ? '>>>' : '   ') + ' ' + ln + ': ' + l;
-      })
-      .join('\n');
-  }
-
-  // Unified diff
   const unifiedDiffLines: string[] = [];
   if (oldLines.length === 0 && newLines.length === 0) {
     unifiedDiffLines.push('(no changes)');
   } else {
+    if (!isNewFile) {
+      // Context lines before the change (original file line numbers)
+      const ctxStart = Math.max(1, params.startLine - CTX);
+      for (let ln = ctxStart; ln < params.startLine; ln++) {
+        unifiedDiffLines.push('   ' + ln + ': ' + lines[ln - 1]);
+      }
+    }
     for (let i = 0; i < oldLines.length; i++) {
-      const ln = params.startLine + i;
-      unifiedDiffLines.push('- ' + ln + ': ' + oldLines[i]);
+      unifiedDiffLines.push('- ' + (params.startLine + i) + ': ' + oldLines[i]);
     }
     for (let i = 0; i < newLines.length; i++) {
-      const ln = params.startLine + i;
-      unifiedDiffLines.push('+ ' + ln + ': ' + newLines[i]);
+      unifiedDiffLines.push('+ ' + (params.startLine + i) + ': ' + newLines[i]);
+    }
+    // Context lines after the change (new file line numbers)
+    const afterStartIdx = (params.startLine - 1) + newLines.length;
+    for (let i = 0; i < CTX && afterStartIdx + i < afterLines.length; i++) {
+      unifiedDiffLines.push('   ' + (params.startLine + newLines.length + i) + ': ' + afterLines[afterStartIdx + i]);
     }
   }
   const unifiedDiff = unifiedDiffLines.join('\n');
@@ -191,8 +162,6 @@ export async function replaceLinesTool(
     filePath: params.filePath,
     startLine: params.startLine,
     endLine: clampedEnd,
-    beforeContext,
-    afterContext,
     unifiedDiff,
   });
 
@@ -233,8 +202,6 @@ export async function replaceLinesTool(
       filePath: params.filePath,
       startLine: params.startLine,
       endLine: clampedEnd,
-      beforeContext,
-      afterContext,
       unifiedDiff,
     });
     try {
@@ -258,8 +225,6 @@ export async function replaceLinesTool(
   writeLines(absPath, afterLines, crlf);
 
   const newTotal = afterLines.length;
-  const diagnosticsInfo = { hasNewDiagnostics: false, count: 0, diagnostics: [] };
-
   return JSON.stringify({
     success: true,
     totalLines: newTotal,
@@ -267,7 +232,6 @@ export async function replaceLinesTool(
     message: 'Replaced lines ' + params.startLine + '-' + clampedEnd + ': removed ' + oldLines.length + ', added ' + newLines.length + '. File now has ' + newTotal + ' lines.',
     lineRangeStaleHint:
       'Before another edit on this file, call read_file again: line numbers from prior reads are outdated after this change.',
-    diagnosticsCheck: diagnosticsInfo,
     ...diffMeta,
   });
 }

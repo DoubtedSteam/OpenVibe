@@ -2,7 +2,6 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import { resolveWorkspacePath, getWorkspaceRoot } from '../utils/pathHelpers';
-import { getRuntimeEnvironmentSummary } from '../agentRuntimeContext';
 
 // ─── get_workspace_info ───────────────────────────────────────────────────────
 
@@ -80,7 +79,6 @@ export function getWorkspaceInfoTool(getMemorySyncEnabled?: () => boolean): stri
     topLevelEntries: entries,
     hint: 'Use relative paths (e.g. "src/index.ts") when calling read_file or find_in_file.',
     ...(memorySummary ? { memorySummary } : {}),
-    ...getRuntimeEnvironmentSummary(),
   });
 }
 
@@ -224,7 +222,6 @@ export function getFileInfoTool(params: GetFileInfoParams): string {
       isDirectory: stat.isDirectory(),
       size: stat.size,
       mtimeMs: stat.mtimeMs,
-      mtimeIso: new Date(stat.mtimeMs).toISOString(),
     });
   } catch (e: any) {
     return JSON.stringify({ error: e.message });

@@ -337,13 +337,13 @@ export class ToolExecutor {
           return JSON.stringify({ error: `Index ${idx} is out of range (0–${theList.items.length - 1}).` });
         }
         this._todoListManager.markDone(idx);
-        const list = this._todoListManager.postUpdateDisplay(this._todoListManager.getList()!.items);
+        this._todoListManager.markDone(idx);
+        this._todoListManager.postUpdateDisplay(this._todoListManager.getList()!.items);
         const remaining = this._todoListManager.getList()!.items.filter(i => !i.done).length;
         const result = JSON.stringify({
           success: true,
           message: summary ? `Item ${idx + 1} complete: ${summary}` : `Item ${idx + 1} marked complete.`,
           remaining,
-          todoList: list,
         });
         this._notifyTodoPersisted();
 

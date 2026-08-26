@@ -296,13 +296,12 @@ export class MessageHandler {
               ? `\n\n**📄 本次修改了 ${modifiedFiles.length} 个文件**:\n${fileListStr}`
               : '';
             const memoryHint = modifiedFiles.length > 0
-              ? 'Task complete. ⚠️ MEMORY SYNC REQUIRED: this task modified files — before editing .OpenVibe/memory/ next, check whether new/removed files need L2-inventory.md updates and whether changed components need L3-roles.md updates (code is the source of truth). Modified files:\n' +
-                modifiedFiles.map(f => `- ${f}`).join('\n')
+              ? `Task complete. ⚠️ MEMORY SYNC REQUIRED: this task modified ${modifiedFiles.length} file(s) — before editing .OpenVibe/memory/ next, check whether new/removed files need L2-inventory.md updates and whether changed components need L3-roles.md updates (code is the source of truth).`
               : 'Task complete. No files modified — memory sync not required.';
             const summary = (args['summary'] as string) || '';
             const result = JSON.stringify({
               success: true, operation: 'task_complete',
-              message: 'Task marked complete. ' + memoryHint, summary, modifiedFiles,
+              message: 'Task marked complete. ' + memoryHint, summary,
             });
             this._postIfSameSession({ type: 'toolResult', name, result });
             this._addTaggedMessage({ role: 'tool', content: result, tool_call_id: toolCall.id });

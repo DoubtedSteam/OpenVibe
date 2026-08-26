@@ -131,8 +131,6 @@ export async function runShellCommandTool(params: RunShellCommandParams): Promis
     if (signal?.aborted) {
       return JSON.stringify({
         success: false,
-        command,
-        cwd: root,
         exitCode: null,
         durationMs: 0,
         error: 'Operation stopped by user.',
@@ -162,8 +160,6 @@ export async function runShellCommandTool(params: RunShellCommandParams): Promis
         const t = setTimeout(() => {
           finish({
             success: false,
-            command,
-            cwd: root,
             exitCode: null,
             durationMs: Date.now() - startedAt,
             error: 'Operation stopped by user.',
@@ -217,8 +213,6 @@ export async function runShellCommandTool(params: RunShellCommandParams): Promis
       child.on('error', (err: Error) => {
         finish({
           success: false,
-          command,
-          cwd: root,
           exitCode: null,
           durationMs: Date.now() - startedAt,
           error: err.message,
@@ -234,8 +228,6 @@ export async function runShellCommandTool(params: RunShellCommandParams): Promis
         if (aborted) {
           finish({
             success: false,
-            command,
-            cwd: root,
             exitCode: null,
             durationMs: Date.now() - startedAt,
             error: 'Operation stopped by user.',
@@ -251,8 +243,6 @@ export async function runShellCommandTool(params: RunShellCommandParams): Promis
         const extracted = summarizeShellOutput(stdout, stderr);
         finish({
           success: code === 0,
-          command,
-          cwd: root,
           exitCode: code,
           signal: typeof sig === 'string' ? sig : null,
           durationMs: Date.now() - startedAt,

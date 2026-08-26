@@ -282,19 +282,6 @@ export class ConversationService {
     }
   }
 
-  /**
-   * Removes assistant turns whose tool_calls never received matching tool results.
-   * This is a standalone version that operates on a given array and returns a new copy.
-   * Used by compactHistory to sanitize the to-be-compressed messages before sending to API.
-   *
-   * @param preservePendingAssistant - If true, the trailing assistant+tool block (at the end
-   *   of the array) is kept even if some tool_calls lack responses, because those responses
-   *   are still being generated in the current LLM turn and will be appended after compact
-   *   completes. This prevents the tool responses from becoming orphaned `tool` messages.
-   */
-  private _sanitizeMessageList(messages: ChatMessage[], preservePendingAssistant = false): ChatMessage[] {
-    return sanitizeMessageList(messages, preservePendingAssistant);
-  }
 
   // ─── Reserve window (based on API prompt_tokens snapshots) ───────────────
 

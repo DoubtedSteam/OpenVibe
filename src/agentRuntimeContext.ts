@@ -2,7 +2,6 @@ import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
 
-export type DefaultLineEnding = 'CRLF' | 'LF';
 
 /**
  * Get information about the user's currently active editor (open file).
@@ -79,31 +78,7 @@ export function getAgentRuntimeContextBlock(): string {
   return block;
 }
 
-/** Structured snapshot for tool results (e.g. get_workspace_info). */
-export function getRuntimeEnvironmentSummary(): {
-  osPlatform: string;
-  osType: string;
-  osRelease: string;
-  arch: string;
-  pathSeparator: string;
-  defaultNewFileLineEndings: DefaultLineEnding;
-} {
-  return {
-    osPlatform: process.platform,
-    osType: os.type(),
-    osRelease: os.release(),
-    arch: os.arch(),
-    pathSeparator: path.sep,
-    defaultNewFileLineEndings: process.platform === 'win32' ? 'CRLF' : 'LF',
-  };
-}
 
-/**
- * Build a language instruction block to append to the system prompt.
- * Mirrors the language setting from ApiConfig to tell the AI which
- * language to use when communicating with the user.
- * Kept as a separate export so both MessageHandler and ConversationService
- * share the same implementation for KV cache prefix consistency.
 /**
  * Build a formatted date string: YYYY/MM/DD DayOfWeek (Chinese).
  * Used in the user Context block so the AI knows the current date.
