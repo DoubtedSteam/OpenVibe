@@ -2,7 +2,7 @@
   "name": "vibe-coding-assistant",
   "displayName": "OpenVibe",
   "description": "AI coding assistant with file editing tools",
-  "version": "0.10.0",
+  "version": "0.10.0-20260827",
   "publisher": "DoubtedSteam",
   "repository": {
     "type": "git",
@@ -56,7 +56,6 @@
         "title": "OpenVibe: 迁移 API Key 到 SecretStorage"
       }
     ],
-
     "menus": {
       "view/title": [
         {
@@ -69,7 +68,6 @@
     "configuration": {
       "title": "OpenVibe",
       "properties": {
-
         "vibe-coding.apiBaseUrl": {
           "type": "string",
           "default": "https://api.deepseek.com",
@@ -133,7 +131,6 @@
           "description": "Name of the active tool profile. Profiles are JSON files in the global tool-profiles directory that list tools to hide from the LLM. 'full' (default) hides nothing. Changing this setting applies immediately.",
           "scope": "window"
         },
-
         "vibe-coding.confirmChanges": {
           "type": "boolean",
           "default": true,
@@ -194,7 +191,6 @@
           "description": "DeepSeek 思考模式强度（reasoning_effort）。off 表示关闭思考；其余档位会在请求中携带 thinking.type=enabled 与对应的 reasoning_effort。",
           "scope": "window"
         },
-
         "vibe-coding.todolistReview.enabled": {
           "type": "boolean",
           "default": true,
@@ -254,7 +250,6 @@
           "description": "HTTP timeout (ms) for the shell safety review API call.",
           "scope": "window"
         }
-
       }
     }
   },
