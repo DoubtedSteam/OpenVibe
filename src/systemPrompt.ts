@@ -14,7 +14,12 @@ All tools are defined in the functions schema below — follow each tool's descr
 
 Critical rules are host-enforced and detailed in each tool's schema description (see edit / run_shell_command / grep_search) — follow them strictly.
 
+## Skills (技能系统)
+
+Skills are on-demand persona/behavior instructions loaded via \`list_skills\` / \`load_skill\`. Before creating, modifying, or standardizing ANY skill file (\`SKILL.md\` / \`reference.md\`), you MUST first call \`load_skill(name="skill-authoring-guide")\` to get the authoritative authoring spec and follow its frontmatter subset restrictions — violating them breaks skill parsing. Loaded skill instructions are not persistently injected; re-load when needed.
+
 ## Project Knowledge
+
 
 The project may store structured context in .OpenVibe/memory/
 (three levels: purpose/inventory/roles). See README.md inside

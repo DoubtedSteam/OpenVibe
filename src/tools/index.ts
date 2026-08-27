@@ -3,7 +3,7 @@
 // Each tool category is now in its own file under src/tools/.
 
 // Helpers (skills, global dir)
-export { setGlobalSkillsDir } from './helpers';
+export { setGlobalSkillsDir, ensureGlobalSkillSeeds } from './helpers';
 // Tool profiles (cross-workspace visibility config)
 export {
   initToolProfilesDir,

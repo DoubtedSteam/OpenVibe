@@ -6,7 +6,7 @@ import { SessionManager } from './SessionManager';
 import { UIManager } from './UIManager';
 import { ConversationService } from './ConversationService';
 import { ConfigService } from './ConfigService';
-import { gitRollbackTool, listGitSnapshotsTool, setGlobalSkillsDir, activateTerminalTracking, listToolProfiles, getCurrentToolProfile, applyToolProfile, killActiveShellProcesses, DEFAULT_TOOL_PROFILE } from '../tools';
+import { gitRollbackTool, listGitSnapshotsTool, setGlobalSkillsDir, ensureGlobalSkillSeeds, activateTerminalTracking, listToolProfiles, getCurrentToolProfile, applyToolProfile, killActiveShellProcesses, DEFAULT_TOOL_PROFILE } from '../tools';
 import { OperationController } from '../operationController';
 import { getChatViewHtml } from './chatViewHtml';
 import { AUTO_COMPACT_TOKEN_THRESHOLD } from '../constants';
@@ -29,6 +29,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     // ── Initialize global skills pool (shared across all workspaces) ──────
     const globalSkillsDir = path.join(_context.globalStorageUri.fsPath, 'skills');
     setGlobalSkillsDir(globalSkillsDir);
+    // Seed the bundled skill-authoring-guide into the global pool so the
+    // skill-creation guide is reachable from ANY workspace.
+    ensureGlobalSkillSeeds(this._extensionUri.fsPath);
 
     this._config = config;
 

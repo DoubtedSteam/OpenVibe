@@ -63,7 +63,40 @@ function _listSkillsFromDir(dir: string): string[] {
 
 export {
   getOrCreateGlobalSkillsDir,
+  ensureGlobalSkillSeeds,
   _skillSearchPaths,
   _findSkillAcrossPools,
   _listSkillsFromDir,
 };
+
+// ─── Seed bundled guide skill into the global pool ──────────────────────────
+const GUIDE_SKILL_NAME = 'skill-authoring-guide';
+
+/**
+ * Deploys the bundled `skill-authoring-guide` SKILL.md (shipped under
+ * <extension>/media/skill-authoring-guide/) into the global skills pool so the
+ * authoring guide is readable from ANY workspace (list_skills / load_skill).
+ *
+ * Copies only when the target is missing or its content differs, so it both
+ * self-heals fresh installs and syncs guide updates on extension upgrade.
+ * Failures are silent — the skills pool must never block extension startup.
+ */
+function ensureGlobalSkillSeeds(extensionRootFsPath: string): void {
+  if (!_globalSkillsDir) return;
+  try {
+    const seedSrc = path.join(extensionRootFsPath, 'media', GUIDE_SKILL_NAME, 'SKILL.md');
+    if (!fs.existsSync(seedSrc)) return; // seed stripped (e.g. custom packaging) → skip
+
+    const destDir = path.join(_globalSkillsDir, GUIDE_SKILL_NAME);
+    if (!fs.existsSync(destDir)) {
+      fs.mkdirSync(destDir, { recursive: true });
+    }
+    const dest = path.join(destDir, 'SKILL.md');
+    const srcContent = fs.readFileSync(seedSrc, 'utf-8');
+    if (!fs.existsSync(dest) || fs.readFileSync(dest, 'utf-8') !== srcContent) {
+      fs.writeFileSync(dest, srcContent, 'utf-8');
+    }
+  } catch {
+    // ignore — never block startup
+  }
+}
