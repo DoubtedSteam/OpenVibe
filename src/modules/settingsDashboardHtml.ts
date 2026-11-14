@@ -250,6 +250,7 @@ export function getSettingsDashboardHtml(webview: vscode.Webview, extensionUri: 
       <button class="nav-item active" data-section="modes"><span>🧭</span><span>模式与插件</span><span class="nav-badge" id="badge-modes">0</span></button>
       <button class="nav-item" data-section="connection"><span>🔌</span><span>API 连接</span></button>
       <button class="nav-item" data-section="models"><span>🤖</span><span>模型列表</span></button>
+      <button class="nav-item" data-section="context"><span>📏</span><span>上下文控制</span></button>
       <button class="nav-item" data-section="behavior"><span>⚙️</span><span>交互行为</span></button>
       <button class="nav-item" data-section="language"><span>🌐</span><span>语言与思考</span></button>
       <button class="nav-item" data-section="review"><span>🛡️</span><span>审查与记忆</span></button>
@@ -257,7 +258,7 @@ export function getSettingsDashboardHtml(webview: vscode.Webview, extensionUri: 
     <main class="content">
       <section id="sec-modes" class="section active">
         <div class="section-title">🧭 模式与插件</div>
-        <div class="section-desc">每个模式（mode）对应一组插件（工具）可见性配置。点击模式卡片可查看并切换该模式下的插件。被隐藏的插件不会发送给 AI，且执行层会拒绝调用。绿色 = 可用，红色划线 = 隐藏。</div>
+        <div class="section-desc">每个模式（mode）对应一组插件（工具）可见性配置。点击模式卡片可查看并切换该模式下的插件。被隐藏的插件不会发送给 AI，且执行层会拒绝调用。绿色 = 可用，红色划线 = 隐藏。每个模式还可填写"自定义系统提示词"：留空 = 默认；非空 = 完全替换"你是编码助手"的身份与规则（工具照常可用）。</div>
         <div class="card">
           <div class="card-header">全局默认模式 <span class="hint" id="mode-default-hint"></span></div>
           <div class="card-body">
@@ -274,7 +275,8 @@ export function getSettingsDashboardHtml(webview: vscode.Webview, extensionUri: 
 
       <section id="sec-connection" class="section">
         <div class="section-title">🔌 API 连接</div>
-        <div class="section-desc">OpenAI 兼容 API 的连接参数。修改后立即写入 VS Code 设置并即时生效。</div>
+        <div class="section-desc">任意 OpenAI 兼容 API 的连接参数（DeepSeek、硅基流动 SiliconFlow、阿里云百炼、智谱 GLM、Kimi、OpenAI、OpenRouter、本地 Ollama/vLLM…）。修改后立即写入 VS Code 设置并即时生效。</div>
+
         <div class="card">
           <div class="card-header">连接参数</div>
           <div class="card-body">
@@ -293,15 +295,64 @@ export function getSettingsDashboardHtml(webview: vscode.Webview, extensionUri: 
               <input type="text" id="set-model" data-key="model" spellcheck="false">
               <div class="field-desc">未配置「模型列表」或未选择具体模型时使用的默认模型。</div>
             </div>
+            <div class="field">
+              <div class="field-label">🧩 服务商预设（apiProvider）</div>
+              <select data-key="apiProvider" id="set-apiProvider"></select>
+              <div class="field-desc" id="set-apiProvider-note">
+                决定请求体中「思考 / 推理」参数的写法。各厂商并不通用，发错字段会收到 400 错误；
+                auto 会按 Base URL 主机名自动识别（DeepSeek / 硅基流动 / 百炼 / 智谱 / OpenAI / OpenRouter / 本地服务等）。
+              </div>
+            </div>
+            <div class="field">
+              <div class="field-label">🗣️ 思考参数方言（thinkingMode）</div>
+              <select data-key="thinkingMode" id="set-thinkingMode"></select>
+              <div class="field-desc">
+                默认跟随服务商预设。若某服务商报「未知参数 / unknown parameter」，在此选择「不发送（none）」即可兼容任何实现；
+                思考强度设为「关闭」时也只会发送 thinking.type=disabled（DeepSeek / 智谱）或完全不发送。
+              </div>
+            </div>
+
           </div>
         </div>
       </section>
 
       <section id="sec-models" class="section">
         <div class="section-title">🤖 模型列表</div>
-        <div class="section-desc">多模型配置。每项可覆盖 baseUrl、apiKey、最大交互次数与上下文长度；聊天底部栏可按名称切换。留空的字段回落到全局设置。</div>
+        <div class="section-desc">多模型配置。每项可覆盖 baseUrl、apiKey、<strong>服务商预设</strong>、<strong>思考方言</strong>、<strong>上下文窗口</strong>、最大交互次数与上下文长度；聊天底部栏可按名称切换。留空的字段回落到全局设置 —— 因此可以在同一个列表里混用不同厂商（例如 DeepSeek + 硅基流动）。</div>
+
         <div id="models-list"></div>
         <button id="btn-add-model" class="btn primary">＋ 添加模型</button>
+      </section>
+
+      <section id="sec-context" class="section">
+        <div class="section-title">📏 上下文控制</div>
+        <div class="section-desc">
+          按模型真实窗口控制上下文。设定「上下文窗口」后：历史压缩阈值自动变为 <strong>窗口 − 输出预留 − 思维链预留</strong>，
+          聊天底栏用量表按该阈值显示；上游返回「上下文超限」（如硅基流动 <code>code 20015 / max_seq_len</code>）时也会自动压缩并重试一次，
+          而不是把 400 直接甩给用户。留 0 表示沿用旧的 1M 阈值。
+        </div>
+        <div class="card">
+          <div class="card-header">窗口与长度</div>
+          <div class="card-body">
+            <div class="inline-row">
+              <div class="field">
+                <div class="field-label">上下文窗口（token）</div>
+                <input type="number" data-key="contextWindow" id="set-contextWindow" min="0">
+                <div class="field-desc">该模型的真实窗口：Qwen3 128K = 131072、32K 模型 = 32768。0 = 不启用精确控制。</div>
+              </div>
+              <div class="field">
+                <div class="field-label">单次回复上限（token）</div>
+                <input type="number" data-key="maxOutputTokens" id="set-maxOutputTokens" min="0">
+                <div class="field-desc">作为 max_tokens 下发；0 = 不发送。硅基流动建议 4096–8192，并为输入预留约 10k。</div>
+              </div>
+            </div>
+            <div class="field">
+              <div class="field-label">思维链预算（token，思考模式）</div>
+              <input type="number" data-key="thinkingBudget" id="set-thinkingBudget" min="0">
+              <div class="field-desc">仅 enable_thinking 方言（硅基流动 / 百炼）下发 thinking_budget，平台取值 128–32768；0 = 不发送，交给模型默认。</div>
+            </div>
+          </div>
+        </div>
       </section>
 
       <section id="sec-behavior" class="section">
@@ -327,7 +378,7 @@ export function getSettingsDashboardHtml(webview: vscode.Webview, extensionUri: 
               <div class="field">
                 <div class="field-label">最大输出序列长度</div>
                 <input type="number" data-key="maxSequenceLength" id="set-maxSequenceLength">
-                <div class="field-desc">生成文本的最大长度（字符）</div>
+                <div class="field-desc">旧版字符上限，已不参与上下文控制 —— 请改用「📏 上下文控制」的 token 窗口</div>
               </div>
             </div>
           </div>

@@ -14,11 +14,17 @@ export const CONFIG_DEFAULTS = {
   apiBaseUrl: 'https://api.deepseek.com',
   apiKey: '',
   model: 'deepseek-reasoner',
+  apiProvider: 'auto',
+  thinkingMode: 'auto',
   models: [] as ModelConfig[],
   confirmChanges: true,
+
   confirmShellCommand: true,
   maxInteractions: -1,
   maxSequenceLength: 800000,
+  contextWindow: 0,
+  maxOutputTokens: 0,
+  thinkingBudget: 0,
   language: 'zh-CN',
   reasoningEffort: 'high',
   toolProfile: 'full',
@@ -103,6 +109,18 @@ export class ConfigService {
     return this._get<ModelConfig[]>('models', []);
   }
 
+  /** Global API vendor preset id (`auto` = infer from the Base URL host). */
+  getApiProvider(): string {
+    return this._get('apiProvider', CONFIG_DEFAULTS.apiProvider);
+  }
+
+  /** Global reasoning-dialect override (`auto` = follow the provider preset). */
+  getThinkingMode(): string {
+    return this._get('thinkingMode', CONFIG_DEFAULTS.thinkingMode);
+  }
+
+
+
   getLanguage(): string {
     return this._get('language', CONFIG_DEFAULTS.language);
   }
@@ -130,6 +148,24 @@ export class ConfigService {
 
   getMaxSequenceLength(): number {
     return this._get('maxSequenceLength', CONFIG_DEFAULTS.maxSequenceLength);
+  }
+
+  /**
+   * 模型上下文窗口（token）。0 = 未设置 → 沿用内置 1M 压缩阈值（旧行为）。
+   * 设为真实值时，压缩阈值 = 窗口 − 输出预留 − 思维链预留。
+   */
+  getContextWindow(): number {
+    return Math.max(0, Number(this._get('contextWindow', CONFIG_DEFAULTS.contextWindow)) || 0);
+  }
+
+  /** 单次回复输出上限（token），作为 `max_tokens` 下发。0 = 不发送。 */
+  getMaxOutputTokens(): number {
+    return Math.max(0, Number(this._get('maxOutputTokens', CONFIG_DEFAULTS.maxOutputTokens)) || 0);
+  }
+
+  /** 思维链预算（token），仅硅基流动/百炼这类 `enable_thinking` 方言下发。 */
+  getThinkingBudget(): number {
+    return Math.max(0, Number(this._get('thinkingBudget', CONFIG_DEFAULTS.thinkingBudget)) || 0);
   }
 
   getReasoningEffort(): string {
@@ -179,8 +215,9 @@ export class ConfigService {
 
   /**
    * Build the effective ApiConfig for the given model selection.
-   * Model entry overrides (apiBaseUrl/apiKey/maxInteractions/maxSequenceLength)
-   * take precedence over the global vibe-coding.* settings.
+   * Model entry overrides (apiBaseUrl/apiKey/provider/thinkingMode/
+   * maxInteractions/maxSequenceLength) take precedence over the global
+   * vibe-coding.* settings.
    */
   getApiConfig(selectedModelIndex: number = -1): ApiConfig {
     const models = this.getModels();
@@ -189,6 +226,11 @@ export class ConfigService {
     const apiKey = this.getApiKey();
     const maxInteractions = this.getMaxInteractions();
     const maxSequenceLength = this.getMaxSequenceLength();
+    const globalProvider = this.getApiProvider();
+    const globalThinkingMode = this.getThinkingMode();
+    const globalContextWindow = this.getContextWindow();
+    const globalMaxOutputTokens = this.getMaxOutputTokens();
+    const globalThinkingBudget = this.getThinkingBudget();
 
     let effectiveIndex = selectedModelIndex;
     if (effectiveIndex < 0 && models.length > 0) {
@@ -198,16 +240,28 @@ export class ConfigService {
     let activeBaseUrl = baseUrl;
     let activeApiKey = apiKey;
     let activeModelName = model;
+    let activeProvider = globalProvider;
+    let activeThinkingMode = globalThinkingMode;
     let activeMaxInteractions: number | undefined;
     let activeMaxSequenceLength: number | undefined;
+    let activeContextWindow: number | undefined;
+    let activeMaxOutputTokens: number | undefined;
+    let activeThinkingBudget: number | undefined;
 
     if (effectiveIndex >= 0 && effectiveIndex < models.length) {
       const entry = models[effectiveIndex];
       if (entry.apiBaseUrl) activeBaseUrl = entry.apiBaseUrl;
       if (entry.apiKey) activeApiKey = entry.apiKey;
       activeModelName = entry.model;
+      // Per-model vendor / dialect overrides let one model list mix vendors.
+      if (entry.provider) activeProvider = entry.provider;
+      if (entry.thinkingMode) activeThinkingMode = entry.thinkingMode;
       if (entry.maxInteractions != null) activeMaxInteractions = entry.maxInteractions;
       if (entry.maxSequenceLength != null) activeMaxSequenceLength = entry.maxSequenceLength;
+      // 上下文控制：模型级覆盖优先于全局；0 视为「未设置」→ 回退全局。
+      if (entry.contextWindow != null && entry.contextWindow > 0) activeContextWindow = entry.contextWindow;
+      if (entry.maxOutputTokens != null && entry.maxOutputTokens > 0) activeMaxOutputTokens = entry.maxOutputTokens;
+      if (entry.thinkingBudget != null && entry.thinkingBudget > 0) activeThinkingBudget = entry.thinkingBudget;
     }
 
     if (!activeApiKey) {
@@ -220,14 +274,20 @@ export class ConfigService {
       baseUrl: activeBaseUrl,
       apiKey: activeApiKey,
       model: activeModelName,
+      provider: activeProvider as ApiConfig['provider'],
+      thinkingMode: activeThinkingMode as ApiConfig['thinkingMode'],
       confirmChanges: this.getConfirmChanges(),
       confirmShellCommand: this.getConfirmShellCommand(),
       maxInteractions: activeMaxInteractions != null ? activeMaxInteractions : maxInteractions,
       maxSequenceLength: activeMaxSequenceLength != null ? activeMaxSequenceLength : maxSequenceLength,
+      contextWindow: activeContextWindow != null ? activeContextWindow : globalContextWindow,
+      maxOutputTokens: activeMaxOutputTokens != null ? activeMaxOutputTokens : globalMaxOutputTokens,
+      thinkingBudget: activeThinkingBudget != null ? activeThinkingBudget : globalThinkingBudget,
       language: this.getResolvedLanguage(),
       reasoningEffort: this.getReasoningEffort(),
     };
   }
+
 
   /** Raw `vscode.workspace.getConfiguration('vibe-coding')` handle (used by the settings dashboard only). */
   getConfiguration(): vscode.WorkspaceConfiguration {

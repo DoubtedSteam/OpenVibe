@@ -1,3 +1,6 @@
+import type { ProviderId, ThinkingModeOverride } from './providers';
+
+
 export interface ToolCall {
   id: string;
   type: 'function';
@@ -92,20 +95,39 @@ export interface ApiConfig {
   baseUrl: string;
   apiKey: string;
   model: string;
+  /**
+   * API vendor preset id (see `src/providers.ts`). `auto` (or unset) infers the
+   * vendor from {@link baseUrl}. Controls how thinking/reasoning parameters are
+   * shaped in the request body, so DeepSeek-only fields are never sent to other
+   * OpenAI-compatible vendors (e.g. 硅基流动 SiliconFlow).
+   */
+  provider?: ProviderId;
+  /**
+   * Per-model override of the reasoning dialect. `auto` (or unset) follows the
+   * active provider preset.
+   */
+  thinkingMode?: ThinkingModeOverride;
   /** Ask before applying **edit** tool (file changes). */
   confirmChanges?: boolean;
   /** Ask before running **run_shell_command** after review (independent from confirmChanges). */
   confirmShellCommand?: boolean;
   maxInteractions?: number; // -1 means unlimited
   maxSequenceLength?: number;
+  /** 上下文窗口（token）。0/未设置 = 不启用精确控制（沿用内置 1M 压缩阈值）。 */
+  contextWindow?: number;
+  /** 单次回复输出上限（token），作为请求体 `max_tokens` 下发；0/未设置 = 不发送。 */
+  maxOutputTokens?: number;
+  /** 思维链预算（token），仅 `enable_thinking` 方言（硅基流动）下发 `thinking_budget`。 */
+  thinkingBudget?: number;
   /** Language for AI interaction: 'auto' | 'en' | 'zh-CN' */
   language?: string;
-  /** DeepSeek 思考模式强度：'off' | 'low' | 'medium' | 'high' | 'max'。 */
+  /** 思考模式强度：'off' | 'low' | 'medium' | 'high' | 'max'（按服务商方言下发）。 */
   reasoningEffort?: string;
 }
 /**
  * Configuration for a single model entry in the vibe-coding.models array.
- * Each entry can optionally override apiBaseUrl, apiKey, maxInteractions, and maxSequenceLength.
+ * Each entry can optionally override apiBaseUrl, apiKey, provider,
+ * thinkingMode, maxInteractions, and maxSequenceLength.
  */
 export interface ModelConfig {
   /** Display name shown in the model selector dropdown. */
@@ -116,11 +138,30 @@ export interface ModelConfig {
   apiBaseUrl?: string;
   /** Optional API key override (falls back to vibe-coding.apiKey). */
   apiKey?: string;
+  /**
+   * Optional API vendor preset id for this model (falls back to
+   * `vibe-coding.apiProvider`). Lets one conversation mix vendors, e.g. a
+   * DeepSeek model and a 硅基流动 model side by side.
+   */
+  provider?: ProviderId;
+  /**
+   * Optional reasoning-dialect override for this model (falls back to the
+   * provider preset's dialect). `none` never sends vendor-specific reasoning
+   * fields — the universal escape hatch for strict OpenAI-compatible servers.
+   */
+  thinkingMode?: ThinkingModeOverride;
   /** Optional maximum tool call iterations override (falls back to vibe-coding.maxInteractions, -1 = unlimited). */
   maxInteractions?: number;
   /** Optional maximum context / sequence length override in characters (falls back to vibe-coding.maxSequenceLength). */
   maxSequenceLength?: number;
+  /** Optional context window in tokens for this model (falls back to vibe-coding.contextWindow). */
+  contextWindow?: number;
+  /** Optional reply output budget in tokens for this model (falls back to vibe-coding.maxOutputTokens). */
+  maxOutputTokens?: number;
+  /** Optional chain-of-thought budget in tokens for this model (falls back to vibe-coding.thinkingBudget). */
+  thinkingBudget?: number;
 }
+
 
 export interface ToolDefinition {
   type: 'function';

@@ -1,6 +1,6 @@
 import type { ChatMessage, ToolCall, ApiConfig } from '../types';
 import { COMPACT_RESERVE_TOKENS } from '../constants';
-import { SYSTEM_PROMPT } from '../systemPrompt';
+import { getEffectiveSystemPrompt } from '../tools/toolProfiles';
 import { sendChatMessage } from '../api';
 import { buildLanguageInstruction, getStaticHostEnvironmentBlock } from '../agentRuntimeContext';
 import { sanitizeMessageList } from './messageSanitizer';
@@ -12,6 +12,8 @@ export interface CompactorContext {
   getApiConfig(): ApiConfig;
   getUsageSnapshots(): Array<{ msgCount: number; totalPromptTokens: number }>;
   resetUsageSnapshots(): void;
+  /** 保留窗口 token 数；未提供时退回 COMPACT_RESERVE_TOKENS（按上下文窗口缩放）。 */
+  getReserveTokens?(): number;
 }
 
 /**
@@ -19,17 +21,20 @@ export interface CompactorContext {
  * Scans snapshots from the end: the difference between consecutive snapshots'
  * totalPromptTokens reveals how many tokens the messages between them consumed.
  * Returns 0 when no compaction is needed (all messages fit within the reserve window).
+ *
+ * @param reserveTokens 原样保留的最近历史 token 数（默认 20k；配置了上下文窗口时按比例缩小）。
  */
 export function findReserveWindowStart(
   messages: ChatMessage[],
   snapshots: Array<{ msgCount: number; totalPromptTokens: number }>,
+  reserveTokens: number = COMPACT_RESERVE_TOKENS,
 ): number {
   if (snapshots.length === 0) return 0;
 
   const last = snapshots[snapshots.length - 1];
   for (let i = snapshots.length - 2; i >= 0; i--) {
     const diff = last.totalPromptTokens - snapshots[i].totalPromptTokens;
-    if (diff >= COMPACT_RESERVE_TOKENS) {
+    if (diff >= reserveTokens) {
       return snapshots[i + 1].msgCount;
     }
   }
@@ -98,12 +103,17 @@ export async function compactHistoryFn(
   }
 
   // ── Find reserve window ──────────────────────────────────────────────
-  const rawReserveStart = findReserveWindowStart(messages, ctx.getUsageSnapshots());
-  if (rawReserveStart === 0) {
-    return JSON.stringify({ success: false, message: 'Nothing to compact: conversation fits within the reserve window.' });
+  const reserveTokens = ctx.getReserveTokens?.() ?? COMPACT_RESERVE_TOKENS;
+  const rawReserveStart = findReserveWindowStart(messages, ctx.getUsageSnapshots(), reserveTokens);
+  let reserveStart = rawReserveStart === 0 ? 0 : adjustReserveBoundary(messages, rawReserveStart);
+
+  // 首轮就超限时（还没有 usage 快照）没有 token 差值可用，按消息条数兜底切分，
+  // 保留最后一小段原始历史，让「超限 → 压缩 → 重试」这条自愈路径仍然有效。
+  if (reserveStart === 0 && triggeredByTokenLimit && messages.length > 3) {
+    const keepCount = Math.max(2, Math.min(20, Math.floor(messages.length * 0.25)));
+    reserveStart = adjustReserveBoundary(messages, Math.max(1, messages.length - keepCount));
   }
 
-  const reserveStart = adjustReserveBoundary(messages, rawReserveStart);
   if (reserveStart === 0) {
     return JSON.stringify({ success: false, message: 'Nothing to compact: conversation fits within the reserve window.' });
   }
@@ -120,7 +130,7 @@ export async function compactHistoryFn(
     const sanitizedToCompress = sanitizeMessageList(toCompress);
 
     const compactMessages: ChatMessage[] = [
-      { role: 'system', content: SYSTEM_PROMPT + langInstr + '\n\n' + getStaticHostEnvironmentBlock() },
+      { role: 'system', content: getEffectiveSystemPrompt() + langInstr + '\n\n' + getStaticHostEnvironmentBlock() },
     ];
 
 

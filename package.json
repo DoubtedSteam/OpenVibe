@@ -2,7 +2,7 @@
   "name": "vibe-coding-assistant",
   "displayName": "OpenVibe",
   "description": "AI coding assistant with file editing tools",
-  "version": "0.10.0-20260827",
+  "version": "0.11.0-20261114",
   "publisher": "DoubtedSteam",
   "repository": {
     "type": "git",
@@ -86,10 +86,62 @@
           "description": "Model name",
           "scope": "application"
         },
+        "vibe-coding.apiProvider": {
+          "type": "string",
+          "default": "auto",
+          "enum": [
+            "auto",
+            "deepseek",
+            "siliconflow",
+            "dashscope",
+            "zhipu",
+            "moonshot",
+            "openai",
+            "openrouter",
+            "ollama",
+            "generic"
+          ],
+          "enumDescriptions": [
+            "根据 Base URL 主机名自动识别（推荐）",
+            "DeepSeek 官方 —— thinking.type + reasoning_effort",
+            "硅基流动 SiliconFlow —— enable_thinking",
+            "阿里云百炼 DashScope 兼容模式 —— enable_thinking",
+            "智谱 GLM —— thinking.type",
+            "月之暗面 Kimi —— 不发送思考参数",
+            "OpenAI 官方 —— reasoning_effort",
+            "OpenRouter 聚合 —— reasoning.effort",
+            "本地服务（Ollama / vLLM / LM Studio） —— 不发送思考参数",
+            "通用 OpenAI 兼容 —— 只发送标准字段，兼容任何实现"
+          ],
+          "description": "API 服务商预设。决定请求体中的思考/推理参数使用哪种写法（各厂商不通用，发错字段会返回 400）。auto 时按 vibe-coding.apiBaseUrl 的主机名自动识别。单个模型可在 vibe-coding.models 里用 provider 字段单独覆写。",
+          "scope": "application"
+        },
+        "vibe-coding.thinkingMode": {
+          "type": "string",
+          "default": "auto",
+          "enum": [
+            "auto",
+            "thinking_type",
+            "enable_thinking",
+            "reasoning_effort",
+            "reasoning",
+            "none"
+          ],
+          "enumDescriptions": [
+            "跟随当前服务商预设（推荐）",
+            "thinking: { type: 'enabled' | 'disabled' }（DeepSeek / 智谱 GLM）",
+            "enable_thinking: true（硅基流动 / 阿里云百炼，Qwen3、GLM、DeepSeek-V3.1 混合思考模型）",
+            "reasoning_effort: off/low/medium/high/max（OpenAI 推理模型）",
+            "reasoning: { effort }（OpenRouter）",
+            "不发送任何厂商专有思考参数（最兼容，未知字段一律不发）"
+          ],
+          "description": "思考参数方言覆写。思考强度设为 off 时：thinking_type 方言发送 thinking.type=disabled，其余方言一律不发送思考参数（可用作兼容任何服务的兜底手段）。",
+          "scope": "window"
+        },
         "vibe-coding.models": {
           "type": "array",
           "default": [],
-          "description": "List of model configurations for model switching. Each entry can override apiBaseUrl, apiKey, maxInteractions, and maxSequenceLength. Falls back to global vibe-coding.* settings when omitted.",
+          "description": "List of model configurations for model switching. Each entry can override apiBaseUrl, apiKey, provider, thinkingMode, maxInteractions, and maxSequenceLength. Falls back to global vibe-coding.* settings when omitted.",
           "items": {
             "type": "object",
             "properties": {
@@ -109,6 +161,34 @@
                 "type": "string",
                 "description": "Optional API key override for this model (falls back to vibe-coding.apiKey)"
               },
+              "provider": {
+                "type": "string",
+                "enum": [
+                  "auto",
+                  "deepseek",
+                  "siliconflow",
+                  "dashscope",
+                  "zhipu",
+                  "moonshot",
+                  "openai",
+                  "openrouter",
+                  "ollama",
+                  "generic"
+                ],
+                "description": "Optional API vendor preset for this model (falls back to vibe-coding.apiProvider). Lets one model list mix vendors, e.g. DeepSeek + 硅基流动."
+              },
+              "thinkingMode": {
+                "type": "string",
+                "enum": [
+                  "auto",
+                  "thinking_type",
+                  "enable_thinking",
+                  "reasoning_effort",
+                  "reasoning",
+                  "none"
+                ],
+                "description": "Optional reasoning-parameter dialect for this model (falls back to the provider preset). 'none' never sends vendor-specific reasoning fields."
+              },
               "maxInteractions": {
                 "type": "number",
                 "description": "Optional max tool call iterations override for this model (-1 = unlimited, falls back to vibe-coding.maxInteractions)"
@@ -116,8 +196,21 @@
               "maxSequenceLength": {
                 "type": "number",
                 "description": "Optional max context/sequence length override for this model in characters (falls back to vibe-coding.maxSequenceLength)"
+              },
+              "contextWindow": {
+                "type": "number",
+                "description": "该模型的上下文窗口（token，0/留空 = 回退全局 vibe-coding.contextWindow）。决定压缩阈值与自动压缩时机。"
+              },
+              "maxOutputTokens": {
+                "type": "number",
+                "description": "该模型的单次回复上限（token，0/留空 = 回退全局 vibe-coding.maxOutputTokens）。作为 max_tokens 下发。"
+              },
+              "thinkingBudget": {
+                "type": "number",
+                "description": "该模型的思维链预算（token，0/留空 = 回退全局 vibe-coding.thinkingBudget）。仅 enable_thinking 方言下发。"
               }
             },
+
             "required": [
               "name",
               "model"
@@ -153,6 +246,27 @@
           "type": "number",
           "default": 800000,
           "description": "Maximum length for generated text sequences",
+          "scope": "window"
+        },
+        "vibe-coding.contextWindow": {
+          "type": "number",
+          "default": 0,
+          "minimum": 0,
+          "description": "模型上下文窗口（token）。0 = 不启用精确控制（沿用内置 1M 压缩阈值）。设为该模型真实窗口（如 Qwen3 131072、32K 模型 32768）后：压缩阈值 = 窗口 − 输出预留 − 思维链预留，且上游报「上下文超限」时会自动压缩并重试一次。可在模型列表中按模型覆写。",
+          "scope": "window"
+        },
+        "vibe-coding.maxOutputTokens": {
+          "type": "number",
+          "default": 0,
+          "minimum": 0,
+          "description": "单次回复输出上限（token），作为请求体 max_tokens 下发。0 = 不发送（交给服务端默认）。硅基流动官方建议不要把 max_tokens 顶到窗口上限，需为输入预留约 10k。",
+          "scope": "window"
+        },
+        "vibe-coding.thinkingBudget": {
+          "type": "number",
+          "default": 0,
+          "minimum": 0,
+          "description": "思维链（CoT）预算，仅 enable_thinking 方言（硅基流动 / 阿里云百炼）下发 thinking_budget，平台取值 128–32768。0 = 不发送。",
           "scope": "window"
         },
         "vibe-coding.language": {

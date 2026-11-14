@@ -9,7 +9,8 @@ import { ConfigService } from './ConfigService';
 import { gitRollbackTool, listGitSnapshotsTool, setGlobalSkillsDir, ensureGlobalSkillSeeds, activateTerminalTracking, listToolProfiles, getCurrentToolProfile, applyToolProfile, killActiveShellProcesses, DEFAULT_TOOL_PROFILE } from '../tools';
 import { OperationController } from '../operationController';
 import { getChatViewHtml } from './chatViewHtml';
-import { AUTO_COMPACT_TOKEN_THRESHOLD } from '../constants';
+import { AUTO_COMPACT_TOKEN_THRESHOLD, COMPACT_RESERVE_TOKENS } from '../constants';
+import { contextBudgetForConfig } from '../providers';
 
 export class ChatViewProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = 'vibeCodingChat';
@@ -389,11 +390,16 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
   /** Send the current conversation's last known context length (per-session token usage) to the webview footer. */
   private _postSessionTokenContext(): void {
+    const budget = contextBudgetForConfig(this._uiManager.getApiConfig(), {
+      compactThreshold: AUTO_COMPACT_TOKEN_THRESHOLD,
+      reserveTokens: COMPACT_RESERVE_TOKENS,
+    });
     this._uiManager.post({
       type: 'tokenUsage',
       usage: null,
       contextTokens: this._sessionManager.getCurrentSessionTokenContext(),
-      compactThreshold: AUTO_COMPACT_TOKEN_THRESHOLD,
+      compactThreshold: budget.compactThreshold,
+      contextWindow: budget.contextWindow || undefined,
     });
   }
 

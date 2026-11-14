@@ -2,9 +2,9 @@
 
 # OpenVibe — 极简 AI 编程助手 / Minimalist AI Assistant
 
-**在 VS Code 工作区内直接读写与编辑项目的智能助手。** 基于 **read**、**find**、**edit** 三类核心工具，并配合任务规划、多智能体审查与会话管理。当前版本 **v0.10.0**：纯 JSON 工具参数、可视化设置中心、工具模式（Tool Profiles）、多模型切换、思考强度与历史压缩（见[版本历史](#changelog)）。
+**在 VS Code 工作区内直接读写与编辑项目的智能助手。** 基于 **read**、**find**、**edit** 三类核心工具，并配合任务规划、多智能体审查与会话管理。当前版本 **v0.11.0**：任意 OpenAI 兼容端点（含硅基流动）、token 级上下文长度控制、纯 JSON 工具参数、可视化设置中心、工具模式（Tool Profiles）、多模型切换与思考强度（见[版本历史](#changelog)）。
 
-> **An intelligent assistant that reads and edits your project inside the VS Code workspace.** Built around **read**, **find**, and **edit**, with task planning, multi-agent review, and session management. Current version **v0.10.0** (see [changelog](#changelog)).
+> **An intelligent assistant that reads and edits your project inside the VS Code workspace.** Built around **read**, **find**, and **edit**, with task planning, multi-agent review, and session management. Current version **v0.11.0** — any OpenAI-compatible endpoint (incl. SiliconFlow), token-level context-length control (see [changelog](#changelog)).
 
 <h2 id="table-of-contents">目录 / Table of contents</h2>
 
@@ -33,6 +33,12 @@
 > Smart editing works, but **this is not recommended as a production‑only workflow**; the experience is experimental and exploratory—hence the name. Early development used the DeepSeek API for roughly 30 RMB.
 
 <h2 id="changelog">版本历史 / Changelog</h2>
+
+> **2026-11-14 · v0.11.0 · 上下文长度控制 + 硅基流动适配**：1) **上下文窗口（`contextWindow`）**——按模型真实窗口（token）计算历史压缩阈值 `窗口 − 输出预留 − 思维链预留`，并让压缩保留窗口随窗口缩放；未配置时沿用旧的 1M 阈值，DeepSeek 用户行为不变。2) **输出与 CoT 预算**——`maxOutputTokens` 作为 `max_tokens` 下发，`thinkingBudget` 作为硅基流动的 `thinking_budget`（128–32768）下发。3) **超限自愈**——OpenAI / 硅基流动 `code 20015 / max_seq_len` / vLLM / DashScope 等「上下文超限」措辞统一识别为 `ContextOverflowError`，自动压缩一次后重试。4) **参数兼容降级**——上游 400 点名不支持某字段（如硅基流动部分模型不支持 `enable_thinking`）时，自动剔除该字段重试并按「端点+模型」记忆，之后不再发送。5) **Base URL 归一化**——末尾 `/`、粘贴完整 `/chat/completions`、漏写协议头（本地地址自动用 http）都能正确拼接；`off` 档在 `enable_thinking` 方言下改为显式下发 `enable_thinking: false`（此前不发等于关不掉 Qwen3 等混合思考模型的思考）。
+
+> **2026-09-30 · 多服务商 API 支持（硅基流动等）**：新增 **服务商预设（provider）** 与 **思考方言（thinkingMode）** 机制，可直连**任意 OpenAI 兼容端点** —— 硅基流动 SiliconFlow、阿里云百炼、智谱 GLM、月之暗面 Kimi、OpenAI、OpenRouter、本地 Ollama/vLLM/LM Studio。此前 `src/api.ts` 会无条件下发 DeepSeek 专有的 `thinking` / `reasoning_effort` 字段，非 DeepSeek 厂商会因此返回 **400 未知参数**；现在请求体按方言组装（`thinking.type` / `enable_thinking` / `reasoning_effort` / `reasoning.effort` / 不发送）。`apiProvider` 默认 `auto`，按 Base URL 主机名自动识别，**DeepSeek 用户行为完全不变**；模型条目可逐项覆写 `provider` / `thinkingMode`，从而在同一模型列表混用多家厂商。响应侧同时兼容 `reasoning_content` 与 `reasoning`；遇到未知参数错误时会在报错中提示当前服务商与方言及三种解决办法。
+
+> **2026-09-08 · 模式级自定义系统提示词（systemPrompt）**：设置中心「🧭 模式与插件」中每个模式新增可编辑的 **自定义系统提示词** 字段——留空 = 使用默认提示词；非空 = 激活该模式时**完全替换**默认"编码助手"身份与规则（工具 schema、语言指令与运行环境段仍自动保留/追加，工具照常可用）。提供一键"载入示例：40k 2K 型机仆虚拟模拟器"人设（全文开头含二进制赞歌），聊天底部栏模式选择器以 ✍️ 标记已启用自定义提示词的模式。profile JSON 新增可选 `systemPrompt` 字段（`~/.openvibe/tool-profiles/*.json`）。
 
 > **2026-08-22 · v0.10.0**：**废弃 `<edit-content>` XML fallback**——工具参数回归纯 JSON 字符串，多行内容直接写入 `newContent` / `command`，由 JSON 转义处理，不再需要 XML 标签提取/注入。消除了「空 `newContent` 静默删除」风险、并行工具调用标签错位以及历史消息中 `tool_calls` 参数与执行结果不一致的问题；工具参数 JSON 解析失败时返回错误要求模型重试，绝不带空参数执行。自 v0.8.0（2026-06-06）以来累计 0.8.1 ~ 0.9.1 五个小版本。
 
@@ -475,7 +481,7 @@ load_skill(name="paper-revision-router")
 在 VS Code **设置**中搜索 `vibe-coding` 即可。下列键名与 `package.json` 中 `contributes.configuration` 一致。
 
 > **配置分层 / Config layering**
-> - **用户级（`application` scope）**：`apiBaseUrl`、`apiKey`、`model`、`models`、`language`、`confirmChanges`、`confirmShellCommand`、`editReview.enabled`、`todolistReview.enabled`、`shellCommandReview.enabled` —— 只能写在 **User Settings**，不会被工作区 `.vscode/settings.json` 覆盖（API Key 等敏感项无法被仓库静默改写）。
+> - **用户级（`application` scope）**：`apiBaseUrl`、`apiKey`、`model`、`apiProvider`、`models`、`language`、`confirmChanges`、`confirmShellCommand`、`editReview.enabled`、`todolistReview.enabled`、`shellCommandReview.enabled` —— 只能写在 **User Settings**，不会被工作区 `.vscode/settings.json` 覆盖（API Key 等敏感项无法被仓库静默改写）。
 > - **工作区级（`window` scope）**：`toolProfile`、`reasoningEffort`、`maxInteractions`、`maxSequenceLength`、`memorySync.enabled` 及各 review 的 `timeoutMs` / `maxAttempts` —— 允许项目在 Workspace Settings 中按需覆盖。
 > - **API Key 存储**：`vibe-coding.apiKey` 已不再推荐长期明文保存。扩展优先从 **SecretStorage**（VS Code 安全存储）读取 `openvibe.apiKey`；老配置中的 `vibe-coding.apiKey` 会在激活时自动迁移到 SecretStorage（**不自动清除明文**）。可执行命令 **`OpenVibe: 迁移 API Key 到 SecretStorage`** 手动迁移并选择是否清除 Settings 中的明文。
 > - **工作区数据**：`.OpenVibe/` 目录（会话、记忆）属于**工作区本地数据**，请勿提交敏感信息；建议加入 `.gitignore`。
@@ -486,13 +492,18 @@ load_skill(name="paper-revision-router")
 | `vibe-coding.apiBaseUrl` | `string` | `https://api.deepseek.com` | OpenAI 兼容 API 的 Base URL |
 | `vibe-coding.apiKey` | `string` | `""` | API 密钥（**必填**，用户级）。**推荐**改用 SecretStorage：设置后台的 API Key 输入框或迁移命令会写入 SecretStorage，不再明文落盘 |
 | `vibe-coding.model` | `string` | `deepseek-reasoner` | 模型名 |
-| `vibe-coding.models` | `array` | `[]` | 多模型列表（底部栏模型选择器）。每项含 `name`（显示名）+ `model`（模型名），可覆写 `apiBaseUrl` / `apiKey` / `maxInteractions` / `maxSequenceLength`；未配置时回退全局设置 |
+| `vibe-coding.apiProvider` | `string` | `auto` | **API 服务商预设**（`auto` / `deepseek` / `siliconflow` / `dashscope` / `zhipu` / `moonshot` / `openai` / `openrouter` / `ollama` / `generic`）。决定请求体里思考/推理参数的写法；`auto` 按 Base URL 主机名自动识别。详见下方[多服务商支持](#multi-provider) |
+| `vibe-coding.thinkingMode` | `string` | `auto` | **思考参数方言覆写**（`auto` / `thinking_type` / `enable_thinking` / `reasoning_effort` / `reasoning` / `none`）。默认跟随服务商预设；`none` 表示绝不发送厂商专有参数 —— 兼容任何 OpenAI 兼容服务的兜底开关 |
+| `vibe-coding.models` | `array` | `[]` | 多模型列表（底部栏模型选择器）。每项含 `name`（显示名）+ `model`（模型名），可覆写 `apiBaseUrl` / `apiKey` / `provider` / `thinkingMode` / `contextWindow` / `maxOutputTokens` / `thinkingBudget` / `maxInteractions` / `maxSequenceLength`；未配置时回退全局设置 —— 因此可在同一列表混用不同厂商 |
 | `vibe-coding.toolProfile` | `string` | `full` | 当前工具模式（tool profile，如 `full` 标准 / `写作` 故事）；profile 文件位于 `~/.openvibe/tool-profiles/`，被隐藏的工具不会发给 LLM 且在执行层被拒绝。会话级选择优先于该全局默认 |
-| `vibe-coding.reasoningEffort` | `string` | `high` | 思考强度：`off` 关闭思考（DeepSeek `thinking: disabled`）/ `low` / `medium` / `high` / `max`（`thinking: enabled` + 对应 `reasoning_effort`） |
+| `vibe-coding.reasoningEffort` | `string` | `high` | 思考强度：`off` / `low` / `medium` / `high` / `max`。**按服务商方言下发**：DeepSeek/智谱 → `thinking.type`（+ DeepSeek 的 `reasoning_effort`）；硅基流动/百炼 → `enable_thinking`；OpenAI → `reasoning_effort`；OpenRouter → `reasoning.effort`；其余厂商不发送任何思考参数 |
 | `vibe-coding.confirmChanges` | `boolean` | `true` | 应用 `edit` 前是否确认 |
 | `vibe-coding.confirmShellCommand` | `boolean` | `true` | `run_shell_command` 在审查后是否再经人工确认（与 `confirmChanges` 独立） |
 | `vibe-coding.maxInteractions` | `number` | `-1` | 最大工具调用轮数（`-1` 不限） |
-| `vibe-coding.maxSequenceLength` | `number` | `800000` | 生成文本最大长度 |
+| `vibe-coding.maxSequenceLength` | `number` | `800000` | **（旧版，已不参与上下文控制）** 字符上限 |
+| `vibe-coding.contextWindow` | `number` | `0` | **模型上下文窗口（token）**。0 = 不启用（沿用内置 1M 压缩阈值）。设为真实值（如 Qwen3 `131072`、32K 模型 `32768`）后：压缩阈值 = `窗口 − 输出预留 − CoT 预留`，保留窗口缩到窗口的 1/4（≤20k），上游报上下文超限时自动压缩重试。详见[上下文长度控制](#context-control) |
+| `vibe-coding.maxOutputTokens` | `number` | `0` | 单次回复输出上限（token），作为 `max_tokens` 下发；0 = 不发送（服务端默认）。硅基流动建议 4096–8192，为输入预留约 10k |
+| `vibe-coding.thinkingBudget` | `number` | `0` | 思维链预算，仅 `enable_thinking` 方言（硅基流动 / 百炼）下发 `thinking_budget`（平台限制 128–32768）；0 = 不发送 |
 | `vibe-coding.language` | `string` | `zh-CN` | AI 交互语言（`auto` 自动检测 VS Code UI 语言 / `en` 英文 / `zh-CN` 简体中文） |
 | `vibe-coding.todolistReview.enabled` | `boolean` | `true` | 是否对 todo 生成/编辑做独立审查 |
 | `vibe-coding.todolistReview.maxAttempts` | `number` | `5` | 单次 `create_todo_list` 最大审查/重试轮数（≥1） |
@@ -517,8 +528,10 @@ load_skill(name="paper-revision-router")
   // 老用户若已在 settings 中配置明文 apiKey，扩展会在激活时自动迁移（不清除明文）。
   "vibe-coding.apiBaseUrl": "https://api.deepseek.com",
   "vibe-coding.model": "deepseek-reasoner",
+  "vibe-coding.apiProvider": "auto",       // 服务商预设（auto = 按 Base URL 识别）
+  "vibe-coding.thinkingMode": "auto",      // 思考方言（auto = 跟随服务商预设）
 
-  // ── 多模型切换（可选）─────────────────────────────────────────
+  // ── 多模型切换（可选；可混用不同厂商）─────────────────────────
   "vibe-coding.models": [
     {
       "name": "DeepSeek R1",
@@ -531,10 +544,21 @@ load_skill(name="paper-revision-router")
       "apiKey": "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"   // ← 可覆写 Key
     },
     {
-      "name": "Claude 3.5 Sonnet",
-      "model": "claude-3-5-sonnet-latest",
-      "apiBaseUrl": "https://api.anthropic.com",
-      "apiKey": "sk-ant-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      // 硅基流动：provider 省略也行（auto 会按主机名识别为 siliconflow）
+      "name": "硅基流动 · DeepSeek-V3.1",
+      "model": "deepseek-ai/DeepSeek-V3.1",
+      "apiBaseUrl": "https://api.siliconflow.cn/v1",
+      "apiKey": "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "provider": "siliconflow"
+    },
+    {
+      // 不支持 enable_thinking 的模型：把方言设为 none 即可完全兼容
+      "name": "硅基流动 · Qwen2.5 7B",
+      "model": "Qwen/Qwen2.5-7B-Instruct",
+      "apiBaseUrl": "https://api.siliconflow.cn/v1",
+      "apiKey": "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "provider": "siliconflow",
+      "thinkingMode": "none"
     }
   ],
 
@@ -552,6 +576,74 @@ load_skill(name="paper-revision-router")
 }
 ```
 > All keys are under **`vibe-coding.*`** in Settings.
+
+<h3 id="multi-provider">多服务商支持 / Multi-vendor APIs</h3>
+
+OpenVibe 可以与**任何 OpenAI 兼容的 `/chat/completions` 端点**通信，包括 **硅基流动 SiliconFlow**、阿里云百炼、智谱 GLM、月之暗面 Kimi、OpenAI、OpenRouter，以及本地 **Ollama / vLLM / LM Studio**。
+
+**为什么需要「服务商预设」**：各厂商对「思考 / 推理模式」的写法并不通用 ——
+
+| 请求字段 | 使用它的服务商 |
+|----------|----------------|
+| `thinking: { type: 'enabled' \| 'disabled' }` | DeepSeek 官方、智谱 GLM |
+| `enable_thinking: true` | 硅基流动、阿里云百炼（Qwen3 / GLM / DeepSeek-V3.1 等混合思考模型） |
+| `reasoning_effort: <档位>` | OpenAI 推理模型（o 系列 / GPT-5）；DeepSeek 亦接受 |
+| `reasoning: { effort }` | OpenRouter |
+| *（不发送任何上述字段）* | 其余全部厂商 |
+
+很多 OpenAI 兼容服务对**未知字段直接返回 400**，因此 OpenVibe 会按当前服务商的「方言」只发送它认可的字段。
+
+**三种配置方式（任选其一）**
+
+1. **什么都不做** —— `vibe-coding.apiProvider` 默认为 `auto`，会按 Base URL 主机名自动识别（`api.siliconflow.cn` → `siliconflow`，`open.bigmodel.cn` → `zhipu`，`localhost` → 本地服务……）。只要把 `apiBaseUrl` 指向目标厂商即可。
+2. **显式指定预设** —— 设置中心「🔌 API 连接 → 🧩 服务商预设」，或 `vibe-coding.apiProvider`。
+3. **逐模型覆写** —— `vibe-coding.models[].provider` / `.thinkingMode`，让同一个模型列表混用多家厂商。设置中心模型卡片里选「服务商预设」时会**自动填入该厂商的默认 Base URL**（不覆盖你已填写的地址）。
+
+**思考强度如何生效**
+
+`vibe-coding.reasoningEffort`（`off` / `low` / `medium` / `high` / `max`）会翻译成当前方言的写法：
+
+- `off` 在 `thinking_type` 方言下发送 `thinking: { type: 'disabled' }` + `temperature: 0`；
+- `off` 在**其他所有方言**下**完全不发送**思考相关字段 —— 这同时也是「服务商报未知参数」的通用解决方案；
+- `low` / `medium` / `high` / `max` 仅在服务商支持档位时作为 effort 值下发（OpenAI、OpenRouter、DeepSeek）。
+
+**遇到 400 报错怎么办**
+
+若返回信息形如 *unknown / unrecognized / unsupported parameter*，错误消息末尾会附带提示，指明**当前识别到的服务商与方言**。按提示三选一即可：切换服务商预设 → 把该模型的「思考方言」设为 `none` → 把思考强度设为「关闭」。
+
+**硅基流动（SiliconFlow）要点**
+
+- `enable_thinking` **只被部分模型接受**；发给不支持的模型会返回 `400 / code 20015 / current model does not support parameter 'enable_thinking'`。OpenVibe 遇到这类报错会自动剔除被点名的字段（连带 `thinking_budget`）重试，成功后在本次会话内记住该模型，后续请求直接跳过 —— 因此「思考强度 = 开启」对所有模型都是安全的；
+- `max_tokens` 只限制**最终回复**（不含思维链），`thinking_budget` 单独限制思维链长度，两者相加再加 prompt 不能超过模型窗口 → 建议三个设置都填；
+- 思考强度 `off` 会显式下发 `enable_thinking: false`：Qwen3 / GLM / DeepSeek-V3.1 这类混合思考模型**默认就是开**，不发这个字段等于关不掉；
+- 平台建议 `max_tokens` 不要顶到窗口上限，为输入预留约 10k。
+
+> ⚠️ 提示：`vibe-coding.models[].apiKey` 会以**明文**写入 `settings.json`。多厂商场景更推荐统一由 SecretStorage 提供主 Key，或仅在必要时覆写。
+
+<h3 id="context-control">上下文长度控制 / Context length</h3>
+
+模型报 400「上下文超限」通常不是密钥问题，而是 `prompt + 回复` 超过了该模型窗口。OpenVibe 用三个 token 级设置把它变成可控项：
+
+| 设置 | 作用 | 典型值 |
+|------|------|--------|
+| `contextWindow` | 该模型的真实窗口，决定何时压缩历史 | Qwen3-8B `131072`、32K 模型 `32768` |
+| `maxOutputTokens` | 单次回复上限（下发 `max_tokens`） | `4096` ~ `8192` |
+| `thinkingBudget` | 思维链预算（下发 `thinking_budget`，仅硅基流动 / 百炼） | `4096` ~ `16384` |
+
+**换算规则**（`src/providers.ts → computeContextBudget`）：
+
+- 压缩阈值 = `contextWindow − maxOutputTokens − thinkingBudget`，且不低于窗口的 50%；
+- `maxOutputTokens` 为 0 时按 `8192` 预留输出空间；
+- 压缩时原样保留的最近历史 = `min(20k, 窗口/4)`（32K 窗口 → 8k）；
+- `contextWindow` 为 0 → **完全沿用旧行为**（1M 阈值 / 20k 保留窗口），现有 DeepSeek 配置不受影响。
+
+**超限自愈**：上游返回的上下文超限（OpenAI `maximum context length`、硅基流动 `code 20015 / must be less than max_seq_len`、vLLM `max_total_tokens`、DashScope `Range of input length` 等措辞）会被统一识别为 `ContextOverflowError`，主循环**先压缩一次历史再重试**；只有压缩后仍然超限才把错误抛给用户。
+
+**Base URL 归一化**：末尾多写 `/`、直接粘贴完整 `/chat/completions`、漏写协议头都能正确拼接；`localhost` / `127.x` / 内网段自动使用 `http://`（Ollama、one-api、vLLM 常见）。
+
+> ⚠️ 不知道模型窗口时，去服务商控制台的模型详情页查 `context_length`。**不要填得比真实值大**，否则压缩永远不会触发，问题会推迟到某次长回复才炸。
+
+
 
 <h2 id="memory-management-system">内存管理 / Memory</h2>
 
@@ -615,8 +707,9 @@ load_skill(name="paper-revision-router")
 | `src/tools/toolProfiles.ts` | 工具模式（Tool Profiles）：跨工作区工具可见性配置、内置模式 seed、profile 增删改查 |
 | `src/modules/settingsDashboard.ts` + `settingsDashboardHtml.ts` | 可视化设置中心（Webview 面板：设置白名单编辑、工具模式插件矩阵、覆盖检测） |
 | `src/tools/helpers.ts` | 全局技能池变量 + 激活回调设置 |
-| `src/api.ts` | API 调用封装（`sendChatMessage`） |
-| `src/types.ts` | `ChatMessage`、`ToolCall`、`ChatSession` 等类型定义（含 `btwBranch` 字段） |
+| `src/api.ts` | API 调用封装（`sendChatMessage`，按服务商方言组装请求体、兼容多厂商思维链字段） |
+| `src/providers.ts` | **服务商预设与思考方言**：10 种服务商预设、Base URL 主机名自动识别与归一化、`planThinking` / `thinkingPayload` / `extractReasoningContent` / `computeContextBudget` / 超限识别纯函数（无 vscode 依赖） |
+| `src/types.ts` | `ChatMessage`、`ToolCall`、`ChatSession` 等类型定义（含 `btwBranch` 字段；`ModelConfig.provider` / `.thinkingMode`） |
 | `src/constants.ts` | 配置常量（`COMPACT_RESERVE_TOKENS`、`AUTO_COMPACT_TOKEN_THRESHOLD`） |
 | `src/toolDefinitions.ts` | 工具的 JSON Schema 定义 |
 | `src/mmOutput.ts` | ~~XML 标签提取与占位符替换~~（2026-08-22 已废弃，仅剩说明注释，可手动删除） |

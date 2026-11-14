@@ -3,11 +3,11 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { ChatMessage, ApiConfig } from '../types';
 import { getActiveEditorInfo, getStaticHostEnvironmentBlock, buildLanguageInstruction, getDateInfo } from '../agentRuntimeContext';
-import { SYSTEM_PROMPT } from '../systemPrompt';
-import { getVisibleToolDefinitions } from '../tools/toolProfiles';
-import { sendChatMessage } from '../api';
+import { getEffectiveSystemPrompt, getVisibleToolDefinitions } from '../tools/toolProfiles';
+import { sendChatMessage, ContextOverflowError, hasDroppedParameters } from '../api';
+import { contextBudgetForConfig } from '../providers';
 import { gitSnapshotTool } from '../tools';
-import { AUTO_COMPACT_TOKEN_THRESHOLD } from '../constants';
+import { AUTO_COMPACT_TOKEN_THRESHOLD, COMPACT_RESERVE_TOKENS } from '../constants';
 import type { OperationController } from '../operationController';
 
 export class MessageHandler {
@@ -16,6 +16,25 @@ export class MessageHandler {
   private _originSessionId: string | null = null;
   /** Cumulative token usage across all LLM calls in this session. */
   private _accumulatedUsage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
+  /** 已提示过「该模型不支持部分思考参数」的端点+模型，避免每次请求都刷屏。 */
+  private _paramWarnings = new Set<string>();
+
+  /**
+   * 上游拒收思考参数时（如硅基流动部分模型不支持 enable_thinking），api.ts 会
+   * 自动剔除并重试。这里只提示一次，让用户知道「思考没生效」不是 bug。
+   */
+  private _notifyDroppedParamsOnce(apiConfig: ApiConfig): void {
+    if (!hasDroppedParameters(apiConfig)) return;
+    const key = `${apiConfig.baseUrl}|${apiConfig.model}`;
+    if (this._paramWarnings.has(key)) return;
+    this._paramWarnings.add(key);
+    this._context.post({
+      type: 'info',
+      message:
+        `当前模型（${apiConfig.model}）不支持部分思考参数，已自动跳过 ` +
+        '（思考开关 / 思维链预算等）。如需完整思考能力，请换用支持该参数的模型。',
+    });
+  }
 
 
 
@@ -224,6 +243,8 @@ export class MessageHandler {
     this._context.setBlockedTools?.(blockedTools);
 
     const apiConfig = this._context.getApiConfig();
+    /** 本次 phase 内是否已经因上下文超限压缩过一次（防止无限重试）。 */
+    let overflowRecovered = false;
     while (!this._context.operation.isStopped()) {
 
       if (this._context.operation.isStopped()) {
@@ -232,9 +253,26 @@ export class MessageHandler {
       }
 
       const langInstr = buildLanguageInstruction(apiConfig.language);
-      const allMessages = this._context.buildMessagesForLlm(SYSTEM_PROMPT + langInstr + '\n\n' + getStaticHostEnvironmentBlock());
+      const allMessages = this._context.buildMessagesForLlm(getEffectiveSystemPrompt() + langInstr + '\n\n' + getStaticHostEnvironmentBlock());
 
-      const response = await sendChatMessage(allMessages, apiConfig, getVisibleToolDefinitions(), this._context.operation.signal());
+      let response;
+      try {
+        response = await sendChatMessage(allMessages, apiConfig, getVisibleToolDefinitions(), this._context.operation.signal());
+      } catch (error: any) {
+        // ── 上下文超限：压缩一次历史后重试，而不是把 400 直接抛给用户 ──
+        if (error instanceof ContextOverflowError || error?.name === 'ContextOverflowError') {
+          if (overflowRecovered) throw error;
+          overflowRecovered = true;
+          this._context.post({ type: 'info', message: '上下文超出模型上限，正在压缩历史后重试…' });
+          const compactResult = await this._context.compactHistory(true).catch((e: any) => `Compact failed: ${e?.message ?? e}`);
+          this._context.post({ type: 'info', message: compactResult });
+          continue;
+        }
+        throw error;
+      }
+      overflowRecovered = false;
+      this._notifyDroppedParamsOnce(apiConfig);
+
       const hasPendingToolCalls = !!(response.toolCalls && response.toolCalls.length > 0);
       this._accumulateAndSendUsage(response.tokenUsage, hasPendingToolCalls);
 
@@ -572,11 +610,19 @@ export class MessageHandler {
     this._accumulatedUsage.prompt_tokens += usage.prompt_tokens;
     this._accumulatedUsage.completion_tokens += usage.completion_tokens;
     this._accumulatedUsage.total_tokens += usage.total_tokens;
+
+    // 压缩阈值随模型上下文窗口缩放：window − 输出预留 − CoT 预留。
+    // 未配置 contextWindow 时仍是旧的内置 1M 阈值（行为不变）。
+    const budget = contextBudgetForConfig(this._context.getApiConfig(), {
+      compactThreshold: AUTO_COMPACT_TOKEN_THRESHOLD,
+      reserveTokens: COMPACT_RESERVE_TOKENS,
+    });
+
     this._context.post({
       type: 'tokenUsage',
       usage,
       accumulated: { ...this._accumulatedUsage },
-      compactThreshold: AUTO_COMPACT_TOKEN_THRESHOLD,
+      compactThreshold: budget.compactThreshold,
     });
 
     // Per-session token usage: remember this conversation's current context length.
@@ -598,7 +644,7 @@ export class MessageHandler {
     if (
       this._currentTag === 'free' &&
       !hasPendingToolCalls &&
-      usage.total_tokens >= AUTO_COMPACT_TOKEN_THRESHOLD
+      usage.total_tokens >= budget.compactThreshold
     ) {
       this._context.compactHistory(true).catch(() => {});
     }

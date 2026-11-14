@@ -23,7 +23,11 @@ import {
   applyToolProfile,
   getCurrentToolProfile,
   DEFAULT_TOOL_PROFILE,
+  SAMPLE_40K_SYSTEM_PROMPT,
 } from '../tools';
+import { PROVIDER_PRESETS, THINKING_DIALECTS, THINKING_DIALECT_LABELS } from '../providers';
+
+
 
 
 export const SETTINGS_VIEW_TYPE = 'openvibeSettings';
@@ -35,12 +39,17 @@ const SETTING_SPECS: Record<string, SettingKind> = {
   apiBaseUrl: 'string',
   apiKey: 'string',
   model: 'string',
+  apiProvider: 'string',
+  thinkingMode: 'string',
   models: 'json',
   toolProfile: 'string',
   confirmChanges: 'boolean',
   confirmShellCommand: 'boolean',
   maxInteractions: 'number',
   maxSequenceLength: 'number',
+  contextWindow: 'number',
+  maxOutputTokens: 'number',
+  thinkingBudget: 'number',
   language: 'string',
   reasoningEffort: 'string',
   'todolistReview.enabled': 'boolean',
@@ -62,12 +71,17 @@ const SETTING_DEFAULTS: Record<string, unknown> = {
   apiBaseUrl: CONFIG_DEFAULTS.apiBaseUrl,
   apiKey: CONFIG_DEFAULTS.apiKey,
   model: CONFIG_DEFAULTS.model,
+  apiProvider: CONFIG_DEFAULTS.apiProvider,
+  thinkingMode: CONFIG_DEFAULTS.thinkingMode,
   models: CONFIG_DEFAULTS.models,
   toolProfile: CONFIG_DEFAULTS.toolProfile,
   confirmChanges: CONFIG_DEFAULTS.confirmChanges,
   confirmShellCommand: CONFIG_DEFAULTS.confirmShellCommand,
   maxInteractions: CONFIG_DEFAULTS.maxInteractions,
   maxSequenceLength: CONFIG_DEFAULTS.maxSequenceLength,
+  contextWindow: CONFIG_DEFAULTS.contextWindow,
+  maxOutputTokens: CONFIG_DEFAULTS.maxOutputTokens,
+  thinkingBudget: CONFIG_DEFAULTS.thinkingBudget,
   language: CONFIG_DEFAULTS.language,
   reasoningEffort: CONFIG_DEFAULTS.reasoningEffort,
   'todolistReview.enabled': CONFIG_DEFAULTS.todolistReviewEnabled,
@@ -150,6 +164,20 @@ function buildState(): Record<string, unknown> {
     })),
     profilesDir: getProfilesDir(),
     currentProfile: getCurrentToolProfile(),
+    sampleSystemPrompt: SAMPLE_40K_SYSTEM_PROMPT,
+    /**
+     * Provider preset catalog + dialect ids, so the webview can render the
+     * vendor dropdowns (and prefill Base URLs) without duplicating the list.
+     */
+    providers: PROVIDER_PRESETS.map((p) => ({
+      id: p.id,
+      label: p.label,
+      baseUrl: p.baseUrl,
+      thinking: p.thinking,
+      note: p.note ?? '',
+      supportsEffortLevels: p.supportsEffortLevels,
+    })),
+    thinkingDialects: THINKING_DIALECTS.map((id) => ({ id, label: THINKING_DIALECT_LABELS[id] })),
     version: '1.0',
   };
 }
@@ -280,6 +308,7 @@ export function openSettingsDashboard(context: vscode.ExtensionContext, config: 
           description: typeof msg.description === 'string' ? msg.description : '',
           hiddenTools: Array.isArray(msg.hiddenTools) ? msg.hiddenTools.map((t: unknown) => String(t)) : [],
           disableReview: !!msg.disableReview,
+          systemPrompt: typeof msg.systemPrompt === 'string' ? msg.systemPrompt : undefined,
         });
         if (res.ok) {
           // Reload the active filter so in-flight sessions see the change.

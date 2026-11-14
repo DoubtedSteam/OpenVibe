@@ -4,7 +4,8 @@ import { SYSTEM_PROMPT } from '../systemPrompt';
 import { TOOL_DEFINITIONS } from '../toolDefinitions';
 import { sendChatMessage } from '../api';
 import { SessionManager } from './SessionManager';
-import { COMPACT_RESERVE_TOKENS } from '../constants';
+import { COMPACT_RESERVE_TOKENS, AUTO_COMPACT_TOKEN_THRESHOLD } from '../constants';
+import { contextBudgetForConfig } from '../providers';
 import { replaySessionToWebview } from './webviewReplay';
 import { sanitizeMessageList } from './messageSanitizer';
 import { compactHistoryFn, findReserveWindowStart, adjustReserveBoundary } from './historyCompactor';
@@ -293,7 +294,15 @@ export class ConversationService {
    * Returns 0 when no compaction is needed (all messages fit within the reserve window).
    */
   private _findReserveWindowStart(messages: ChatMessage[]): number {
-    return findReserveWindowStart(messages, this._usageSnapshots);
+    return findReserveWindowStart(messages, this._usageSnapshots, this._contextBudget().reserveTokens);
+  }
+
+  /** 当前模型的上下文预算（保留窗口随 contextWindow 缩放）。 */
+  private _contextBudget() {
+    return contextBudgetForConfig(this._getApiConfig(), {
+      compactThreshold: AUTO_COMPACT_TOKEN_THRESHOLD,
+      reserveTokens: COMPACT_RESERVE_TOKENS,
+    });
   }
 
   /**
@@ -326,6 +335,7 @@ export class ConversationService {
         getApiConfig: () => this._getApiConfig(),
         getUsageSnapshots: () => this._usageSnapshots,
         resetUsageSnapshots: () => this.resetUsageSnapshots(),
+        getReserveTokens: () => this._contextBudget().reserveTokens,
       },
       triggeredByTokenLimit,
     );

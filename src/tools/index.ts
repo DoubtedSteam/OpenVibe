@@ -5,6 +5,7 @@
 // Helpers (skills, global dir)
 export { setGlobalSkillsDir, ensureGlobalSkillSeeds } from './helpers';
 // Tool profiles (cross-workspace visibility config)
+// Tool profiles (cross-workspace visibility config)
 export {
   initToolProfilesDir,
   applyToolProfile,
@@ -19,6 +20,9 @@ export {
   deleteToolProfile,
   isReviewDisabled,
   DEFAULT_TOOL_PROFILE,
+  getActiveSystemPromptOverride,
+  getEffectiveSystemPrompt,
+  SAMPLE_40K_SYSTEM_PROMPT,
 } from './toolProfiles';
 export type { ToolProfileInfo, ToolProfileDetail, SaveProfileResult } from './toolProfiles';
 
