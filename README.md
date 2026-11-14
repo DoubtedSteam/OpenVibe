@@ -474,7 +474,17 @@ load_skill(name="paper-revision-router")
 3. 编译：`npm run compile`（开发时可用 `npm run watch` 监听）
 4. 在 VS Code 中打开该文件夹，按 **F5** 启动 **Extension Development Host** 调试扩展；在侧栏打开 **Vibe Coding** 视图使用聊天。
 
-> **Requirements:** Node.js (LTS recommended), VS Code **≥ 1.74**. Clone → `npm install` → `npm run compile` → open in VS Code → **F5** to run the extension host → use the **Vibe Coding** sidebar chat.
+**从 vsix 安装（无需编译）**
+
+```powershell
+code --install-extension .\vibe-coding-assistant-0.11.0-20261114.vsix --force
+```
+
+安装后重载窗口（命令面板 → `Developer: Reload Window`），侧栏会出现 **OpenVibe**。
+
+> ⚠️ VS Code CLI **不能从 UNC 路径读取 vsix**（会报 `ERR_UNC_HOST_NOT_ALLOWED`）。仓库在网络共享上时，先把 vsix 复制到本地磁盘（如 `%TEMP%`）再安装。同理，`npm run compile` 在 UNC 工作区会失败（cmd.exe 不支持 UNC 当前目录），此时用 `node esbuild.mjs --production` 直接构建。
+
+> **Requirements:** Node.js (LTS recommended), VS Code **≥ 1.74**. Clone → `npm install` → `npm run compile` → open in VS Code → **F5** to run the extension host → use the **OpenVibe** sidebar chat. Or install the packaged `.vsix` with `code --install-extension <file> --force` (copy it off any UNC share first).
 
 <h2 id="configuration">配置 / Configuration</h2>
 
